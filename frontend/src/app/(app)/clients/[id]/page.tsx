@@ -370,12 +370,23 @@ export default function ClientPage() {
         в padding карточки и обрезалась. Отрицательные поля + такой же padding
         дают доскроллить до последней вкладки вплотную к краю.
       */}
-      <div className="-mx-4 flex gap-1 overflow-x-auto border-b border-[var(--border)] px-4 md:mx-0 md:px-0">
+      {/*
+        role="tablist"/"tab" + aria-selected: без них экранный диктор читал
+        вкладки как обычные кнопки и не сообщал, какая открыта (п.122).
+      */}
+      <div
+        role="tablist"
+        aria-label="Разделы карточки клиента"
+        className="-mx-4 flex gap-1 overflow-x-auto border-b border-[var(--border)] px-4 md:mx-0 md:px-0"
+      >
         {TABS.map((item) => (
           <button
             key={item.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === item.key}
             onClick={() => setTab(item.key)}
-            className={`focus-ring -mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-[13px] transition-colors ${
+            className={`focus-ring -mb-px min-h-[40px] shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-[13px] transition-colors ${
               tab === item.key
                 ? "border-primary font-medium text-primary"
                 : "border-transparent text-[var(--muted)] hover:text-ink"
