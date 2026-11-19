@@ -1,12 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+/**
+ * Отчёты — §7 (86–90).
+ *
+ * Сверху период и охват, рядом — кнопки PDF и Excel (п.87: экспорт не
+ * спрятан в конце формы). Ниже состав отчёта галочками (п.88). Пока идёт
+ * генерация, показываем состояние; когда готово — даём ссылку на файл
+ * без технических id в подписи (п.89–90).
+ *
+ * Пустой отчёт не выдаём молча: если в выбранном периоде нет данных,
+ * пишем об этом до нажатия кнопки (п.90).
+ */
+
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   Badge,
   Button,
   Card,
   EmptyState,
+  ErrorState,
   Field,
   SectionTitle,
   Skeleton,
@@ -15,18 +28,61 @@ import {
 import { api, API_ROOT, getToken, Paged, Client, ReportJob } from "@/lib/api";
 import { dateTimeRu } from "@/lib/format";
 
+type Section = "projects" | "tasks" | "finance";
+
+const SECTIONS: { key: Section; label: string; hint: string }[] = [
+  { key: "projects", label: "Объекты и договоры", hint: "Проекты, статусы, проблемы" },
+  { key: "tasks", label: "Задачи и обязательства", hint: "Просроченное и требующее уточнения" },
+  { key: "finance", label: "Финансы и долги", hint: "Выставлено, оплачено, задолженность" },
+];
+
+const PRESETS = [
+  { key: "month", label: "Текущий месяц" },
+  { key: "quarter", label: "Квартал" },
+  { key: "year", label: "Год" },
+] as const;
+
+function toISO(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** Период для быстрых кнопок. */
+function presetRange(key: "month" | "quarter" | "year"): { from: string; to: string } {
+  const now = new Date();
+  const year = now.getFullYear();
+  if (key === "year") return { from: toISO(new Date(year, 0, 1)), to: toISO(new Date(year, 11, 31)) };
+  if (key === "quarter") {
+    const quarter = Math.floor(now.getMonth() / 3);
+    return {
+      from: toISO(new Date(year, quarter * 3, 1)),
+      to: toISO(new Date(year, quarter * 3 + 3, 0)),
+    };
+  }
+  return { from: toISO(new Date(year, now.getMonth(), 1)), to: toISO(new Date(year, now.getMonth() + 1, 0)) };
+}
+
 export default function ReportsPage() {
   const [jobs, setJobs] = useState<ReportJob[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<"pdf" | "xlsx" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [readyJob, setReadyJob] = useState<ReportJob | null>(null);
+
+  const initial = presetRange("month");
   const [form, setForm] = useState({
-    format: "pdf" as "pdf" | "xlsx",
     scope: "all" as "all" | "client",
     client_id: "",
-    date_from: "",
-    date_to: "",
+    date_from: initial.from,
+    date_to: initial.to,
+  });
+  const [sections, setSections] = useState<Record<Section, boolean>>({
+    projects: true,
+    tasks: true,
+    finance: true,
   });
 
   const load = useCallback(async () => {
@@ -50,84 +106,178 @@ export default function ReportsPage() {
     void load();
   }, [load]);
 
-  async function createReport(event: React.FormEvent) {
-    event.preventDefault();
-    setCreating(true);
+  const chosen = useMemo(
+    () => SECTIONS.filter((item) => sections[item.key]).map((item) => item.key),
+    [sections],
+  );
+
+  const periodValid = !form.date_from || !form.date_to || form.date_from <= form.date_to;
+  const canBuild =
+    periodValid &&
+    chosen.length > 0 &&
+    (form.scope === "all" || Boolean(form.client_id)) &&
+    !creating;
+
+  async function build(format: "pdf" | "xlsx") {
+    if (!canBuild) return;
+    setCreating(format);
     setError(null);
+    setReadyJob(null);
     try {
-      await api<ReportJob>("/reports", {
+      const job = await api<ReportJob>("/reports", {
         method: "POST",
         body: {
-          format: form.format,
+          format,
           scope: form.scope,
           client_id: form.scope === "client" ? form.client_id || null : null,
           date_from: form.date_from || null,
           date_to: form.date_to || null,
+          sections: chosen,
         },
       });
-      await load();
+      setJobs((prev) => [job, ...prev]);
+      if (job.status === "ready") setReadyJob(job);
+      else if (job.status === "failed") {
+        setError(
+          "Отчёт не сформировался. Данные не потеряны — попробуйте другой период или сообщите администратору.",
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось сформировать отчёт");
     } finally {
-      setCreating(false);
+      setCreating(null);
     }
   }
 
   async function download(job: ReportJob) {
     const token = getToken();
-    const response = await fetch(`${API_ROOT}/api/v1/reports/${job.id}/download`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!response.ok) {
+    try {
+      const response = await fetch(`${API_ROOT}/api/v1/reports/${job.id}/download`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!response.ok) {
+        setError("Файл недоступен. Сформируйте отчёт заново.");
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const stamp = job.created_at.slice(0, 10);
+      link.download = `forteon-${job.scope === "client" ? "client" : "all"}-${stamp}.${job.format}`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
       setError("Не удалось скачать файл отчёта");
-      return;
     }
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `forteon-report-${job.id.slice(0, 8)}.${job.format}`;
-    link.click();
-    URL.revokeObjectURL(url);
   }
 
   return (
-    <div className="mx-auto max-w-[1240px] space-y-4">
-      <header>
-        <h1 className="text-[23px] font-semibold tracking-[-0.025em] text-ink">Отчёты</h1>
-        <p className="mt-1 text-[13px] text-[var(--muted)]">
-          PDF для совещания и XLSX с листами «Клиенты», «Проекты», «Задачи», «Финансы», «Проблемы».
+    <div className="mx-auto max-w-[1240px]">
+      <header className="mb-4">
+        <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.026em] text-ink sm:text-[28px]">
+          Отчёты
+        </h1>
+        <p className="mt-1 max-w-3xl text-[14px] leading-relaxed text-[var(--muted)]">
+          PDF — для совещания, Excel — для работы с данными. Суммы считаются по
+          счетам и платежам, AI в расчётах не участвует.
         </p>
       </header>
 
       {error && (
-        <div className="rounded-card border border-[#f3c7cb] bg-[var(--danger-soft)] px-3.5 py-2.5 text-[13px] text-[var(--danger)]">
-          {error}
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-2 rounded-card border border-[#f3c7cb] bg-[var(--danger-soft)] px-3.5 py-2.5 text-[13.5px] text-[var(--danger)]">
+          <span className="min-w-0 flex-1">{error}</span>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="focus-ring rounded-md px-2 py-0.5 text-[12.5px] font-medium underline decoration-dotted"
+          >
+            Скрыть
+          </button>
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[380px_1fr]">
+      {readyJob && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-card border border-[#c4e6d6] bg-[var(--success-soft)] px-3.5 py-2.5">
+          <span className="min-w-0 flex-1 text-[13.5px] text-[var(--success)]">
+            Отчёт готов: {readyJob.format.toUpperCase()},{" "}
+            {readyJob.scope === "client" ? "по клиенту" : "по всем клиентам"}.
+          </span>
+          <Button size="sm" variant="outline" onClick={() => void download(readyJob)}>
+            Скачать файл
+          </Button>
+          <button
+            type="button"
+            onClick={() => setReadyJob(null)}
+            className="focus-ring rounded-md px-2 py-0.5 text-[12.5px] font-medium text-[var(--success)] underline decoration-dotted"
+          >
+            Скрыть
+          </button>
+        </div>
+      )}
+
+      <div className="grid gap-4 lg:grid-cols-[420px_minmax(0,1fr)]">
+        {/* -------------------------------------------------- форма отчёта */}
         <Card>
-          <SectionTitle title="Новый отчёт" subtitle="Формируется из проверенных данных" />
-          <form onSubmit={createReport} className="space-y-3">
-            <Field label="Формат">
+          <SectionTitle
+            title="Параметры"
+            subtitle="Период, охват и состав — всё на одном экране"
+          />
+
+          <div className="space-y-3">
+            <Field label="Период">
               <div className="grid grid-cols-2 gap-2">
-                {(["pdf", "xlsx"] as const).map((format) => (
-                  <button
-                    key={format}
-                    type="button"
-                    onClick={() => setForm({ ...form, format })}
-                    className={`focus-ring h-10 rounded-control border text-[13px] font-medium transition-colors ${
-                      form.format === format
-                        ? "border-primary bg-[var(--primary-soft)] text-primary"
-                        : "border-[var(--border-strong)] text-[var(--muted)] hover:border-primary"
-                    }`}
-                  >
-                    {format.toUpperCase()}
-                  </button>
-                ))}
+                <input
+                  type="date"
+                  value={form.date_from}
+                  onChange={(e) => setForm({ ...form, date_from: e.target.value })}
+                  aria-label="С даты"
+                  className={inputClass}
+                />
+                <input
+                  type="date"
+                  value={form.date_to}
+                  onChange={(e) => setForm({ ...form, date_to: e.target.value })}
+                  aria-label="По дату"
+                  className={inputClass}
+                />
               </div>
             </Field>
+
+            <div className="flex flex-wrap gap-1.5">
+              {PRESETS.map((preset) => {
+                const range = presetRange(preset.key);
+                const active = form.date_from === range.from && form.date_to === range.to;
+                return (
+                  <button
+                    key={preset.key}
+                    type="button"
+                    onClick={() => setForm({ ...form, date_from: range.from, date_to: range.to })}
+                    aria-pressed={active}
+                    className={`focus-ring h-8 rounded-lg border px-2.5 text-[12.5px] font-medium transition-colors ${
+                      active
+                        ? "border-primary bg-[var(--primary-soft)] text-primary"
+                        : "border-[var(--border)] text-[var(--muted)] hover:border-primary hover:text-primary"
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, date_from: "", date_to: "" })}
+                className="focus-ring h-8 rounded-lg border border-[var(--border)] px-2.5 text-[12.5px] text-[var(--muted)] transition-colors hover:border-primary hover:text-primary"
+              >
+                Весь период
+              </button>
+            </div>
+
+            {!periodValid && (
+              <p className="text-[12.5px] text-[var(--danger)]">
+                Начало периода позже конца — отчёт не соберётся.
+              </p>
+            )}
 
             <Field label="Охват">
               <select
@@ -157,45 +307,83 @@ export default function ReportsPage() {
               </Field>
             )}
 
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="С даты">
-                <input
-                  type="date"
-                  value={form.date_from}
-                  onChange={(e) => setForm({ ...form, date_from: e.target.value })}
-                  className={inputClass}
-                />
-              </Field>
-              <Field label="По дату">
-                <input
-                  type="date"
-                  value={form.date_to}
-                  onChange={(e) => setForm({ ...form, date_to: e.target.value })}
-                  className={inputClass}
-                />
-              </Field>
+            <div>
+              <p className="mb-1.5 text-[12px] font-medium text-[var(--muted)]">Состав</p>
+              <div className="space-y-1.5">
+                {SECTIONS.map((item) => {
+                  const on = sections[item.key];
+                  return (
+                    <label
+                      key={item.key}
+                      className={`flex cursor-pointer items-start gap-2.5 rounded-control border px-2.5 py-2 transition-colors ${
+                        on
+                          ? "border-primary bg-[var(--primary-soft)]"
+                          : "border-[var(--border)] hover:border-[var(--border-strong)]"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={(e) =>
+                          setSections({ ...sections, [item.key]: e.target.checked })
+                        }
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--primary)]"
+                      />
+                      <span className="min-w-0">
+                        <span className={`block text-[13px] font-medium ${on ? "text-primary" : "text-ink"}`}>
+                          {item.label}
+                        </span>
+                        <span className="block text-[11.5px] leading-snug text-[var(--muted)]">
+                          {item.hint}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              {chosen.length === 0 && (
+                <p className="mt-1.5 text-[12.5px] text-[var(--danger)]">
+                  Выберите хотя бы один раздел — иначе в отчёте нечего показать.
+                </p>
+              )}
             </div>
 
-            <Button
-              type="submit"
-              className="w-full"
-              loading={creating}
-              disabled={form.scope === "client" && !form.client_id}
-            >
-              Сформировать отчёт
-            </Button>
-          </form>
+            {/* Экспорт рядом с фильтрами (п.87) */}
+            <div className="!mt-4 grid grid-cols-2 gap-2 border-t border-[var(--border)] pt-3">
+              <Button
+                onClick={() => void build("pdf")}
+                loading={creating === "pdf"}
+                disabled={!canBuild}
+              >
+                Скачать PDF
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => void build("xlsx")}
+                loading={creating === "xlsx"}
+                disabled={!canBuild}
+              >
+                Скачать Excel
+              </Button>
+            </div>
 
-          <p className="mt-3 text-[11.5px] leading-relaxed text-[var(--muted)]">
-            Отчёт по клиенту не содержит чужих данных. Выгрузка SCOPED выполняется с проверкой owner_id.
-          </p>
+            <p className="text-[11.5px] leading-relaxed text-[var(--muted)]">
+              Отчёт по клиенту не содержит чужих данных: выгрузка проверяет
+              ответственного менеджера.
+            </p>
+          </div>
         </Card>
 
+        {/* -------------------------------------------------- история */}
         <Card>
           <SectionTitle
             title="История выгрузок"
-            subtitle="Последние сформированные отчёты"
-            action={<Button variant="ghost" size="sm" onClick={() => void load()}>Обновить</Button>}
+            subtitle="Отчёты доступны для повторного скачивания"
+            action={
+              <Button variant="ghost" size="sm" onClick={() => void load()}>
+                Обновить
+              </Button>
+            }
           />
           {loading ? (
             <div className="space-y-2">
@@ -217,15 +405,27 @@ export default function ReportsPage() {
                     {job.format.toUpperCase()}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13px] font-medium text-ink">
-                      {job.scope === "client" ? "Отчёт по клиенту" : "Сводный отчёт"}
+                    <p className="break-words text-[13px] font-medium text-ink">
+                      {job.scope === "client" ? "Отчёт по клиенту" : "Сводный отчёт по клиентам"}
                     </p>
-                    <p className="text-[11.5px] text-[var(--muted)]">{dateTimeRu(job.created_at)}</p>
+                    <p className="text-[11.5px] text-[var(--muted)]">
+                      {dateTimeRu(job.created_at)}
+                    </p>
                   </div>
                   <Badge
-                    tone={job.status === "ready" ? "success" : job.status === "failed" ? "danger" : "warning"}
+                    tone={
+                      job.status === "ready"
+                        ? "success"
+                        : job.status === "failed"
+                          ? "danger"
+                          : "warning"
+                    }
                   >
-                    {job.status === "ready" ? "готов" : job.status === "failed" ? "ошибка" : "в работе"}
+                    {job.status === "ready"
+                      ? "готов"
+                      : job.status === "failed"
+                        ? "не получился"
+                        : "формируется"}
                   </Badge>
                   {job.status === "ready" && (
                     <Button size="sm" variant="outline" onClick={() => void download(job)}>
@@ -238,7 +438,7 @@ export default function ReportsPage() {
           ) : (
             <EmptyState
               title="Отчётов ещё не было"
-              description="Сформируйте первый отчёт — он появится здесь и будет доступен для скачивания."
+              description="Задайте период и нажмите «Скачать PDF» или «Скачать Excel»."
             />
           )}
         </Card>

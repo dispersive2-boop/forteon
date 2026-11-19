@@ -164,7 +164,14 @@ def _sheet(ws, title: str, headers: list[str], widths: list[int]) -> None:
     ws.freeze_panes = "A2"
 
 
-def build_xlsx(db: Session, rows: list[dict], period_label: str) -> bytes:
+def build_xlsx(
+    db: Session,
+    rows: list[dict],
+    period_label: str,
+    sections: list[str] | None = None,
+) -> bytes:
+    """XLSX. sections ограничивает листы составом отчёта (§7, п.88)."""
+    wanted = set(sections or ["projects", "tasks", "finance"])
     wb = Workbook()
 
     ws_clients = wb.active
@@ -178,48 +185,51 @@ def build_xlsx(db: Session, rows: list[dict], period_label: str) -> bytes:
             len(row["projects"]), len(row["open_tasks"]), len(row["overdue"]), round(row["debt"], 2),
         ])
 
-    ws_projects = wb.create_sheet("Проекты")
-    _sheet(ws_projects, "Проекты",
-           ["Клиент", "Объект", "Статус", "Расположение", "Дата в работе", "Объём",
-            "Плановый доход, ₽", "Сервис", "Следующий спринт", "Проблемы"],
-           [26, 34, 16, 20, 14, 12, 18, 12, 34, 34])
-    for row in rows:
-        for p in row["projects"]:
-            ws_projects.append([
-                row["client"].name, p.name, p.status, p.location or "—", p.start_date, p.volume,
-                float(p.planned_revenue) if p.planned_revenue is not None else None,
-                p.service_flag or "—", p.plan_next_sprint or "—", p.problems_text or "—",
-            ])
+    if "projects" in wanted:
+        ws_projects = wb.create_sheet("Проекты")
+        _sheet(ws_projects, "Проекты",
+               ["Клиент", "Объект", "Статус", "Расположение", "Дата в работе", "Объём",
+                "Плановый доход, ₽", "Сервис", "Следующий спринт", "Проблемы"],
+               [26, 34, 16, 20, 14, 12, 18, 12, 34, 34])
+        for row in rows:
+            for p in row["projects"]:
+                ws_projects.append([
+                    row["client"].name, p.name, p.status, p.location or "—", p.start_date, p.volume,
+                    float(p.planned_revenue) if p.planned_revenue is not None else None,
+                    p.service_flag or "—", p.plan_next_sprint or "—", p.problems_text or "—",
+                ])
 
-    ws_tasks = wb.create_sheet("Задачи")
-    _sheet(ws_tasks, "Задачи",
-           ["Клиент", "Задача", "Тип", "Приоритет", "Статус", "Срок", "Источник", "Требует уточнения"],
-           [26, 46, 12, 12, 12, 16, 12, 18])
-    for row in rows:
-        for t in row["tasks"]:
-            ws_tasks.append([
-                row["client"].name, t.title, t.type, t.priority, t.status,
-                t.due_date, "AI" if t.origin == "ai" else ("Импорт" if t.origin == "import" else "Вручную"),
-                "да" if t.needs_review else "нет",
-            ])
+    if "tasks" in wanted:
+        ws_tasks = wb.create_sheet("Задачи")
+        _sheet(ws_tasks, "Задачи",
+               ["Клиент", "Задача", "Тип", "Приоритет", "Статус", "Срок", "Источник", "Требует уточнения"],
+               [26, 46, 12, 12, 12, 16, 12, 18])
+        for row in rows:
+            for t in row["tasks"]:
+                ws_tasks.append([
+                    row["client"].name, t.title, t.type, t.priority, t.status,
+                    t.due_date, "AI" if t.origin == "ai" else ("Импорт" if t.origin == "import" else "Вручную"),
+                    "да" if t.needs_review else "нет",
+                ])
 
-    ws_fin = wb.create_sheet("Финансы")
-    _sheet(ws_fin, "Финансы",
-           ["Клиент", "Выставлено, ₽", "Оплачено, ₽", "Распределено, ₽", "Долг, ₽"],
-           [34, 18, 18, 18, 18])
-    for row in rows:
-        ws_fin.append([row["client"].name, round(row["billed"], 2), round(row["paid"], 2),
-                       round(row["allocated"], 2), round(row["debt"], 2)])
+    if "finance" in wanted:
+        ws_fin = wb.create_sheet("Финансы")
+        _sheet(ws_fin, "Финансы",
+               ["Клиент", "Выставлено, ₽", "Оплачено, ₽", "Распределено, ₽", "Долг, ₽"],
+               [34, 18, 18, 18, 18])
+        for row in rows:
+            ws_fin.append([row["client"].name, round(row["billed"], 2), round(row["paid"], 2),
+                           round(row["allocated"], 2), round(row["debt"], 2)])
 
-    ws_problems = wb.create_sheet("Проблемы")
-    _sheet(ws_problems, "Проблемы",
-           ["Клиент", "Объект", "Проблема", "Ответственный", "Срок"],
-           [26, 30, 50, 22, 14])
-    for row in rows:
-        for p in row["projects"]:
-            if not p.problems_text:
-                continue
-            ws_problems.append([row["client"].name, p.name, p.problems_text, "—", p.end_date])
+        ws_problems = wb.create_sheet("Проблемы")
+        _sheet(ws_problems, "Проблемы",
+               ["Клиент", "Объект", "Проблема", "Ответственный", "Срок"],
+               [26, 30, 50, 22, 14])
+        for row in rows:
+            for p in row["projects"]:
+                if not p.problems_text:
+                    continue
+                ws_problems.append([row["client"].name, p.name, p.problems_text, "—", p.end_date])
 
     ws_info = wb.create_sheet("Сведения")
     _sheet(ws_info, "Сведения", ["Параметр", "Значение"], [34, 60])
@@ -242,7 +252,15 @@ def build_xlsx(db: Session, rows: list[dict], period_label: str) -> bytes:
 
 
 # ------------------------------------------------------------------ PDF
-def build_pdf(db: Session, rows: list[dict], period_label: str, scope_label: str) -> bytes:
+def build_pdf(
+    db: Session,
+    rows: list[dict],
+    period_label: str,
+    scope_label: str,
+    sections: list[str] | None = None,
+) -> bytes:
+    """PDF для совещания. sections убирает лишние блоки (§7, п.88)."""
+    wanted = set(sections or ["projects", "tasks", "finance"])
     font, font_bold = register_fonts()
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -307,77 +325,79 @@ def build_pdf(db: Session, rows: list[dict], period_label: str, scope_label: str
     ]))
     story.append(kpi)
 
-    story.append(Paragraph("Клиенты и проекты", h2))
-    table_rows = [["Клиент", "Объект", "Статус", "Расположение", "План, ₽",
-                   "Задачи", "Просрочено", "Долг, ₽", "Проблемы"]]
-    for row in rows:
-        if not row["projects"]:
-            table_rows.append([row["client"].name, "—", row["client"].status, row["client"].address or "—",
-                               "—", str(len(row["open_tasks"])), str(len(row["overdue"])),
-                               _fmt_money(row["debt"]), "—"])
-            continue
-        for p in row["projects"]:
-            table_rows.append([
-                Paragraph(row["client"].name[:40], base),
-                Paragraph((p.name or "—")[:44], base),
-                Paragraph((p.status or "—")[:22], base),
-                Paragraph((p.location or "—")[:24], base),
-                _fmt_money(float(p.planned_revenue) if p.planned_revenue is not None else None),
-                str(len(row["open_tasks"])),
-                str(len(row["overdue"])),
-                _fmt_money(row["debt"]),
-                Paragraph((p.problems_text or "—")[:110], base),
-            ])
-
-    widths = [34 * mm, 40 * mm, 24 * mm, 26 * mm, 22 * mm, 14 * mm, 16 * mm, 22 * mm, 62 * mm]
-    table = Table(table_rows, colWidths=widths, repeatRows=1)
-    table_style = [
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2455DB")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), font_bold),
-        ("FONTNAME", (0, 1), (-1, -1), font),
-        ("FONTSIZE", (0, 0), (-1, -1), 7.2),
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D7DEEA")),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F7F9FC")]),
-        ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-    ]
-    table.setStyle(TableStyle(table_style))
-    story.append(table)
-
-    story.append(PageBreak())
-    story.append(Paragraph("Просроченные и требующие уточнения задачи", h2))
-    task_rows = [["Клиент", "Задача", "Срок", "Приоритет", "Источник", "Требует уточнения"]]
-    for row in rows:
-        for t in row["tasks"]:
-            if t.status != "open":
+    if "projects" in wanted:
+        story.append(Paragraph("Клиенты и проекты", h2))
+        table_rows = [["Клиент", "Объект", "Статус", "Расположение", "План, ₽",
+                       "Задачи", "Просрочено", "Долг, ₽", "Проблемы"]]
+        for row in rows:
+            if not row["projects"]:
+                table_rows.append([row["client"].name, "—", row["client"].status, row["client"].address or "—",
+                                   "—", str(len(row["open_tasks"])), str(len(row["overdue"])),
+                                   _fmt_money(row["debt"]), "—"])
                 continue
-            if not (t.needs_review or (t.due_date and t.due_date < date.today())):
-                continue
-            task_rows.append([
-                Paragraph(row["client"].name[:34], base),
-                Paragraph(t.title[:90], base),
-                _fmt_date(t.due_date),
-                t.priority,
-                t.origin,
-                "да" if t.needs_review else "нет",
-            ])
-    if len(task_rows) == 1:
-        task_rows.append(["—", "Нет проблемных задач", "—", "—", "—", "—"])
+            for p in row["projects"]:
+                table_rows.append([
+                    Paragraph(row["client"].name[:40], base),
+                    Paragraph((p.name or "—")[:44], base),
+                    Paragraph((p.status or "—")[:22], base),
+                    Paragraph((p.location or "—")[:24], base),
+                    _fmt_money(float(p.planned_revenue) if p.planned_revenue is not None else None),
+                    str(len(row["open_tasks"])),
+                    str(len(row["overdue"])),
+                    _fmt_money(row["debt"]),
+                    Paragraph((p.problems_text or "—")[:110], base),
+                ])
 
-    t2 = Table(task_rows, colWidths=[40 * mm, 96 * mm, 22 * mm, 22 * mm, 22 * mm, 28 * mm], repeatRows=1)
-    t2.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#151B29")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), font_bold),
-        ("FONTNAME", (0, 1), (-1, -1), font),
-        ("FONTSIZE", (0, 0), (-1, -1), 7.4),
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D7DEEA")),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F7F9FC")]),
-    ]))
-    story.append(KeepTogether([t2]))
+        widths = [34 * mm, 40 * mm, 24 * mm, 26 * mm, 22 * mm, 14 * mm, 16 * mm, 22 * mm, 62 * mm]
+        table = Table(table_rows, colWidths=widths, repeatRows=1)
+        table_style = [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2455DB")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), font_bold),
+            ("FONTNAME", (0, 1), (-1, -1), font),
+            ("FONTSIZE", (0, 0), (-1, -1), 7.2),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D7DEEA")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F7F9FC")]),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]
+        table.setStyle(TableStyle(table_style))
+        story.append(table)
+
+    if "tasks" in wanted:
+        story.append(PageBreak())
+        story.append(Paragraph("Просроченные и требующие уточнения задачи", h2))
+        task_rows = [["Клиент", "Задача", "Срок", "Приоритет", "Источник", "Требует уточнения"]]
+        for row in rows:
+            for t in row["tasks"]:
+                if t.status != "open":
+                    continue
+                if not (t.needs_review or (t.due_date and t.due_date < date.today())):
+                    continue
+                task_rows.append([
+                    Paragraph(row["client"].name[:34], base),
+                    Paragraph(t.title[:90], base),
+                    _fmt_date(t.due_date),
+                    t.priority,
+                    t.origin,
+                    "да" if t.needs_review else "нет",
+                ])
+        if len(task_rows) == 1:
+            task_rows.append(["—", "Нет проблемных задач", "—", "—", "—", "—"])
+
+        t2 = Table(task_rows, colWidths=[40 * mm, 96 * mm, 22 * mm, 22 * mm, 22 * mm, 28 * mm], repeatRows=1)
+        t2.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#151B29")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), font_bold),
+            ("FONTNAME", (0, 1), (-1, -1), font),
+            ("FONTSIZE", (0, 0), (-1, -1), 7.4),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D7DEEA")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F7F9FC")]),
+        ]))
+        story.append(KeepTogether([t2]))
 
     story.append(Spacer(1, 8))
     story.append(Paragraph(

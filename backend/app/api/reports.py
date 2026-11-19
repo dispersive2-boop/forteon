@@ -59,6 +59,7 @@ def create_report(payload: ReportRequest, db: Session = Depends(get_db),
                 "date_from": payload.date_from.isoformat() if payload.date_from else None,
                 "date_to": payload.date_to.isoformat() if payload.date_to else None,
                 "statuses": payload.statuses,
+                "sections": payload.sections,
             },
             ensure_ascii=False,
         ),
@@ -74,9 +75,9 @@ def create_report(payload: ReportRequest, db: Session = Depends(get_db),
         period = _period_label(payload.date_from, payload.date_to)
         scope_label = f"Клиент: {rows[0]['client'].name}" if payload.scope == "client" and rows else "Все клиенты"
         if payload.format == "xlsx":
-            content = build_xlsx(db, rows, period)
+            content = build_xlsx(db, rows, period, payload.sections)
         else:
-            content = build_pdf(db, rows, period, scope_label)
+            content = build_pdf(db, rows, period, scope_label, payload.sections)
         path = save_report(content, job.id, payload.format)
         job.status = "ready"
         job.file_key = path

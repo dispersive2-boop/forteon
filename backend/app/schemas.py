@@ -458,6 +458,10 @@ class ReportRequest(BaseModel):
     date_from: date | None = None
     date_to: date | None = None
     statuses: list[str] = Field(default_factory=list)
+    # Состав отчёта (§7, п.88–89). Пустой список = всё, что есть.
+    # projects — объекты и договоры, tasks — задачи и обязательства,
+    # finance — invoices/payments и задолженность.
+    sections: list[Literal["projects", "tasks", "finance"]] = Field(default_factory=list)
 
 
 class ReportOut(ORMModel):
