@@ -19,6 +19,8 @@ from ..schemas import (
     TaskOut,
     TaskReschedule,
     TaskUpdate,
+    TodayCounters,
+    TodayOut,
 )
 from ..services.ai import make_dedupe_key
 from ..services.dates import to_date
@@ -122,6 +124,78 @@ def create_task(payload: TaskCreate, db: Session = Depends(get_db), user: User =
     db.commit()
     db.refresh(task)
     return _task_out(task, client.name)
+
+
+# ---------------------------------------------------------------- экран «Сегодня»
+# ВАЖНО: маршрут объявлен ДО `/tasks/{task_id}`. Иначе FastAPI матчит
+# "today" как task_id и возвращает 404 — проверено фактическим запросом.
+_PRIORITY_WEIGHT = {"critical": 0, "high": 1, "normal": 2, "low": 3}
+
+
+def _today_sort_key(task: Task):
+    """Просроченные -> критичные -> по времени (требование п.22)."""
+    today = date.today()
+    overdue = 0 if (task.due_date and task.due_date < today) else 1
+    priority = _PRIORITY_WEIGHT.get(task.priority, 2)
+    # Задачи без времени — в конце дня, а не с выдуманным «09:00» (п.27).
+    no_time = 1 if task.due_at is None else 0
+    return (overdue, priority, no_time, task.due_at or datetime.max, task.created_at)
+
+
+@router.get("/tasks/today", response_model=TodayOut)
+def tasks_today(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Всё для главного экрана одним запросом.
+
+    Возвращает открытые задачи со сроком «сегодня или раньше», а также
+    закрытые сегодня. Задачи без срока в список не попадают — они живут
+    в блоке «Уточнить», чтобы не изобретать дедлайны.
+    """
+    today = date.today()
+    open_rows = list(
+        db.scalars(
+            _scope_query(user)
+            .where(Task.status == "open")
+            .where(Task.due_date.is_not(None))
+            .where(Task.due_date <= today)
+        )
+    )
+    open_rows.sort(key=_today_sort_key)
+
+    done_rows = list(
+        db.scalars(
+            _scope_query(user)
+            .where(Task.status == "done")
+            .where(Task.completed_at.is_not(None))
+            .where(Task.completed_at >= datetime.combine(today, time.min))
+            .order_by(Task.completed_at.desc())
+            .limit(50)
+        )
+    )
+
+    names = _client_names(db, {t.client_id for t in open_rows + done_rows})
+
+    # Счётчики считаем по одной выборке, а не тремя отдельными запросами.
+    counters_scope = list(db.scalars(_scope_query(user).where(Task.status == "open")))
+    week_end = today + timedelta(days=7)
+    payments = sum(1 for t in counters_scope if t.type == "payment" and t.due_date and t.due_date <= week_end)
+    review = sum(1 for t in counters_scope if t.needs_review)
+    week = sum(1 for t in counters_scope if t.due_date and today < t.due_date <= week_end)
+    overdue = sum(1 for t in counters_scope if t.due_date and t.due_date < today and not t.needs_review)
+    todays = sum(1 for t in counters_scope if t.due_date == today)
+
+    return TodayOut(
+        date=today,
+        counters=TodayCounters(
+            today=todays,
+            overdue=overdue,
+            payments=payments,
+            review=review,
+            done_today=len(done_rows),
+            week=week,
+        ),
+        items=[_task_out(t, names.get(t.client_id)) for t in open_rows],
+        done=[_task_out(t, names.get(t.client_id)) for t in done_rows],
+    )
 
 
 @router.get("/tasks/{task_id}", response_model=TaskOut)

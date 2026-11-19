@@ -1,13 +1,30 @@
 "use client";
 
+/**
+ * Каркас приложения: сайдбар + верхняя панель + область контента.
+ *
+ * DESIGN TASKS v2.1:
+ *  §1 (п.1-3, 8, 10): сайдбар фиксирован 232-248px и #111827;
+ *      топбар 64-72px с названием страницы, поиском, уведомлениями,
+ *      профилем и кнопкой «Новая заметка»; горизонтальной прокрутки нет;
+ *      на узком экране панель — выдвижной drawer.
+ *  §2 (п.11-18): строгий порядок пунктов, БЕЗ подписей-подсказок,
+ *      активный пункт — синяя подложка, иконки 20px с единой толщиной,
+ *      счётчик просрочек у «Планировщик» только при наличии,
+ *      внизу аватар + имя + выход, «Администрирование» только админу,
+ *      «Проекты» отдельным пунктом не выводим.
+ */
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { useAuth, UserBadge } from "@/components/AuthProvider";
 import {
   IconAdmin,
   IconClients,
+  IconFinance,
+  IconHelp,
   IconLogout,
   IconNotes,
   IconPlanner,
@@ -17,36 +34,69 @@ import {
   IconSettings,
   IconToday,
 } from "@/components/icons";
+import { MobileNav } from "@/components/MobileNav";
+import { api, TodayPayload } from "@/lib/api";
 
 /**
- * Навигация. Цвета заданы явно (#fff / rgba-классами из шкалы Tailwind),
- * потому что `text-white/62` не генерируется и текст становится невидимым
- * на тёмной панели.
+ * Строгий порядок из макета (§2). Подписи-подсказки удалены (п.11):
+ * они дублировали название и мешали быстрому сканированию.
  */
 const NAV_ITEMS = [
-  { href: "/today", label: "Сегодня", hint: "Что делать сейчас", Icon: IconToday },
-  { href: "/notes", label: "Заметки", hint: "Записать и разобрать", Icon: IconNotes },
-  { href: "/planner", label: "Планировщик", hint: "Все сроки", Icon: IconPlanner },
-  { href: "/clients", label: "Клиенты", hint: "Карточки и история", Icon: IconClients },
-  { href: "/reports", label: "Отчёты", hint: "PDF и XLSX", Icon: IconReports },
-  {
-    href: "/admin",
-    label: "Администрирование",
-    hint: "Люди, импорт, аудит",
-    Icon: IconAdmin,
-    adminOnly: true,
-  },
+  { href: "/today", label: "Сегодня", Icon: IconToday },
+  { href: "/planner", label: "Планировщик", Icon: IconPlanner, badge: "overdue" as const },
+  { href: "/clients", label: "Клиенты", Icon: IconClients },
+  { href: "/notes", label: "Заметки", Icon: IconNotes },
+  { href: "/finance", label: "Финансы", Icon: IconFinance },
+  { href: "/reports", label: "Отчёты", Icon: IconReports },
+  { href: "/settings", label: "Настройки", Icon: IconSettings },
+  { href: "/help", label: "Помощь", Icon: IconHelp },
+  { href: "/admin", label: "Администрирование", Icon: IconAdmin, adminOnly: true },
 ];
+
+const PAGE_TITLES: Record<string, string> = {
+  "/today": "Сегодня",
+  "/planner": "Планировщик",
+  "/clients": "Клиенты",
+  "/notes": "Заметки",
+  "/finance": "Финансы",
+  "/reports": "Отчёты",
+  "/settings": "Настройки",
+  "/help": "Помощь",
+  "/admin": "Администрирование",
+};
+
+function pageTitle(pathname: string): string {
+  if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname];
+  const base = `/${pathname.split("/")[1] ?? ""}`;
+  if (PAGE_TITLES[base]) return PAGE_TITLES[base];
+  if (pathname.startsWith("/clients/")) return "Карточка клиента";
+  return "ForteOn";
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [overdue, setOverdue] = useState(0);
 
   const items = NAV_ITEMS.filter((item) => !item.adminOnly || user?.role === "admin");
 
+  /** Пункт 14: счётчик просрочек у «Планировщик», обновляется без перезагрузки. */
+  const refreshOverdue = useCallback(async () => {
+    try {
+      const data = await api<TodayPayload>("/tasks/today");
+      setOverdue(data.counters.overdue);
+    } catch {
+      /* счётчик не критичен — молча пропускаем */
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshOverdue();
+  }, [refreshOverdue, pathname]);
+
   return (
-    <div className="flex min-h-screen bg-canvas">
+    <div className="flex min-h-screen w-full max-w-full overflow-x-hidden bg-canvas">
       {mobileOpen && (
         <button
           className="fixed inset-0 z-30 bg-[#0b1220]/45 md:hidden"
@@ -55,8 +105,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         />
       )}
 
+      {/* Пункт 1: ширина 232-248px, цвет #111827; пункт 17 — скроллится только навигация */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-[276px] flex-col bg-sidebar transition-transform duration-200 md:sticky md:top-0 md:h-screen md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-[240px] flex-col bg-[#111827] transition-transform duration-200 md:sticky md:top-0 md:h-screen md:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -66,83 +117,67 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           Без rounded-«плитки»: в референсе знак стоит свободно на тёмном фоне,
           а скругление обрезало ему кончики лент.
         */}
-        <div className="flex h-[84px] shrink-0 items-center border-b border-white/8 px-5">
+        <div className="flex h-[68px] shrink-0 items-center px-4">
           <Link
             href="/today"
-            className="focus-ring flex items-center gap-2.5 rounded-control"
+            className="focus-ring flex items-center gap-2.5 rounded-lg"
             aria-label="ForteOn — на главную"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/logo-mark.svg"
               alt=""
-              width={44}
-              height={44}
-              className="h-11 w-11 shrink-0 drop-shadow-[0_2px_8px_rgba(96,165,250,0.35)]"
+              width={38}
+              height={38}
+              className="h-[38px] w-[38px] shrink-0 drop-shadow-[0_2px_8px_rgba(96,165,250,0.35)]"
             />
-            <span className="text-[25px] font-semibold leading-none tracking-[-0.035em] text-white">
+            <span className="text-[22px] font-semibold leading-none tracking-[-0.035em] text-white">
               Forte<span className="text-[#60A5FA]">On</span>
             </span>
           </Link>
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-          {items.map(({ href, label, hint, Icon }) => {
+        <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5 py-2" aria-label="Основная навигация">
+          {items.map(({ href, label, Icon, badge }) => {
             const active = pathname === href || pathname.startsWith(`${href}/`);
+            const showBadge = badge === "overdue" && overdue > 0;
             return (
               <Link
                 key={href}
                 href={href}
                 onClick={() => setMobileOpen(false)}
-                className={`flex items-center gap-3 rounded-control px-3 py-2.5 transition-colors ${
+                aria-current={active ? "page" : undefined}
+                className={`focus-ring flex h-11 items-center gap-2.5 rounded-lg px-2.5 text-[14px] font-medium transition-colors ${
                   active
-                    ? "bg-[var(--sidebar-active)] text-white shadow-soft"
-                    : "text-white/72 hover:bg-[var(--sidebar-hover)] hover:text-white"
+                    ? "bg-[#2563EB] text-white"
+                    : "text-[#CBD5E1] hover:bg-white/8 hover:text-white"
                 }`}
               >
-                <span
-                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${
-                    active ? "bg-white/16 text-white" : "bg-white/6 text-white/72"
-                  }`}
-                >
-                  <Icon size={19} />
+                {/* Пункт 13: иконки 20px, единая толщина штриха */}
+                <span className="grid h-6 w-6 shrink-0 place-items-center">
+                  <Icon size={20} />
                 </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-[15px] font-medium leading-tight">
-                    {label}
+                <span className="min-w-0 flex-1 truncate">{label}</span>
+                {showBadge && (
+                  <span className="shrink-0 rounded-full bg-[#EF4444] px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white">
+                    {overdue}
                   </span>
-                  <span
-                    className={`mt-0.5 block truncate text-[12px] leading-tight ${
-                      active ? "text-white/85" : "text-white/45"
-                    }`}
-                  >
-                    {hint}
-                  </span>
-                </span>
+                )}
               </Link>
             );
           })}
         </nav>
 
-        <div className="shrink-0 border-t border-white/8 px-3 py-3">
-          <Link
-            href="/settings"
-            className="mb-2 flex items-center gap-3 rounded-control px-3 py-2.5 text-[15px] font-medium text-white/72 transition-colors hover:bg-[var(--sidebar-hover)] hover:text-white"
-          >
-            <span className="grid h-9 w-9 place-items-center rounded-lg bg-white/6">
-              <IconSettings size={19} />
-            </span>
-            Настройки
-          </Link>
-
+        {/* Пункт 15: аватар, имя и выход внизу */}
+        <div className="shrink-0 border-t border-white/10 px-2.5 py-3">
           {user && (
-            <div className="flex items-center justify-between gap-2 rounded-control bg-white/6 px-2.5 py-2">
+            <div className="flex items-center gap-2 rounded-lg px-1 py-1">
               <UserBadge user={user} />
               <button
                 onClick={signOut}
-                title="Выйти"
-                aria-label="Выйти"
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-white/55 transition-colors hover:bg-white/10 hover:text-white focus-ring"
+                title="Выйти из аккаунта"
+                aria-label="Выйти из аккаунта"
+                className="focus-ring grid h-11 w-11 shrink-0 place-items-center rounded-lg text-[#94A3B8] transition-colors hover:bg-white/10 hover:text-white"
               >
                 <IconLogout size={18} />
               </button>
@@ -151,56 +186,71 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-[64px] items-center gap-3 border-b border-[var(--border)] bg-surface/95 px-4 backdrop-blur md:px-7">
+      <div className="flex min-w-0 max-w-full flex-1 flex-col">
+        {/* Пункт 3: топбар 64-72px — название страницы, поиск, уведомления, профиль, «Новая заметка» */}
+        <header className="sticky top-0 z-20 flex h-[68px] shrink-0 items-center gap-2 border-b border-[var(--border)] bg-surface/95 px-3 backdrop-blur md:px-6">
           <button
             onClick={() => setMobileOpen(true)}
-            className="grid h-10 w-10 place-items-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[#F1F5F9] focus-ring md:hidden"
+            className="focus-ring grid h-11 w-11 shrink-0 place-items-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[#F1F5F9] md:hidden"
             aria-label="Открыть меню"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <MobileBrand />
-          <div className="ml-auto flex items-center gap-2">
-            <Link
-              href="/clients"
-              className="hidden h-10 items-center gap-2 rounded-control border border-[var(--border-strong)] px-3.5 text-[13.5px] font-medium text-[var(--muted)] transition-colors hover:border-primary hover:text-primary focus-ring sm:flex"
-            >
-              <IconSearch size={16} />
-              Найти клиента
-            </Link>
-            <Link
-              href="/notes"
-              className="flex h-10 items-center gap-2 rounded-control bg-primary px-4 text-[13.5px] font-semibold text-white transition-colors hover:bg-[var(--primary-hover)] focus-ring"
-            >
-              <IconPlus size={17} strokeWidth={2.4} />
-              Заметка
-            </Link>
-          </div>
+
+          {/*
+            Не <h1>: настоящий h1 живёт в контенте страницы. Иначе на экране
+            оказывалось два заголовка первого уровня (п.122 — доступность),
+            а название дублировалось в топбаре и в теле (п.11).
+            На мобильном показываем короткий контекст, на десктопе — пусто.
+          */}
+          <span className="min-w-0 flex-1 truncate text-[17px] font-semibold tracking-[-0.02em] text-ink md:hidden">
+            {pageTitle(pathname)}
+          </span>
+          <span className="hidden min-w-0 flex-1 md:block" aria-hidden />
+
+          <Link
+            href="/clients"
+            className="focus-ring hidden h-10 items-center gap-2 rounded-lg border border-[var(--border-strong)] px-3 text-[13.5px] font-medium text-[var(--muted)] transition-colors hover:border-primary hover:text-primary lg:flex"
+          >
+            <IconSearch size={16} />
+            Поиск клиента
+          </Link>
+
+          <Link
+            href="/today#notifications"
+            title="Уведомления"
+            aria-label="Уведомления"
+            className="focus-ring relative grid h-11 w-11 shrink-0 place-items-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[#F1F5F9] hover:text-ink"
+          >
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+              <path d="M18 8a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6" />
+              <path d="M10.3 20a2 2 0 0 0 3.4 0" />
+            </svg>
+            {overdue > 0 && (
+              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[#EF4444]" />
+            )}
+          </Link>
+
+          <Link
+            href="/notes"
+            className="focus-ring flex h-10 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 text-[13.5px] font-semibold text-white transition-colors hover:bg-[var(--primary-hover)] sm:px-4"
+          >
+            <IconPlus size={17} strokeWidth={2.4} />
+            <span className="hidden sm:inline">Новая заметка</span>
+            <span className="sm:hidden">Заметка</span>
+          </Link>
         </header>
 
-        <main className="min-w-0 flex-1 px-4 py-5 md:px-7 md:py-7">{children}</main>
+        {/* Пункт 10: никакой горизонтальной прокрутки всего приложения */}
+        <main className="min-w-0 max-w-full flex-1 px-3 pb-24 pt-4 md:px-6 md:pb-8 md:pt-6">
+          {children}
+        </main>
       </div>
-    </div>
-  );
-}
 
-function MobileBrand() {
-  return (
-    <Link href="/today" className="flex items-center gap-2 rounded-lg focus-ring md:hidden">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/logo-mark.svg"
-        alt="ForteOn"
-        width={30}
-        height={30}
-        className="h-[30px] w-[30px]"
-      />
-      <span className="text-[17px] font-semibold tracking-[-0.02em] text-ink">
-        Forte<span className="text-primary">On</span>
-      </span>
-    </Link>
+      {/* §8 (п.92-94): отдельная мобильная навигация с центральной кнопкой микрофона */}
+      <MobileNav overdue={overdue} />
+    </div>
   );
 }

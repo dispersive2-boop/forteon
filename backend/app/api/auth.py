@@ -1,5 +1,11 @@
-"""Auth: сессии на нескольких устройствах, refresh, отзыв сессий."""
+"""Auth: сессии на нескольких устройствах, refresh, отзыв сессий.
+
+Плюс защита от перебора паролей: скользящее окно по IP+логину,
+карантин после серии неудач, ответ 429 с Retry-After.
+"""
 from __future__ import annotations
+
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
@@ -9,6 +15,7 @@ from ..config import settings
 from ..db import get_db
 from ..deps import audit, find_session, get_current_user, session_expiry
 from ..models import Session as SessionModel, User, utcnow
+from ..services.ratelimit import limiter
 from ..schemas import (
     LoginRequest,
     PasswordChange,
@@ -26,6 +33,25 @@ from ..security import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+log = logging.getLogger("forteon.auth")
+
+
+def _too_many_attempts(wait: float, scope: str) -> HTTPException:
+    """429 с человеческим текстом и заголовком Retry-After."""
+    minutes = max(1, int(round(wait / 60)))
+    return HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail={
+            "code": "rate_limited",
+            "message": (
+                f"Слишком много попыток входа. Повторите через {minutes} мин."
+                if scope == "login"
+                else "Слишком много запросов. Повторите позже."
+            ),
+            "details": {"retry_after": int(wait)},
+        },
+        headers={"Retry-After": str(int(wait))},
+    )
 
 
 def issue_tokens(db: Session, user: User, request: Request, device_label: str | None = None) -> TokenResponse:
@@ -56,25 +82,69 @@ def issue_tokens(db: Session, user: User, request: Request, device_label: str | 
 
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
-    user = db.scalar(select(User).where(User.email == payload.email.strip().lower()))
+    email = payload.email.strip().lower()
+    ip = request.client.host if request.client else "unknown"
+
+    # Ключ включает IP и логин: перебор одного аккаунта не блокирует других,
+    # но и смена логина с того же IP не помогает (отдельный ключ на IP).
+    key_pair = f"login:{ip}:{email}"
+    key_ip = f"login-ip:{ip}"
+
+    wait = limiter.retry_after(key_pair) or limiter.retry_after(key_ip)
+    if wait:
+        raise _too_many_attempts(wait, "login")
+
+    user = db.scalar(select(User).where(User.email == email))
     if user is None or not user.is_active or user.deleted_at is not None:
+        # Неудача тоже расходует лимит — иначе перебор существующих логинов
+        # ничем не ограничен.
+        blocked = limiter.hit(
+            key_pair, settings.login_max_attempts, settings.login_window_seconds,
+            max_failures=settings.login_max_attempts, lockout=settings.login_lockout_seconds,
+            failed=True,
+        )
+        limiter.hit(
+            key_ip, settings.login_max_attempts * 4, settings.login_window_seconds,
+            max_failures=settings.login_max_attempts * 4, lockout=settings.login_lockout_seconds,
+            failed=True,
+        )
+        if blocked:
+            raise _too_many_attempts(blocked, "login")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "invalid_credentials", "message": "Неверный e-mail или пароль"},
         )
+
     if not verify_password(payload.password, user.password_hash):
-        audit(db, user, "user", user.id, "login_failed", ip=request.client.host if request.client else None)
+        blocked = limiter.hit(
+            key_pair, settings.login_max_attempts, settings.login_window_seconds,
+            max_failures=settings.login_max_attempts, lockout=settings.login_lockout_seconds,
+            failed=True,
+        )
+        limiter.hit(
+            key_ip, settings.login_max_attempts * 4, settings.login_window_seconds,
+            max_failures=settings.login_max_attempts * 4, lockout=settings.login_lockout_seconds,
+            failed=True,
+        )
+        audit(db, user, "user", user.id, "login_failed", ip=ip)
         db.commit()
+        if blocked:
+            log.warning("ForteOn: серия неудачных входов %s, карантин %.0f c", key_pair, blocked)
+            raise _too_many_attempts(blocked, "login")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "invalid_credentials", "message": "Неверный e-mail или пароль"},
         )
+
+    # Успех: снимаем накопленные неудачи по этой паре IP+логин.
+    limiter.reset(key_pair)
+
     if needs_rehash(user.password_hash):
         user.password_hash = hash_password(payload.password)
 
     result = issue_tokens(db, user, request, payload.email)
     result_user = UserOut.model_validate(user)
-    audit(db, user, "user", user.id, "login", ip=request.client.host if request.client else None)
+    audit(db, user, "user", user.id, "login", ip=ip)
     db.commit()
 
     response.set_cookie(
@@ -96,6 +166,11 @@ def login(payload: LoginRequest, request: Request, response: Response, db: Sessi
 
 @router.post("/refresh", response_model=TokenResponse)
 def refresh(payload: RefreshRequest, request: Request, db: Session = Depends(get_db)):
+    key = limiter.client_key(request, "refresh")
+    wait = limiter.hit(key, 60, 60)
+    if wait:
+        raise _too_many_attempts(wait, "refresh")
+
     raw = payload.refresh_token or request.cookies.get("forteon_refresh")
     if not raw:
         raise HTTPException(status_code=401, detail={"code": "missing_token", "message": "Нет refresh-токена"})

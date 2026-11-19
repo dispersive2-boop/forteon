@@ -5,7 +5,15 @@
 import Link from "next/link";
 import { useMemo } from "react";
 
-import { compactMoney, isOverdue, money, relativeDay, statusLabel } from "@/lib/format";
+import {
+  compactMoney,
+  isOverdue,
+  money,
+  PRIORITY_LABELS,
+  relativeDay,
+  statusLabel,
+  TASK_TYPE_LABELS,
+} from "@/lib/format";
 
 type ButtonProps = {
   children: React.ReactNode;
@@ -373,3 +381,353 @@ export const inputClass =
 
 export const textareaClass =
   "focus-ring block w-full min-w-0 resize-y rounded-control border border-[var(--border-strong)] bg-surface px-3.5 py-3 text-[14.5px] leading-relaxed text-ink placeholder:text-[#94A3B8]";
+
+/* ==================================================================
+   Ниже — примитивы для редизайна по списку DESIGN TASKS v2.1.
+   Требования: 107 (отступы 4/8/12/16/24/32), 109 (текст 15-16px),
+   111 (единые высоты), 113 (hover/focus/pressed/disabled),
+   120 (skeleton), 121 (раздельные состояния).
+   ================================================================== */
+
+/** Компактная KPI-плашка (п.19: без огромных пустых пространств). */
+export function Stat({
+  label,
+  value,
+  tone = "neutral",
+  active = false,
+  onClick,
+}: {
+  label: string;
+  value: string | number;
+  tone?: "neutral" | "danger" | "success" | "primary" | "warning";
+  active?: boolean;
+  onClick?: () => void;
+}) {
+  const tones: Record<string, string> = {
+    neutral: "text-ink",
+    danger: "text-[var(--danger)]",
+    success: "text-[var(--success)]",
+    primary: "text-primary",
+    warning: "text-[#B45309]",
+  };
+  const body = (
+    <>
+      <span className={`tabular block text-[22px] font-semibold leading-none tracking-[-0.02em] ${tones[tone]}`}>
+        {value}
+      </span>
+      {/*
+        Без truncate: при 390px «Просрочено» обрезалось до «Прос...».
+        Разрешаем перенос на две строки — читаемость важнее однострочности
+        (п.109 минимальный кегль, п.126 переполнение).
+      */}
+      <span className="mt-1 block text-[12px] font-medium leading-tight text-[var(--muted)]">
+        {label}
+      </span>
+    </>
+  );
+  // Внутри flex-контейнера плашка не растягивается на всю строку —
+  // на 390px пятая KPI иначе занимала весь ряд (проверено скриншотом).
+  const base =
+    "w-full min-w-0 rounded-control border px-2.5 py-2.5 text-left transition-colors sm:w-auto sm:min-w-[116px] sm:px-3";
+  if (!onClick) {
+    return (
+      <div className={`${base} border-[var(--border)] bg-surface`}>{body}</div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`${base} focus-ring ${
+        active
+          ? "border-primary bg-[var(--primary-soft)]"
+          : "border-[var(--border)] bg-surface hover:border-[var(--border-strong)]"
+      }`}
+    >
+      {body}
+    </button>
+  );
+}
+
+/** Горизонтальные вкладки-фильтры (п.20, п.96: скроллится только полоса). */
+export function Tabs<T extends string>({
+  items,
+  value,
+  onChange,
+  className = "",
+}: {
+  items: { key: T; label: string; count?: number }[];
+  value: T;
+  onChange: (key: T) => void;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`-mx-1 flex items-center gap-1 overflow-x-auto px-1 pb-0.5 ${className}`}
+      role="tablist"
+    >
+      {items.map((item) => {
+        const active = item.key === value;
+        return (
+          <button
+            key={item.key}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(item.key)}
+            className={`focus-ring flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-[13.5px] font-medium transition-colors ${
+              active
+                ? "bg-primary text-white"
+                : "bg-[#f1f4f9] text-[var(--muted)] hover:bg-[#e6ecf6] hover:text-ink"
+            }`}
+          >
+            {item.label}
+            {typeof item.count === "number" && item.count > 0 && (
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[11px] font-semibold leading-none ${
+                  active ? "bg-white/22 text-white" : "bg-white text-[var(--muted)]"
+                }`}
+              >
+                {item.count}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Панель инструментов: заголовок + действия, без «прыжков» ширины (п.112). */
+export function Toolbar({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`flex flex-wrap items-center gap-2 gap-y-2 ${className}`}>{children}</div>
+  );
+}
+
+/** Раздельные состояния (п.121): «нет данных» и «ошибка загрузки» — разные экраны. */
+export function ErrorState({
+  title = "Не удалось загрузить",
+  description,
+  onRetry,
+}: {
+  title?: string;
+  description?: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center rounded-card border border-[#f3c7cb] bg-[var(--danger-soft)] px-6 py-10 text-center">
+      <div className="mb-3 grid h-11 w-11 place-items-center rounded-full bg-white text-[var(--danger)]">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <path d="M12 9v4M12 17h.01" />
+          <circle cx="12" cy="12" r="9.2" />
+        </svg>
+      </div>
+      <p className="text-[15px] font-semibold text-[var(--danger)]">{title}</p>
+      {description && (
+        <p className="mt-1.5 max-w-md text-[13px] leading-relaxed text-[#8c3a41]">{description}</p>
+      )}
+      {onRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="focus-ring mt-4 h-10 rounded-control border border-[var(--danger)] bg-white px-4 text-[13.5px] font-medium text-[var(--danger)] transition-colors hover:bg-[var(--danger)] hover:text-white"
+        >
+          Повторить
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Чип «Уточнить срок» для задач без даты (п.58). */
+export function ReviewChip({ reason }: { reason?: string | null }) {
+  return (
+    <span
+      title={reason || "Срок не определён"}
+      className="inline-flex items-center gap-1 rounded-full bg-[var(--warning-soft)] px-2 py-0.5 text-[11.5px] font-medium leading-tight text-[#B45309]"
+    >
+      Уточнить срок
+    </span>
+  );
+}
+
+/**
+ * Строка задачи для «Сегодня».
+ * Отличается от TaskRow: настоящий checkbox 44×44 (п.100), явные
+ * действия «Перенести» / «Открыть клиента», аккуратное выделение
+ * просрочки без красной заливки всей строки (п.28).
+ */
+export function TaskItem({
+  task,
+  active = false,
+  busy = false,
+  onSelect,
+  onComplete,
+  onReschedule,
+}: {
+  task: {
+    id: string;
+    title: string;
+    client_id: string;
+    client_name?: string | null;
+    due_date: string | null;
+    due_at: string | null;
+    priority: string;
+    type: string;
+    needs_review: boolean;
+    status: string;
+    origin: string;
+  };
+  active?: boolean;
+  busy?: boolean;
+  onSelect?: () => void;
+  onComplete?: () => void;
+  onReschedule?: () => void;
+}) {
+  const overdue = isOverdue({ due_date: task.due_date, status: task.status });
+  const time = task.due_at
+    ? new Date(task.due_at.endsWith("Z") ? task.due_at : `${task.due_at}Z`).toLocaleTimeString("ru-RU", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+
+  return (
+    <div
+      className={`group relative flex items-stretch gap-1 rounded-control border transition-colors ${
+        active
+          ? "border-primary bg-[var(--primary-soft)]"
+          : "border-transparent hover:border-[var(--border)] hover:bg-[#f8fafd]"
+      }`}
+    >
+      {/* Просрочка — тонкая полоса слева, а не красная заливка (п.28) */}
+      {overdue && (
+        <span aria-hidden className="my-2 w-[3px] shrink-0 rounded-full bg-[var(--danger)]" />
+      )}
+
+      <button
+        type="button"
+        onClick={onComplete}
+        disabled={busy}
+        title="Выполнить задачу"
+        aria-label={`Выполнить: ${task.title}`}
+        className="focus-ring my-1.5 ml-1 grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-[var(--border-strong)] text-transparent transition-colors hover:border-[var(--success)] hover:bg-[var(--success-soft)] hover:text-[var(--success)] disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {busy ? (
+          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent text-[var(--muted)]" />
+        ) : (
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+        )}
+      </button>
+
+      <button
+        type="button"
+        onClick={onSelect}
+        className="focus-ring min-w-0 flex-1 rounded-control px-2 py-2 text-left"
+      >
+        <span
+          className={`block truncate text-[14.5px] leading-snug ${
+            overdue ? "font-medium text-ink" : "text-ink"
+          }`}
+        >
+          {task.title}
+        </span>
+        <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-[var(--muted)]">
+          {task.client_name && (
+            <span className="max-w-[190px] truncate font-medium text-[#475569]">{task.client_name}</span>
+          )}
+          <span className={overdue ? "font-semibold text-[var(--danger)]" : ""}>
+            {time ? `${time} · ` : ""}
+            {relativeDay(task.due_date)}
+          </span>
+          <span className="hidden sm:inline">· {TASK_TYPE_LABELS[task.type] ?? task.type}</span>
+          {task.needs_review && <ReviewChip />}
+          {task.priority === "critical" && (
+            <span className="rounded-full bg-[var(--danger-soft)] px-2 py-0.5 text-[11.5px] font-semibold text-[var(--danger)]">
+              Критично
+            </span>
+          )}
+          {task.origin === "ai" && (
+            <span className="rounded-full bg-[var(--primary-soft)] px-2 py-0.5 text-[11.5px] font-medium text-primary">
+              AI
+            </span>
+          )}
+        </span>
+      </button>
+
+      {onReschedule && (
+        <button
+          type="button"
+          onClick={onReschedule}
+          title="Перенести на другую дату"
+          aria-label="Перенести"
+          className="focus-ring my-1.5 mr-1 grid h-11 w-11 shrink-0 place-items-center rounded-lg text-[var(--muted)] opacity-0 transition-colors hover:bg-[#eef2f8] hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <rect x="3" y="4.5" width="18" height="16.5" rx="2.5" />
+            <path d="M8 2.5v4M16 2.5v4M3 10.5h18" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Строка закрытой задачи: зачёркнуто + дата закрытия (п.25, п.26). */
+export function DoneTaskRow({
+  task,
+  onReopen,
+}: {
+  task: {
+    id: string;
+    title: string;
+    client_name?: string | null;
+    completed_at: string | null;
+  };
+  onReopen?: () => void;
+}) {
+  const when = task.completed_at
+    ? new Date(task.completed_at.endsWith("Z") ? task.completed_at : `${task.completed_at}Z`)
+        .toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+    : null;
+  return (
+    <div className="flex items-center gap-2 rounded-control px-2 py-1.5 hover:bg-[#f8fafd]">
+      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[var(--success-soft)] text-[var(--success)]">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2">
+          <path d="M20 6L9 17l-5-5" />
+        </svg>
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13.5px] text-[var(--muted)] line-through">{task.title}</span>
+        <span className="mt-0.5 block truncate text-[11.5px] text-[var(--muted)]">
+          {task.client_name ?? ""}
+          {when ? `${task.client_name ? " · " : ""}закрыто в ${when}` : ""}
+        </span>
+      </span>
+      {onReopen && (
+        <button
+          type="button"
+          onClick={onReopen}
+          className="focus-ring h-8 shrink-0 rounded-lg px-2.5 text-[12.5px] font-medium text-primary transition-colors hover:bg-[var(--primary-soft)]"
+        >
+          Вернуть
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Подпись приоритета для контекстной панели. */
+export function priorityLabel(priority: string): string {
+  return PRIORITY_LABELS[priority] ?? priority;
+}

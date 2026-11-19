@@ -182,3 +182,99 @@ def delete_allocation(allocation_id: str, db: Session = Depends(get_db), user: U
 def financial_summary(client_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     client = get_client_or_404(db, user, client_id)
     return _summary(db, client.id)
+
+
+# ---------------------------------------------------------------- общая сводка
+# Требования §7: п.79 общий раздел «Финансы», п.80 счётчики сверху,
+# п.81 таблица счетов и платежей, п.82 долг из финансовых записей.
+@router.get("/finance/overview")
+def finance_overview(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Сводка по всем доступным клиентам + последние счета и платежи.
+
+    Менеджер видит только своих клиентов, админ — всех. Суммы считаются
+    по финансовым записям (Invoice/Payment/Allocation), не по заметкам AI.
+    """
+    from ..models import Client
+
+    clients_q = select(Client).where(Client.deleted_at.is_(None))
+    if user.role != "admin":
+        clients_q = clients_q.where(Client.owner_id == user.id)
+    clients = list(db.scalars(clients_q))
+    client_ids = [c.id for c in clients]
+    names = {c.id: c.name for c in clients}
+
+    if not client_ids:
+        return {
+            "billed": 0.0, "paid": 0.0, "allocated": 0.0, "debt": 0.0,
+            "overdue_amount": 0.0, "invoices": 0, "unpaid_invoices": 0,
+            "clients": 0, "rows": [],
+        }
+
+    invoices = list(db.scalars(
+        select(Invoice).where(Invoice.client_id.in_(client_ids)).order_by(Invoice.issue_date.desc())
+    ))
+    payments = list(db.scalars(
+        select(Payment).where(Payment.client_id.in_(client_ids)).order_by(Payment.paid_at.desc())
+    ))
+    invoice_ids = [i.id for i in invoices]
+    allocations = list(db.scalars(
+        select(PaymentAllocation).where(PaymentAllocation.invoice_id.in_(invoice_ids or ["-"]))
+    )) if invoice_ids else []
+
+    today = date.today()
+    active_invoices = [i for i in invoices if i.status != "void"]
+    billed = sum(float(i.amount or 0) for i in active_invoices)
+    paid = sum(float(p.amount or 0) for p in payments)
+    allocated = sum(float(a.amount or 0) for a in allocations)
+    overdue_amount = sum(
+        float(i.amount or 0) for i in invoices
+        if i.status == "issued" and i.due_date and i.due_date < today
+    )
+
+    # Распределено по каждому счёту — чтобы показать остаток в строке.
+    alloc_by_invoice: dict[str, float] = {}
+    for alloc in allocations:
+        alloc_by_invoice[alloc.invoice_id] = alloc_by_invoice.get(alloc.invoice_id, 0.0) + float(alloc.amount or 0)
+
+    rows = []
+    for invoice in invoices[:200]:
+        if invoice.client_id not in names:
+            continue
+        amount = float(invoice.amount or 0)
+        covered = alloc_by_invoice.get(invoice.id, 0.0)
+        rows.append({
+            "id": invoice.id,
+            "client_id": invoice.client_id,
+            "client_name": names.get(invoice.client_id),
+            "number": invoice.number,
+            "issue_date": invoice.issue_date,
+            "due_date": invoice.due_date,
+            "amount": round(amount, 2),
+            "allocated": round(covered, 2),
+            "remaining": round(max(amount - covered, 0.0), 2),
+            "status": invoice.status,
+            "overdue": bool(invoice.status == "issued" and invoice.due_date and invoice.due_date < today),
+        })
+
+    return {
+        "billed": round(billed, 2),
+        "paid": round(paid, 2),
+        "allocated": round(allocated, 2),
+        "debt": round(billed - allocated, 2),
+        "overdue_amount": round(overdue_amount, 2),
+        "invoices": len(invoices),
+        "unpaid_invoices": sum(1 for i in invoices if i.status == "issued"),
+        "clients": len(clients),
+        "rows": rows,
+        "payments": [
+            {
+                "id": p.id,
+                "client_id": p.client_id,
+                "client_name": names.get(p.client_id),
+                "amount": round(float(p.amount or 0), 2),
+                "paid_at": p.paid_at,
+                "method": getattr(p, "method", None),
+            }
+            for p in payments[:50]
+        ],
+    }

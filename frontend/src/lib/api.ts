@@ -260,12 +260,17 @@ export type Task = {
   due_at: string | null;
   due_date: string | null;
   origin: "manual" | "ai" | "import";
+  /** Ссылка на заметку, из которой AI создал задачу (п.57 §5). */
+  source_note_id: string | null;
   source_quote: string | null;
   confidence: number | null;
   conditional: boolean;
   needs_review: boolean;
   review_reason: string | null;
+  assignee_id?: string;
+  timezone?: string;
   completed_at: string | null;
+  result_note?: string | null;
   version: number;
 };
 
@@ -335,6 +340,23 @@ export type Paged<T> = {
   items: T[];
   total: number;
   next_cursor: string | null;
+};
+
+/** Ответ GET /tasks/today — весь экран «Сегодня» одним запросом. */
+export type TodayCounters = {
+  today: number;
+  overdue: number;
+  payments: number;
+  review: number;
+  done_today: number;
+  week: number;
+};
+
+export type TodayPayload = {
+  date: string;
+  counters: TodayCounters;
+  items: Task[];
+  done: Task[];
 };
 
 export type Session = {

@@ -358,6 +358,32 @@ class PlannerSummary(BaseModel):
     completed_today: int
 
 
+# ---------------------------------------------------------------- экран «Сегодня»
+class TodayCounters(BaseModel):
+    """Счётчики для KPI главного экрана (требования, п.19)."""
+
+    today: int
+    overdue: int
+    payments: int
+    review: int
+    done_today: int
+    week: int
+
+
+class TodayOut(BaseModel):
+    """Один запрос на весь экран «Сегодня» (п.19-31).
+
+    items — открытые задачи (просроченные и сегодня), уже отсортированные:
+    просроченные -> критичные -> по времени (п.22).
+    done  — закрытые сегодня, для кнопки «Показать выполненные» (п.31).
+    """
+
+    date: date
+    counters: TodayCounters
+    items: list[TaskOut]
+    done: list[TaskOut]
+
+
 # ---------------------------------------------------------------- finance
 class InvoiceCreate(BaseModel):
     project_id: str | None = None

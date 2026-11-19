@@ -69,6 +69,17 @@ class Settings:
         ]
         self.rate_limit_per_minute = int(_env("FORTEON_RATE_LIMIT", "240"))
 
+        # Защита от перебора паролей (этап A, P0).
+        # Попыток входа с одного IP+логина за окно `login_window` секунд.
+        self.login_max_attempts = int(_env("FORTEON_LOGIN_MAX_ATTEMPTS", "5"))
+        self.login_window_seconds = int(_env("FORTEON_LOGIN_WINDOW", "300"))
+        # После превышения — карантин на `lockout` секунд (даже с верным паролем).
+        self.login_lockout_seconds = int(_env("FORTEON_LOGIN_LOCKOUT", "900"))
+        # Общий потолок запросов к API на пользователя/сессию.
+        self.api_limit_per_minute = int(_env("FORTEON_API_LIMIT_PER_MINUTE", "600"))
+        # Писать в лог тела запросов с персональными данными (только для отладки).
+        self.log_payloads = _bool("FORTEON_LOG_PAYLOADS", False)
+
         # AI Extractor. Любой OpenAI-совместимый провайдер:
         # OpenRouter, RouterAI (https://routerai.ru/api/v1) и т.п.
         self.ai_api_key = _env("FORTEON_AI_API_KEY") or _env("OPENROUTER_API_KEY")
