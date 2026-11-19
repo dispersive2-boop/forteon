@@ -56,6 +56,14 @@ export function isOverdue(task: { due_date: string | null; status: string }): bo
   return due.getTime() < Date.now();
 }
 
+/** Размер файла по-человечески: 1536 → «1,5 КБ». */
+export function formatBytes(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined || Number.isNaN(bytes)) return "—";
+  if (bytes < 1024) return `${bytes} Б`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1).replace(".", ",")} КБ`;
+  return `${(bytes / (1024 * 1024)).toFixed(1).replace(".", ",")} МБ`;
+}
+
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).slice(0, 2);
   return parts.map((p) => p[0]?.toUpperCase() ?? "").join("") || "?";

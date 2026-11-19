@@ -2,7 +2,20 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+/*
+ * ВАЖНО: здесь НЕ используется useSearchParams().
+ * В Next.js 15 App Router этот хук требует Suspense-границы на уровне
+ * страницы; без неё клиентский компонент зависает и страница не отдаётся
+ * (замер: таймаут 90 с на /clients/{id}). Вкладку читаем из window.location
+ * и пишем через history.replaceState — без ре-рендера роутера.
+ */
+function readTabFromUrl(): Tab | null {
+  if (typeof window === "undefined") return null;
+  const value = new URLSearchParams(window.location.search).get("tab");
+  return TAB_KEYS.includes(value as Tab) ? (value as Tab) : null;
+}
 
 import {
   Badge,
@@ -22,15 +35,46 @@ import {
 } from "@/components/ui";
 import {
   api,
+  API_ROOT,
+  ClientContract,
   ClientDetail,
+  ClientDocument,
   FinancialSummary,
   Note,
   Project,
   Task,
 } from "@/lib/api";
-import { dateRu, dateTimeRu, isOverdue, money, relativeDay } from "@/lib/format";
+import {
+  dateRu,
+  dateTimeRu,
+  formatBytes,
+  isOverdue,
+  money,
+  relativeDay,
+} from "@/lib/format";
 
-type Tab = "overview" | "notes" | "tasks" | "finance" | "projects";
+/**
+ * Семь вкладок карточки клиента (DESIGN TASKS v2.1, п.34-40).
+ * «Контакты» и «Документы» вынесены отдельно: раньше их не было в UI,
+ * хотя эндпоинты /contacts и /documents существовали.
+ * Вкладка хранится в URL (?tab=finance) — можно дать ссылку коллеге (п.43).
+ */
+type Tab =
+  | "overview"
+  | "notes"
+  | "tasks"
+  | "projects"
+  | "finance"
+  | "documents"
+  | "history";
+
+const TAB_KEYS: Tab[] = [
+  "overview", "notes", "tasks", "projects", "finance", "documents", "history",
+];
+
+function tabFromQuery(value: string | null): Tab {
+  return TAB_KEYS.includes(value as Tab) ? (value as Tab) : "overview";
+}
 
 /** Статусы AI по-человечески: раньше в интерфейсе висело «AI: ok». */
 const AI_STATUS_RU: Record<
@@ -97,8 +141,10 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Обзор" },
   { key: "notes", label: "Заметки" },
   { key: "tasks", label: "Задачи" },
-  { key: "finance", label: "Финансы" },
   { key: "projects", label: "Проекты" },
+  { key: "finance", label: "Финансы" },
+  { key: "documents", label: "Документы" },
+  { key: "history", label: "История" },
 ];
 
 export default function ClientPage() {
@@ -110,34 +156,100 @@ export default function ClientPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [finance, setFinance] = useState<FinancialSummary | null>(null);
-  const [tab, setTab] = useState<Tab>("overview");
+  const [documents, setDocuments] = useState<ClientDocument[]>([]);
+  const [contracts, setContracts] = useState<ClientContract[]>([]);
+  const [tab, setTabState] = useState<Tab>("overview");
   const [loading, setLoading] = useState(true);
+
+  // Пункт 43: вкладку восстанавливаем из URL после монтирования.
+  useEffect(() => {
+    const fromUrl = readTabFromUrl();
+    if (fromUrl) setTabState(fromUrl);
+  }, [clientId]);
+
+  /** Пункт 43: вкладка в URL, смена не сбрасывает выбранного клиента. */
+  const setTab = useCallback(
+    (next: Tab) => {
+      setTabState(next);
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", next);
+      window.history.replaceState(null, "", url.toString());
+    },
+    [],
+  );
   const [error, setError] = useState<string | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteBody, setNoteBody] = useState("");
   const [saving, setSaving] = useState(false);
 
+  /**
+   * Пункт 40: история существенных действий.
+   * Собирается из реальных данных карточки: заметки, выполненные задачи,
+   * создание и изменение карточки. Отдельного журнала по клиенту в API нет —
+   * события не выдумываем, показываем то, что действительно произошло.
+   */
+  const historyItems = useMemo(() => {
+    const events: { at: string; title: string; tone: string }[] = [];
+
+    for (const note of notes.slice(0, 20)) {
+      const flat = note.body.replace(/\s+/g, " ");
+      events.push({
+        at: note.created_at,
+        title: `Заметка: ${flat.slice(0, 90)}${flat.length > 90 ? "…" : ""}`,
+        tone: "bg-primary",
+      });
+    }
+    for (const task of tasks.slice(0, 20)) {
+      if (task.completed_at) {
+        events.push({
+          at: task.completed_at,
+          title: `Задача выполнена: ${task.title}`,
+          tone: "bg-[var(--success)]",
+        });
+      }
+    }
+    if (client) {
+      events.push({
+        at: client.created_at,
+        title: "Клиент создан в системе",
+        tone: "bg-[#94A3B8]",
+      });
+      if (client.updated_at && client.updated_at !== client.created_at) {
+        events.push({
+          at: client.updated_at,
+          title: `Карточка обновлена, статус: ${client.status}`,
+          tone: "bg-[var(--warning)]",
+        });
+      }
+    }
+
+    return events.sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 40);
+  }, [notes, tasks, client]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [detail, projectList, taskList, notePage, fin] = await Promise.all([
+      const [detail, projectList, taskList, notePage, fin, docs, contractList] = await Promise.all([
         api<ClientDetail>(`/clients/${clientId}`),
         api<Project[]>(`/clients/${clientId}/projects`),
         api<{ items: Task[] }>(`/tasks?client_id=${clientId}&status=all&limit=200`),
         /*
-         * Эндпоинт теперь отдаёт {items, total}: рядом с каждой заметкой
-         * едет task_count / open_task_count / tasks.
-         * Раньше здесь ожидался массив — из-за этого история выглядела
-         * пустой («Заметок нет» при пяти реальных заметках).
+         * Эндпоинт отдаёт {items, total}: рядом с каждой заметкой едет
+         * task_count / open_task_count / tasks. Раньше ожидался массив —
+         * из-за этого история выглядела пустой при пяти реальных заметках.
          */
         api<{ items: Note[]; total: number }>(`/clients/${clientId}/notes?limit=50`),
         api<FinancialSummary>(`/clients/${clientId}/financial-summary`),
+        api<ClientDocument[]>(`/clients/${clientId}/documents`).catch(() => []),
+        api<ClientContract[]>(`/clients/${clientId}/contracts`).catch(() => []),
       ]);
       setClient(detail);
       setProjects(projectList);
       setTasks(taskList.items);
       setNotes(Array.isArray(notePage) ? notePage : notePage?.items ?? []);
       setFinance(fin);
+      setDocuments(Array.isArray(docs) ? docs : []);
+      setContracts(Array.isArray(contractList) ? contractList : []);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось загрузить карточку клиента");
@@ -539,7 +651,120 @@ export default function ClientPage() {
               <EmptyState title="Проектов нет" description="Добавьте проект клиента через API или импорт." />
             </Card>
           )}
+
+          {/* Пункт 37: внутри проектов — договоры */}
+          {contracts.length > 0 && (
+            <Card>
+              <SectionTitle title="Договоры" subtitle="Суммы договоров не равны оплатам" />
+              <div className="divide-y divide-[var(--border)]">
+                {contracts.map((contract) => (
+                  <div key={contract.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-[13.5px] font-medium text-ink">
+                        {contract.number ? `Договор №${contract.number}` : "Без номера"}
+                      </p>
+                      <p className="text-[12px] text-[var(--muted)]">
+                        подписан {dateRu(contract.signed_at)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {contract.amount !== null && (
+                        <span className="tabular text-[13px] font-medium text-ink">
+                          {money(contract.amount)}
+                        </span>
+                      )}
+                      <Badge tone="neutral">{contract.status}</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
         </div>
+      )}
+
+      {/* ------------------------------------------------ Документы (п.39) */}
+      {tab === "documents" && (
+        <Card padded={false}>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3">
+            <div>
+              <h2 className="text-[16.5px] font-semibold tracking-[-0.015em] text-ink">Документы</h2>
+              <p className="mt-0.5 text-[12.5px] text-[var(--muted)]">
+                Файлы клиента: тип, размер, дата и привязка к проекту или договору.
+              </p>
+            </div>
+            <Badge tone="neutral">{documents.length}</Badge>
+          </div>
+
+          {documents.length ? (
+            <div className="divide-y divide-[var(--border)]">
+              {documents.map((doc) => (
+                <div key={doc.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 hover:bg-[#f8fafd]">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[var(--primary-soft)] text-primary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+                      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+                      <path d="M14 3v5h5" />
+                    </svg>
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    {/* Пункт 44: длинные названия переносим, а не обрезаем безвозвратно */}
+                    <p className="break-words text-[13.5px] font-medium leading-snug text-ink">
+                      {doc.filename}
+                    </p>
+                    <p className="mt-0.5 text-[11.5px] text-[var(--muted)]">
+                      {doc.mime_type ?? "файл"}
+                      {doc.size ? ` · ${formatBytes(doc.size)}` : ""}
+                      {` · ${dateRu(doc.created_at)}`}
+                      {doc.project_id ? " · привязан к проекту" : ""}
+                    </p>
+                  </div>
+                  <a
+                    href={`${API_ROOT}/api/v1/documents/${doc.id}/download`}
+                    className="focus-ring shrink-0 rounded-lg border border-[var(--border-strong)] px-2.5 py-1.5 text-[12.5px] font-medium text-[var(--muted)] transition-colors hover:border-primary hover:text-primary"
+                  >
+                    Скачать
+                  </a>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-4">
+              <EmptyState
+                title="Документов нет"
+                description="Файлы загружаются в карточке клиента или через импорт. Привязка к заметке появится в этапе B."
+              />
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* ------------------------------------------------ История (п.40) */}
+      {tab === "history" && (
+        <Card>
+          <SectionTitle
+            title="История"
+            subtitle="Существенные действия по клиенту: заметки, задачи, изменения статуса"
+          />
+          {historyItems.length ? (
+            <ol className="relative space-y-3 border-l border-[var(--border)] pl-4">
+              {historyItems.map((item, index) => (
+                <li key={`${item.at}-${index}`} className="relative">
+                  <span
+                    className={`absolute -left-[21px] top-1.5 h-2 w-2 rounded-full ${item.tone}`}
+                    aria-hidden
+                  />
+                  <p className="text-[13.5px] leading-snug text-ink">{item.title}</p>
+                  <p className="mt-0.5 text-[11.5px] text-[var(--muted)]">{dateTimeRu(item.at)}</p>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <EmptyState
+              title="Событий пока нет"
+              description="Здесь появятся передачи клиента, изменения статуса и последние действия."
+            />
+          )}
+        </Card>
       )}
 
       <Modal

@@ -228,6 +228,31 @@ export type ClientDetail = Client & {
   debt: number;
 };
 
+/** Документ клиента (вкладка «Документы», п.39 §4). */
+export type ClientDocument = {
+  id: string;
+  client_id: string;
+  project_id: string | null;
+  contract_id: string | null;
+  filename: string;
+  mime_type: string | null;
+  size: number | null;
+  created_at: string;
+  uploaded_by: string | null;
+};
+
+/** Договор клиента (вкладка «Проекты» → договоры, п.37 §4). */
+export type ClientContract = {
+  id: string;
+  client_id: string;
+  project_id: string | null;
+  number: string | null;
+  signed_at: string | null;
+  amount: number | null;
+  currency: string;
+  status: string;
+};
+
 export type Project = {
   id: string;
   client_id: string;
