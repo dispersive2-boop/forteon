@@ -407,8 +407,8 @@ export default function TodayPage() {
                 subtitle="AI не определил срок — решите, когда это сделать"
               />
               <Link
-                href="/planner?view=review"
-                className="focus-ring inline-flex items-center gap-1.5 rounded-lg text-[13.5px] font-medium text-primary hover:underline"
+                href="/planner"
+                className="focus-ring inline-flex min-h-[44px] items-center gap-1.5 rounded-lg text-[13.5px] font-medium text-primary hover:underline"
               >
                 Открыть {data?.counters.review} задач <span aria-hidden>→</span>
               </Link>

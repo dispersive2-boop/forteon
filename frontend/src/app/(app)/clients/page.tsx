@@ -99,7 +99,7 @@ export default function ClientsPage() {
         <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] px-3 py-2.5">
           <div className="relative min-w-[220px] flex-1">
             <svg
-              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9aa7bd]"
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6B7280]"
               width="15"
               height="15"
               viewBox="0 0 24 24"
@@ -114,7 +114,7 @@ export default function ClientsPage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Поиск по названию или юрлицу"
-              className="focus-ring h-9 w-full rounded-control border border-[var(--border-strong)] bg-surface pl-8.5 pr-3 text-[13px] text-ink placeholder:text-[#9aa7bd]"
+              className="focus-ring h-9 w-full rounded-control border border-[var(--border-strong)] bg-surface pl-8.5 pr-3 text-[13px] text-ink placeholder:text-[#6B7280]"
             />
           </div>
           <select

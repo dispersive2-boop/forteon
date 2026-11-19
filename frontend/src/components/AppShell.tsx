@@ -78,6 +78,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [overdue, setOverdue] = useState(0);
+  /**
+   * П.128: статус сети виден интерфейсу. navigator.onLine не идеален, но
+   * даёт честный сигнал при обрыве; запросы всё равно упадут с ошибкой,
+   * а менеджер увидит причину, а не «что-то пошло не так».
+   */
+  const [online, setOnline] = useState(true);
+
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
 
   const items = NAV_ITEMS.filter((item) => !item.adminOnly || user?.role === "admin");
 
@@ -177,7 +194,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 onClick={signOut}
                 title="Выйти из аккаунта"
                 aria-label="Выйти из аккаунта"
-                className="focus-ring grid h-11 w-11 shrink-0 place-items-center rounded-lg text-[#94A3B8] transition-colors hover:bg-white/10 hover:text-white"
+                className="focus-ring grid h-11 w-11 shrink-0 place-items-center rounded-lg text-[#6B7280] transition-colors hover:bg-white/10 hover:text-white"
               >
                 <IconLogout size={18} />
               </button>
@@ -209,6 +226,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {pageTitle(pathname)}
           </span>
           <span className="hidden min-w-0 flex-1 md:block" aria-hidden />
+
+          {/* П.128: состояние сети видно всегда, а не только при обрыве */}
+          <span
+            role="status"
+            aria-live="polite"
+            title={online ? "Соединение есть" : "Нет сети — изменения не сохранятся"}
+            className={`hidden h-8 items-center gap-1.5 rounded-lg px-2 text-[12px] font-medium sm:flex ${
+              online ? "text-[var(--muted)]" : "bg-[var(--danger-soft)] text-[var(--danger)]"
+            }`}
+          >
+            <span
+              aria-hidden
+              className={`h-1.5 w-1.5 rounded-full ${online ? "bg-[var(--success)]" : "bg-[var(--danger)]"}`}
+            />
+            {online ? "онлайн" : "нет сети"}
+          </span>
 
           <Link
             href="/clients"
@@ -242,6 +275,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="sm:hidden">Заметка</span>
           </Link>
         </header>
+
+        {/* П.128: при обрыве сети менеджер сразу видит, почему не сохраняется */}
+        {!online && (
+          <div
+            role="alert"
+            className="mx-3 mt-3 rounded-control border border-[#f3c7cb] bg-[var(--danger-soft)] px-3.5 py-2.5 text-[13px] leading-snug text-[var(--danger)] md:mx-6"
+          >
+            Нет соединения с интернетом. Изменения не сохранятся, пока сеть не
+            вернётся — текст заметки останется в редакторе.
+          </div>
+        )}
 
         {/* Пункт 10: никакой горизонтальной прокрутки всего приложения */}
         <main className="min-w-0 max-w-full flex-1 px-3 pb-24 pt-4 md:px-6 md:pb-8 md:pt-6">

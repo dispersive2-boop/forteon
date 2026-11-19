@@ -190,7 +190,7 @@ export default function FinancePage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Клиент или номер счёта"
-              className="focus-ring h-9 w-[220px] rounded-lg border border-[var(--border-strong)] px-3 text-[13px] text-ink placeholder:text-[#94A3B8]"
+              className="focus-ring h-9 w-[220px] rounded-lg border border-[var(--border-strong)] px-3 text-[13px] text-ink placeholder:text-[#6B7280]"
             />
             {tab === "invoices" && (
               <button

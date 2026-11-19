@@ -377,10 +377,10 @@ export function Field({
 }
 
 export const inputClass =
-  "focus-ring block h-11 w-full min-w-0 truncate rounded-control border border-[var(--border-strong)] bg-surface px-3.5 text-[14.5px] leading-normal text-ink placeholder:text-[#94A3B8]";
+  "focus-ring block h-11 w-full min-w-0 truncate rounded-control border border-[var(--border-strong)] bg-surface px-3.5 text-[14.5px] leading-normal text-ink placeholder:text-[#6B7280]";
 
 export const textareaClass =
-  "focus-ring block w-full min-w-0 resize-y rounded-control border border-[var(--border-strong)] bg-surface px-3.5 py-3 text-[14.5px] leading-relaxed text-ink placeholder:text-[#94A3B8]";
+  "focus-ring block w-full min-w-0 resize-y rounded-control border border-[var(--border-strong)] bg-surface px-3.5 py-3 text-[14.5px] leading-relaxed text-ink placeholder:text-[#6B7280]";
 
 /* ==================================================================
    Ниже — примитивы для редизайна по списку DESIGN TASKS v2.1.

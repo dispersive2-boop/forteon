@@ -253,7 +253,7 @@ function PhoneMock() {
               <div
                 key={item.label}
                 className={`flex flex-col items-center gap-0.5 ${
-                  item.active ? "text-[#2563EB]" : "text-[#94A3B8]"
+                  item.active ? "text-[#2563EB]" : "text-[#6B7280]"
                 }`}
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

@@ -156,6 +156,15 @@ select {
   min-height: 44px;
 }
 
+/*
+  П.112: без этого при появлении вертикального скроллбара страница
+  «прыгает» влево на ширину полосы (на Windows ≈15px). Резервируем место
+  всегда — контент не сдвигается между состояниями.
+*/
+html {
+  scrollbar-gutter: stable;
+}
+
 .focus-ring:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;

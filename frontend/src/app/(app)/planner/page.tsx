@@ -791,7 +791,7 @@ function WeekView({
             <button
               type="button"
               onClick={() => onPickDay(iso)}
-              className="focus-ring mb-1.5 flex w-full items-baseline justify-between gap-1 rounded"
+              className="focus-ring mb-1.5 flex min-h-[36px] w-full items-center justify-between gap-1 rounded px-0.5"
             >
               <span className={`text-[12.5px] font-semibold ${isToday ? "text-primary" : "text-ink"}`}>
                 {WEEKDAYS[(day.getDay() + 6) % 7]}, {day.getDate()}
@@ -802,7 +802,7 @@ function WeekView({
             </button>
 
             {list.length === 0 ? (
-              <p className="py-2 text-[11.5px] text-[#b3bccb]">пусто</p>
+              <p className="py-2 text-[11.5px] text-[#6B7280]">пусто</p>
             ) : (
               <div className="space-y-1">
                 {list.slice(0, 6).map((task) => (
@@ -811,7 +811,7 @@ function WeekView({
                     type="button"
                     onClick={() => onReschedule(task)}
                     title={`${task.title}${task.client_name ? ` · ${task.client_name}` : ""}`}
-                    className={`block w-full break-words rounded-md px-1.5 py-1 text-left text-[12px] leading-snug transition-colors hover:bg-[#f1f4f9] ${
+                    className={`block min-h-[32px] w-full break-words rounded-md px-1.5 py-1.5 text-left text-[12px] leading-snug transition-colors hover:bg-[#f1f4f9] ${
                       task.status === "done"
                         ? "text-[var(--muted)] line-through"
                         : task.priority === "critical"
@@ -831,7 +831,7 @@ function WeekView({
                   <button
                     type="button"
                     onClick={() => onPickDay(iso)}
-                    className="text-[11.5px] font-medium text-primary hover:underline"
+                    className="focus-ring flex min-h-[32px] items-center text-[11.5px] font-medium text-primary hover:underline"
                   >
                     ещё {list.length - 6}
                   </button>
@@ -925,7 +925,7 @@ function MonthView({
                   <span
                     key={task.id}
                     className={`block truncate text-[10.5px] leading-tight ${
-                      task.status === "done" ? "text-[#b3bccb] line-through" : "text-[var(--muted)]"
+                      task.status === "done" ? "text-[#6B7280] line-through" : "text-[var(--muted)]"
                     }`}
                   >
                     {task.title}
@@ -1004,7 +1004,7 @@ function YearView({
             </span>
             <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px]">
               {month.open === 0 && month.done === 0 ? (
-                <span className="text-[#b3bccb]">нет задач</span>
+                <span className="text-[#6B7280]">нет задач</span>
               ) : (
                 <>
                   {month.open > 0 && (

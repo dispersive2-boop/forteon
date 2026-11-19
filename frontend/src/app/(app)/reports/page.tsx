@@ -315,20 +315,27 @@ export default function ReportsPage() {
                   return (
                     <label
                       key={item.key}
-                      className={`flex cursor-pointer items-start gap-2.5 rounded-control border px-2.5 py-2 transition-colors ${
+                      className={`flex min-h-[52px] cursor-pointer items-start gap-2.5 rounded-control border px-2.5 py-2 transition-colors ${
                         on
                           ? "border-primary bg-[var(--primary-soft)]"
                           : "border-[var(--border)] hover:border-[var(--border-strong)]"
                       }`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={on}
-                        onChange={(e) =>
-                          setSections({ ...sections, [item.key]: e.target.checked })
-                        }
-                        className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--primary)]"
-                      />
+                      {/*
+                        Чекбокс 16px — нормальный размер для мыши, но зона
+                        нажатия расширена до 44px через label: на телефоне
+                        попасть по квадратику 16px нереально (п.100).
+                      */}
+                      <span className="grid h-11 w-8 shrink-0 place-items-center">
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          onChange={(e) =>
+                            setSections({ ...sections, [item.key]: e.target.checked })
+                          }
+                          className="h-4 w-4 accent-[var(--primary)]"
+                        />
+                      </span>
                       <span className="min-w-0">
                         <span className={`block text-[13px] font-medium ${on ? "text-primary" : "text-ink"}`}>
                           {item.label}
