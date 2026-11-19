@@ -100,18 +100,44 @@ def clients_picker(
     if user.role != "admin":
         query = query.where(Client.owner_id == user.id)
 
-    needle = (q or "").strip().lower()
-    if needle:
-        pattern = f"%{needle}%"
-        query = query.where(
-            or_(
-                func.lower(Client.name).like(pattern),
-                func.lower(Client.legal_name).like(pattern),
-            )
-        )
+    needle = (q or "").strip()
+    needle_cf = needle.casefold()
 
-    # Кандидаты: берём с запасом, точную сортировку считаем в Python
+    # Кандидатов всегда берём из общей выборки (owner-скоуп уже применён),
+    # а совпадения считаем в Python.
+    #
+    # Почему не SQL LIKE: SQLite LOWER() не понимает кириллицу, поэтому
+    # «альфа» не находило «Альфа» — поиск по русским названиям не работал
+    # вообще, хотя выглядел рабочим. casefold() корректен для Unicode.
+    # Объём — сотни клиентов, фильтрация в памяти дешевле ошибки поиска.
     candidates = list(db.scalars(query.limit(400)))
+
+    if needle:
+        # Контакт ищем по трём полям: имя, телефон, email (п.48).
+        matched_contact_ids = {
+            client_id
+            for client_id, name, phone, email in db.execute(
+                select(
+                    ClientContact.client_id,
+                    ClientContact.name,
+                    ClientContact.phone,
+                    ClientContact.email,
+                )
+            ).all()
+            if needle_cf in (name or "").casefold()
+            or needle_cf in (phone or "").casefold()
+            or needle_cf in (email or "").casefold()
+        }
+        candidates = [
+            c for c in candidates
+            if needle_cf in (c.name or "").casefold()
+            or needle_cf in (c.legal_name or "").casefold()
+            or needle_cf in (c.tax_id or "").casefold()
+            or needle_cf in (c.registration_id or "").casefold()
+            or needle_cf in (c.address or "").casefold()
+            or c.id in matched_contact_ids
+        ]
+
     if not candidates:
         return {"items": [], "total": 0}
 
@@ -157,7 +183,15 @@ def clients_picker(
 
         scored.append((score, last_at, client))
 
-    scored.sort(key=lambda item: (-item[0], -(item[1] or datetime.min).timestamp(), item[2].name))
+    # datetime.min.timestamp() падает на Windows (выход за диапазон).
+    # Безопасно: клиенты без заметок получают 0.0 и уходят в конец.
+    scored.sort(
+        key=lambda item: (
+            -item[0],
+            -(item[1].timestamp() if item[1] else 0.0),
+            item[2].name,
+        )
+    )
     top = scored[:limit]
 
     items = []

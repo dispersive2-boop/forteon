@@ -581,7 +581,7 @@ export default function NotesPage() {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Имя, объект, юрлицо"
+                placeholder="Название, ИНН, телефон, контакт"
                 aria-label="Найти клиента"
                 className="focus-ring h-11 w-full min-w-0 rounded-control border border-[var(--border-strong)] bg-surface pl-9 pr-9 text-[14.5px] text-ink"
               />
@@ -964,6 +964,35 @@ function NoteCard({
   const commitments = note.commitments ?? [];
   const realId = !note.optimistic;
 
+  /*
+    п.59: ИИ иногда формулирует задачу неточно. Менеджер должен исправить её
+    прямо здесь, не уходя в карточку клиента и не открывая модальное окно.
+    Правим через PATCH /tasks/{id} — тот же эндпоинт, что и везде.
+  */
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftTitle, setDraftTitle] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  async function saveTaskTitle(taskId: string) {
+    const title = draftTitle.trim();
+    if (!title) {
+      setEditingId(null);
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      await api(`/tasks/${taskId}`, { method: "PATCH", body: { title } });
+      if (taskId) {
+        // Обновляем локально, чтобы не ждать перезагрузку всей ленты.
+        const target = tasks.find((t) => t.id === taskId);
+        if (target) target.title = title;
+      }
+      setEditingId(null);
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   return (
     <article className="rounded-card border border-[var(--border)] bg-surface p-3.5 shadow-soft">
       <header className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -1045,13 +1074,54 @@ function NoteCard({
                         : "bg-primary"
                   }`}
                 />
-                <span
-                  className={`min-w-0 flex-1 break-words text-[13.5px] font-medium ${
-                    task.status === "done" ? "text-[var(--muted)] line-through" : "text-ink"
-                  }`}
-                >
-                  {task.title}
-                </span>
+                {editingId === task.id ? (
+                  <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                    <input
+                      autoFocus
+                      value={draftTitle}
+                      onChange={(e) => setDraftTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") void saveTaskTitle(task.id);
+                        if (e.key === "Escape") setEditingId(null);
+                      }}
+                      className="focus-ring min-w-0 flex-1 rounded-md border border-[var(--border-strong)] px-2 py-1 text-[13.5px]"
+                      aria-label="Исправить формулировку задачи"
+                    />
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      loading={savingEdit}
+                      onClick={() => void saveTaskTitle(task.id)}
+                    >
+                      Сохранить
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
+                      Отмена
+                    </Button>
+                  </span>
+                ) : (
+                  <>
+                    <span
+                      className={`min-w-0 flex-1 break-words text-[13.5px] font-medium ${
+                        task.status === "done" ? "text-[var(--muted)] line-through" : "text-ink"
+                      }`}
+                    >
+                      {task.title}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingId(task.id);
+                        setDraftTitle(task.title);
+                      }}
+                      title="Исправить формулировку задачи"
+                      aria-label="Исправить формулировку задачи"
+                      className="focus-ring shrink-0 rounded px-1.5 py-1 text-[11.5px] font-medium text-primary hover:bg-[var(--primary-soft)]"
+                    >
+                      Исправить
+                    </button>
+                  </>
+                )}
                 {task.due_date && (
                   <span
                     className={`shrink-0 text-[12px] ${

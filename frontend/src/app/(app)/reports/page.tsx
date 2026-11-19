@@ -106,6 +106,33 @@ export default function ReportsPage() {
     void load();
   }, [load]);
 
+  /*
+    п.88 DESIGN TASKS v2.1: состояние генерации должно обновляться само,
+    без перезагрузки страницы. Раньше «формируется» висело вечно, пока
+    менеджер не нажмёт F5. Опрашиваем только пока есть незавершённые
+    задания, затем останавливаемся — лишних запросов нет.
+  */
+  const hasPending = useMemo(
+    () => jobs.some((j) => j.status !== "ready" && j.status !== "failed"),
+    [jobs],
+  );
+
+  useEffect(() => {
+    if (!hasPending) return;
+    const timer = setInterval(() => {
+      void api<ReportJob[]>("/reports?limit=40")
+        .then((list) => {
+          setJobs(list);
+          const fresh = list.find((j) => j.status === "ready");
+          if (fresh) setReadyJob((prev) => prev ?? fresh);
+        })
+        .catch(() => {
+          /* тихо: следующий тик попробует снова */
+        });
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [hasPending]);
+
   const chosen = useMemo(
     () => SECTIONS.filter((item) => sections[item.key]).map((item) => item.key),
     [sections],
