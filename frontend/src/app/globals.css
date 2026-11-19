@@ -1,0 +1,188 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ForteOn design tokens — утверждённая палитра из дизайн-системы */
+:root {
+  /* Поверхности */
+  --sidebar: #111827;         /* Панель */
+  --sidebar-hover: #1F2937;
+  --sidebar-active: #2563EB;
+  --canvas: #F8FAFC;          /* Фон */
+  --surface: #FFFFFF;         /* Карточка */
+
+  /* Основной синий */
+  --primary: #2563EB;         /* Основной */
+  --primary-hover: #1D4ED8;
+  --primary-soft: #EFF6FF;    /* мягкая подложка */
+  --accent: #3B82F6;          /* Акцент */
+
+  /* Текст */
+  --ink: #111827;
+  --muted: #64748B;
+
+  /* Семантика */
+  --success: #22C55E;         /* Успех */
+  --success-soft: #ECFDF5;
+  --warning: #F59E0B;         /* Внимание */
+  --warning-soft: #FFFBEB;
+  --danger: #EF4444;          /* Ошибка */
+  --danger-soft: #FEF2F2;
+  --info: #06B6D4;            /* Инфо */
+  --info-soft: #ECFEFF;
+
+  /* Границы */
+  --border: #E2E8F0;
+  --border-strong: #CBD5E1;
+
+  --radius-card: 16px;
+  --radius-control: 12px;
+  --space-unit: 4px;
+
+  --shadow-soft: 0 1px 2px rgba(17, 24, 39, 0.06), 0 8px 24px -12px rgba(17, 24, 39, 0.18);
+  --shadow-lift: 0 12px 32px -16px rgba(17, 24, 39, 0.32);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Заголовки: крупнее и плотнее, как на титульном экране */
+h1 {
+  font-size: 27px;
+  font-weight: 600;
+  line-height: 1.22;
+  letter-spacing: -0.025em;
+}
+
+h2 {
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+}
+
+h3 {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+/* Сайдбар: принудительно светлый текст во всех состояниях.
+   Без этого браузер наследует тёмный --ink от body. */
+aside {
+  color: #ffffff;
+}
+
+aside a,
+aside button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Поля ввода: достаточно крупные для пальца */
+input,
+select,
+textarea {
+  font-size: 15px;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #93a0b4;
+}
+
+/* Числовые значения читаются ровно */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+::selection {
+  background: rgba(36, 85, 219, 0.16);
+}
+
+/* Скроллбары */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d3dae7;
+  border-radius: 8px;
+  border: 2px solid var(--canvas);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b9c4d6;
+}
+
+.touch-target {
+  min-height: 44px;
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Скелетоны */
+.skeleton {
+  background: linear-gradient(90deg, #eef2f8 25%, #f7f9fc 37%, #eef2f8 63%);
+  background-size: 500px 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: 8px;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -500px 0;
+  }
+  100% {
+    background-position: 500px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

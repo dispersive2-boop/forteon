@@ -1,0 +1,107 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: forteon-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: forteon
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-forteon}
+      POSTGRES_DB: forteon
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forteon -d forteon"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - private
+
+  redis:
+    image: redis:7-alpine
+    container_name: forteon-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - private
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: forteon-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      FORTEON_DATABASE_URL: postgresql+psycopg://forteon:${POSTGRES_PASSWORD:-forteon}@postgres:5432/forteon
+      FORTEON_STORAGE_DIR: /data/storage
+      FORTEON_REPORTS_DIR: /data/reports
+      FORTEON_COOKIE_SECURE: "true"
+      FORTEON_CORS_ORIGINS: https://forteon.pro,https://www.forteon.pro
+    volumes:
+      - appdata:/data
+    ports:
+      # Только для локальной отладки; в production наружу не публиковать
+      - "127.0.0.1:8081:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - private
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: forteon-worker
+    restart: unless-stopped
+    command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    env_file:
+      - .env
+    environment:
+      FORTEON_DATABASE_URL: postgresql+psycopg://forteon:${POSTGRES_PASSWORD:-forteon}@postgres:5432/forteon
+      FORTEON_STORAGE_DIR: /data/storage
+      FORTEON_REPORTS_DIR: /data/reports
+      CELERY_BROKER_URL: redis://redis:6379/0
+    volumes:
+      - appdata:/data
+    depends_on:
+      - api
+      - redis
+    networks:
+      - private
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Пусто = same-origin: браузер пойдёт на https://forteon.pro/api/v1
+        NEXT_PUBLIC_API_URL: ""
+    container_name: forteon-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:3000"
+    depends_on:
+      - api
+    networks:
+      - private
+
+volumes:
+  pgdata:
+  redisdata:
+  appdata:
+
+networks:
+  private:
+    driver: bridge

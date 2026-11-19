@@ -1,0 +1,52 @@
+
+# ===== ForteOn (forteon.pro) =====
+# web  -> 127.0.0.1:8080 (Next.js)
+# api  -> 127.0.0.1:8081 (FastAPI: /api/*, /health)
+forteon.pro, www.forteon.pro {
+	encode zstd gzip
+
+	@api path /api/* /health /api-docs*
+	handle @api {
+		reverse_proxy 127.0.0.1:8081 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			transport http {
+				read_timeout 120s
+				write_timeout 120s
+				keepalive 90s
+			}
+		}
+	}
+
+	@nextimmutable path /_next/static/*
+	header @nextimmutable Cache-Control "public, max-age=31536000, immutable"
+
+	handle {
+		reverse_proxy 127.0.0.1:8080 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			transport http {
+				keepalive 90s
+			}
+		}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output file C:\home_agent\caddy\forteon-access.log {
+			roll_size 20mb
+			roll_keep 5
+		}
+		format json
+		level WARN
+	}
+}
