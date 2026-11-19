@@ -54,11 +54,18 @@ def _process_note_background(note_id: str, author_id: str) -> None:
 
 @router.get("/notes/feed")
 def notes_feed(
-    limit: int = Query(default=50, ge=1, le=200),
+    limit: int = Query(default=30, ge=1, le=200),
+    before: datetime | None = None,
+    client_id: str | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Общая лента заметок по всем клиентам менеджера — одна выборка вместо N запросов."""
+    """Общая лента заметок по всем клиентам менеджера — одна выборка вместо N запросов.
+
+    Отдаём не только текст, но и то, во что заметка превратилась: задачи и
+    обязательства. Фронтенд не делает N запросов на /notes/{id}/tasks, а сразу
+    показывает менеджеру «из этой фразы родилась задача».
+    """
     from ..models import Client
 
     query = (
@@ -68,14 +75,105 @@ def notes_feed(
     )
     if user.role != "admin":
         query = query.where(Client.owner_id == user.id)
+    if client_id:
+        get_client_or_404(db, user, client_id)
+        query = query.where(Note.client_id == client_id)
+    # Курсор пагинации: «покажи то, что старше последней загруженной заметки»
+    if before:
+        query = query.where(Note.created_at < before)
 
     rows = db.execute(query.order_by(Note.created_at.desc()).limit(limit)).all()
+    if not rows:
+        return {"items": [], "total": 0, "next_before": None, "has_more": False}
+
+    note_ids = [note.id for note, _ in rows]
+    task_rows = db.execute(
+        select(
+            Task.source_note_id,
+            Task.id,
+            Task.title,
+            Task.status,
+            Task.due_date,
+            Task.due_at,
+            Task.priority,
+            Task.source_quote,
+            Task.type,
+            Task.needs_review,
+        )
+        .where(Task.source_note_id.in_(note_ids), Task.deleted_at.is_(None))
+        .order_by(Task.created_at.asc())
+    ).all()
+
+    tasks_by_note: dict[str, list[dict]] = {}
+    for (
+        source_note_id,
+        task_id,
+        title,
+        task_status,
+        due_date,
+        due_at,
+        priority,
+        source_quote,
+        task_type,
+        needs_review,
+    ) in task_rows:
+        tasks_by_note.setdefault(source_note_id, []).append(
+            {
+                "id": task_id,
+                "title": title,
+                "status": task_status,
+                "due_date": due_date.isoformat() if due_date else None,
+                "due_at": due_at.isoformat() if due_at else None,
+                "priority": priority,
+                "type": task_type,
+                "source_quote": source_quote,
+                "needs_review": needs_review,
+            }
+        )
+
+    commit_rows = db.execute(
+        select(
+            Commitment.client_id,
+            Commitment.description,
+            Commitment.promised_by,
+            Commitment.due_date,
+            Commitment.source_quote,
+            Commitment.related_task_id,
+        ).where(Commitment.client_id.in_({note.client_id for note, _ in rows}))
+    ).all()
+    task_to_note = {row_id: nid for nid, tasks in tasks_by_note.items() for row_id in [t["id"] for t in tasks]}
+    commitments_by_note: dict[str, list[dict]] = {}
+    for commitment in commit_rows:
+        note_id = task_to_note.get(commitment.related_task_id or "")
+        if not note_id:
+            continue
+        commitments_by_note.setdefault(note_id, []).append(
+            {
+                "description": commitment.description,
+                "promised_by": commitment.promised_by,
+                "due_date": commitment.due_date.isoformat() if commitment.due_date else None,
+                "source_quote": commitment.source_quote,
+            }
+        )
+
     items = []
     for note, client_name in rows:
         payload = NoteOut.model_validate(note).model_dump()
         payload["client_name"] = client_name
+        linked = tasks_by_note.get(note.id, [])
+        payload["task_count"] = len(linked)
+        payload["open_task_count"] = sum(1 for t in linked if t["status"] == "open")
+        payload["tasks"] = linked
+        payload["commitments"] = commitments_by_note.get(note.id, [])
         items.append(payload)
-    return {"items": items, "total": len(items)}
+
+    oldest = rows[-1][0].created_at
+    return {
+        "items": items,
+        "total": len(items),
+        "next_before": oldest.isoformat() if len(items) == limit else None,
+        "has_more": len(items) == limit,
+    }
 
 
 @router.get("/clients/{client_id}/notes")
