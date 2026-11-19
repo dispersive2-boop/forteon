@@ -361,7 +361,7 @@ export default function PlannerPage() {
                 type="button"
                 onClick={() => setView(item.key)}
                 aria-pressed={view === item.key}
-                className={`focus-ring h-9 rounded-[9px] px-3 text-[13px] font-medium transition-colors ${
+                className={`focus-ring h-11 min-h-[44px] rounded-[9px] px-3 text-[13px] font-medium transition-colors sm:h-9 sm:min-h-9 ${
                   view === item.key
                     ? "bg-primary text-white"
                     : "text-[var(--muted)] hover:text-ink"
@@ -376,7 +376,7 @@ export default function PlannerPage() {
               type="button"
               onClick={() => setAnchor(toISO(shiftPeriod(view, anchorDate, -1)))}
               aria-label="Предыдущий период"
-              className="focus-ring grid h-10 w-10 place-items-center rounded-control border border-[var(--border-strong)] text-[var(--muted)] transition-colors hover:border-primary hover:text-primary"
+              className="focus-ring grid h-11 w-11 place-items-center rounded-control border border-[var(--border-strong)] text-[var(--muted)] transition-colors hover:border-primary hover:text-primary sm:h-10 sm:w-10"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                 <path d="M15 18l-6-6 6-6" />
@@ -389,7 +389,7 @@ export default function PlannerPage() {
               type="button"
               onClick={() => setAnchor(toISO(shiftPeriod(view, anchorDate, 1)))}
               aria-label="Следующий период"
-              className="focus-ring grid h-10 w-10 place-items-center rounded-control border border-[var(--border-strong)] text-[var(--muted)] transition-colors hover:border-primary hover:text-primary"
+              className="focus-ring grid h-11 w-11 place-items-center rounded-control border border-[var(--border-strong)] text-[var(--muted)] transition-colors hover:border-primary hover:text-primary sm:h-10 sm:w-10"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                 <path d="M9 18l6-6-6-6" />
@@ -468,7 +468,7 @@ export default function PlannerPage() {
 
         <Link
           href="/today"
-          className="focus-ring inline-flex h-10 items-center gap-1.5 rounded-control px-2.5 text-[13px] font-medium text-[var(--muted)] hover:text-primary"
+          className="focus-ring inline-flex h-11 min-h-[44px] items-center gap-1.5 rounded-control px-2.5 text-[13px] font-medium text-[var(--muted)] hover:text-primary sm:h-10 sm:min-h-10"
         >
           Открыть «Сегодня»
         </Link>
@@ -791,7 +791,7 @@ function WeekView({
             <button
               type="button"
               onClick={() => onPickDay(iso)}
-              className="focus-ring mb-1.5 flex min-h-[36px] w-full items-center justify-between gap-1 rounded px-0.5"
+              className="focus-ring mb-1.5 flex min-h-[44px] w-full items-center justify-between gap-1 rounded px-0.5"
             >
               <span className={`text-[12.5px] font-semibold ${isToday ? "text-primary" : "text-ink"}`}>
                 {WEEKDAYS[(day.getDay() + 6) % 7]}, {day.getDate()}
@@ -811,7 +811,7 @@ function WeekView({
                     type="button"
                     onClick={() => onReschedule(task)}
                     title={`${task.title}${task.client_name ? ` · ${task.client_name}` : ""}`}
-                    className={`block min-h-[32px] w-full break-words rounded-md px-1.5 py-1.5 text-left text-[12px] leading-snug transition-colors hover:bg-[#f1f4f9] ${
+                    className={`block min-h-[44px] w-full break-words rounded-md px-1.5 py-1.5 text-left text-[12px] leading-snug transition-colors hover:bg-[#f1f4f9] ${
                       task.status === "done"
                         ? "text-[var(--muted)] line-through"
                         : task.priority === "critical"
@@ -831,7 +831,7 @@ function WeekView({
                   <button
                     type="button"
                     onClick={() => onPickDay(iso)}
-                    className="focus-ring flex min-h-[32px] items-center text-[11.5px] font-medium text-primary hover:underline"
+                    className="focus-ring flex min-h-[44px] items-center text-[11.5px] font-medium text-primary hover:underline"
                   >
                     ещё {list.length - 6}
                   </button>

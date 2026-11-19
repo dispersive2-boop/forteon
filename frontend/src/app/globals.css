@@ -97,16 +97,40 @@ aside button {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Поля ввода: достаточно крупные для пальца */
+/* Поля ввода: достаточно крупные для пальца.
+   п.101 DESIGN TASKS v2.1: на мобильном не меньше 16px, иначе iOS
+   сам масштабирует страницу при фокусе и ломает компоновку. */
 input,
 select,
 textarea {
   font-size: 15px;
 }
 
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* п.113: disabled должен отличаться не только прозрачностью */
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled,
+[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* п.110: контраст текста не ниже AA (4.5:1).
+   #93a0b4 на белом давал ≈2.8:1 — подсказка в поле почти не читалась.
+   var(--muted) = #64748B даёт ≈4.8:1. */
 input::placeholder,
 textarea::placeholder {
-  color: #93a0b4;
+  color: var(--muted);
+  opacity: 1;
 }
 
 /* Числовые значения читаются ровно */

@@ -32,10 +32,15 @@ const BUTTON_VARIANTS: Record<string, string> = {
   subtle: "bg-[var(--primary-soft)] text-primary hover:bg-[#dbe7ff]",
 };
 
+/*
+  п.100 DESIGN TASKS v2.1: активная область не меньше 44x44 CSS px.
+  На мобильном поднимаем до 44px; на десктопе оставляем компактный размер,
+  иначе плотность рабочего списка падает.
+*/
 const BUTTON_SIZES: Record<string, string> = {
-  sm: "h-9 min-h-9 px-3.5 text-[13px] rounded-lg",
-  md: "h-11 min-h-11 px-4 text-[14.5px] rounded-control",
-  lg: "h-12 min-h-12 px-6 text-[15.5px] rounded-control",
+  sm: "h-11 min-h-[44px] px-3.5 text-[13px] rounded-lg sm:h-9 sm:min-h-9",
+  md: "h-11 min-h-[44px] px-4 text-[14.5px] rounded-control",
+  lg: "h-12 min-h-[44px] px-6 text-[15.5px] rounded-control",
 };
 
 export function Button({
@@ -343,7 +348,7 @@ export function Modal({
           <h3 className="text-[14.5px] font-semibold text-ink">{title}</h3>
           <button
             onClick={onClose}
-            className="focus-ring grid h-8 w-8 place-items-center rounded-lg text-[var(--muted)] hover:bg-[#f1f4f9]"
+            className="focus-ring grid h-11 w-11 place-items-center rounded-lg text-[var(--muted)] hover:bg-[#f1f4f9] sm:h-8 sm:w-8"
             aria-label="Закрыть"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -476,7 +481,7 @@ export function Tabs<T extends string>({
             role="tab"
             aria-selected={active}
             onClick={() => onChange(item.key)}
-            className={`focus-ring flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-[13.5px] font-medium transition-colors ${
+            className={`focus-ring flex h-11 min-h-[44px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-[13.5px] font-medium transition-colors sm:h-9 sm:min-h-9 ${
               active
                 ? "bg-primary text-white"
                 : "bg-[#f1f4f9] text-[var(--muted)] hover:bg-[#e6ecf6] hover:text-ink"
@@ -718,7 +723,7 @@ export function DoneTaskRow({
         <button
           type="button"
           onClick={onReopen}
-          className="focus-ring h-8 shrink-0 rounded-lg px-2.5 text-[12.5px] font-medium text-primary transition-colors hover:bg-[var(--primary-soft)]"
+          className="focus-ring h-11 min-h-[44px] shrink-0 rounded-lg px-2.5 text-[12.5px] font-medium text-primary transition-colors hover:bg-[var(--primary-soft)] sm:h-8 sm:min-h-8"
         >
           Вернуть
         </button>

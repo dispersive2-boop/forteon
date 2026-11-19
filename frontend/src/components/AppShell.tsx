@@ -137,7 +137,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="flex h-[68px] shrink-0 items-center px-4">
           <Link
             href="/today"
-            className="focus-ring flex items-center gap-2.5 rounded-lg"
+                className="focus-ring flex min-h-[44px] items-center gap-2.5 rounded-lg"
             aria-label="ForteOn — на главную"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -268,7 +268,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           <Link
             href="/notes"
-            className="focus-ring flex h-10 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 text-[13.5px] font-semibold text-white transition-colors hover:bg-[var(--primary-hover)] sm:px-4"
+            className="focus-ring flex h-11 min-h-[44px] shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 text-[13.5px] font-semibold text-white transition-colors hover:bg-[var(--primary-hover)] sm:h-10 sm:min-h-10 sm:px-4"
           >
             <IconPlus size={17} strokeWidth={2.4} />
             <span className="hidden sm:inline">Новая заметка</span>

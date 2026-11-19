@@ -603,7 +603,7 @@ export default function NotesPage() {
               <button
                 type="button"
                 onClick={() => chooseClient(null)}
-                className={`focus-ring h-8 rounded-lg px-2.5 text-[12.5px] font-medium transition-colors ${
+                className={`focus-ring h-11 min-h-[44px] rounded-lg px-2.5 text-[12.5px] font-medium transition-colors sm:h-8 sm:min-h-8 ${
                   clientFilter
                     ? "bg-[#f1f4f9] text-[var(--muted)] hover:text-ink"
                     : "bg-primary text-white"

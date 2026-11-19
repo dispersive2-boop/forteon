@@ -353,7 +353,9 @@ export default function ClientPage() {
   return (
     <div className="mx-auto max-w-[1240px] space-y-4">
       <nav className="flex items-center gap-1.5 text-[12.5px] text-[var(--muted)]">
-        <Link href="/clients" className="hover:text-primary">Клиенты</Link>
+        <Link href="/clients" className="inline-flex min-h-[44px] items-center hover:text-primary sm:min-h-0">
+          Клиенты
+        </Link>
         <span>/</span>
         <span className="truncate text-ink">{client.name}</span>
       </nav>
@@ -404,10 +406,15 @@ export default function ClientPage() {
         role="tablist"/"tab" + aria-selected: без них экранный диктор читал
         вкладки как обычные кнопки и не сообщал, какая открыта (п.122).
       */}
+      {/*
+        п.41: полоса вкладок остаётся доступной при прокрутке длинной карточки.
+        sticky + фон + blur, иначе под вкладками просвечивает контент.
+        п.100: min-h-[44px] — зона нажатия не меньше 44 px.
+      */}
       <div
         role="tablist"
         aria-label="Разделы карточки клиента"
-        className="-mx-4 flex gap-1 overflow-x-auto border-b border-[var(--border)] px-4 md:mx-0 md:px-0"
+        className="sticky top-0 z-20 -mx-4 flex gap-1 overflow-x-auto border-b border-[var(--border)] bg-[var(--canvas)]/95 px-4 backdrop-blur md:mx-0 md:px-0"
       >
         {TABS.map((item) => (
           <button
@@ -416,7 +423,7 @@ export default function ClientPage() {
             role="tab"
             aria-selected={tab === item.key}
             onClick={() => setTab(item.key)}
-            className={`focus-ring -mb-px min-h-[40px] shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-[13px] transition-colors ${
+            className={`focus-ring -mb-px min-h-[44px] shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-[13px] transition-colors ${
               tab === item.key
                 ? "border-primary font-medium text-primary"
                 : "border-transparent text-[var(--muted)] hover:text-ink"
