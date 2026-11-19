@@ -241,6 +241,20 @@ export type ClientDocument = {
   uploaded_by: string | null;
 };
 
+/**
+ * Событие истории клиента (A-P0-2).
+ * Источник — `audit_log`: фактические действия, а не догадки интерфейса.
+ */
+export type ClientHistoryEvent = {
+  id: string;
+  entity: string;
+  entity_id: string | null;
+  action: string;
+  metadata: Record<string, unknown> | null;
+  actor: string | null;
+  created_at: string;
+};
+
 /** Договор клиента (вкладка «Проекты» → договоры, п.37 §4). */
 export type ClientContract = {
   id: string;

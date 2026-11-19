@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import mimetypes
 import shutil
 import uuid
@@ -16,6 +17,7 @@ from ..config import settings
 from ..db import get_db
 from ..deps import audit, bump_version, ensure_version, get_client_or_404, get_current_user
 from ..models import (
+    AuditLog,
     Client,
     ClientContact,
     Contract,
@@ -426,6 +428,79 @@ def delete_contract(contract_id: str, db: Session = Depends(get_db), user: User 
     contract.deleted_at = utcnow()
     db.commit()
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------- история
+@router.get("/clients/{client_id}/history")
+def client_history(client_id: str, limit: int = Query(default=100, ge=1, le=300),
+                   db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """История существенных действий по клиенту — из `audit_log`.
+
+    Раньше вкладка «История» собиралась в браузере из заметок и выполненных
+    задач: смены статуса, правки финансов и передачи клиента туда не попадали.
+    Здесь отдаём фактические события аудита, относящиеся к клиенту или к его
+    счетам, оплатам, задачам, проектам и документам.
+    """
+    client = get_client_or_404(db, user, client_id)
+
+    invoice_ids = [str(x) for x in db.scalars(
+        select(Invoice.id).where(Invoice.client_id == client.id)
+    )]
+    payment_ids = [str(x) for x in db.scalars(
+        select(Payment.id).where(Payment.client_id == client.id)
+    )]
+    task_ids = [str(x) for x in db.scalars(
+        select(Task.id).where(Task.client_id == client.id)
+    )]
+    project_ids = [str(x) for x in db.scalars(
+        select(Project.id).where(Project.client_id == client.id)
+    )]
+
+    allocation_ids: list[str] = []
+    if invoice_ids:
+        allocation_ids = [str(x) for x in db.scalars(
+            select(PaymentAllocation.id).where(PaymentAllocation.invoice_id.in_(invoice_ids))
+        )]
+
+    clause = AuditLog.entity_id == client.id
+    if invoice_ids:
+        clause = or_(clause, (AuditLog.entity == "invoice") & AuditLog.entity_id.in_(invoice_ids))
+    if payment_ids:
+        clause = or_(clause, (AuditLog.entity == "payment") & AuditLog.entity_id.in_(payment_ids))
+    if allocation_ids:
+        # Распределение оплаты — тоже денежное событие клиента: без него
+        # откат оплаты не виден в истории.
+        clause = or_(clause, (AuditLog.entity == "allocation") & AuditLog.entity_id.in_(allocation_ids))
+    if task_ids:
+        clause = or_(clause, (AuditLog.entity == "task") & AuditLog.entity_id.in_(task_ids))
+    if project_ids:
+        clause = or_(clause, (AuditLog.entity == "project") & AuditLog.entity_id.in_(project_ids))
+
+    rows = list(db.scalars(
+        select(AuditLog).where(clause).order_by(AuditLog.created_at.desc()).limit(limit)
+    ))
+
+    actors: dict[str, str] = {}
+    actor_ids = {row.actor_id for row in rows if row.actor_id}
+    if actor_ids:
+        for person in db.scalars(select(User).where(User.id.in_(actor_ids))):
+            actors[person.id] = person.full_name or person.email
+
+    return {
+        "items": [
+            {
+                "id": row.id,
+                "entity": row.entity,
+                "entity_id": row.entity_id,
+                "action": row.action,
+                "metadata": json.loads(row.metadata_json) if row.metadata_json else None,
+                "actor": actors.get(row.actor_id) if row.actor_id else None,
+                "created_at": row.created_at,
+            }
+            for row in rows
+        ],
+        "total": len(rows),
+    }
 
 
 # ---------------------------------------------------------------- documents

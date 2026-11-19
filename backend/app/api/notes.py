@@ -57,6 +57,7 @@ def notes_feed(
     limit: int = Query(default=30, ge=1, le=200),
     before: datetime | None = None,
     client_id: str | None = None,
+    q: str | None = Query(default=None, description="Поиск по тексту заметки"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -65,12 +66,17 @@ def notes_feed(
     Отдаём не только текст, но и то, во что заметка превратилась: задачи и
     обязательства. Фронтенд не делает N запросов на /notes/{id}/tasks, а сразу
     показывает менеджеру «из этой фразы родилась задача».
+
+    `q` ищет по телу заметки (п.4.6 аудита) — раньше поиска по тексту не было.
+    `author_name` отдаётся вместе с заметкой (п.4.2) — раньше автор был только
+    в БД и в интерфейс не попадал.
     """
     from ..models import Client
 
     query = (
-        select(Note, Client.name)
+        select(Note, Client.name, User.full_name)
         .join(Client, Client.id == Note.client_id)
+        .outerjoin(User, User.id == Note.author_id)
         .where(Note.deleted_at.is_(None), Client.deleted_at.is_(None))
     )
     if user.role != "admin":
@@ -78,6 +84,9 @@ def notes_feed(
     if client_id:
         get_client_or_404(db, user, client_id)
         query = query.where(Note.client_id == client_id)
+    if q and q.strip():
+        # SQLAlchemy параметризует значение — инъекция через q невозможна.
+        query = query.where(Note.body.ilike(f"%{q.strip()}%"))
     # Курсор пагинации: «покажи то, что старше последней загруженной заметки»
     if before:
         query = query.where(Note.created_at < before)
@@ -86,7 +95,7 @@ def notes_feed(
     if not rows:
         return {"items": [], "total": 0, "next_before": None, "has_more": False}
 
-    note_ids = [note.id for note, _ in rows]
+    note_ids = [note.id for note, _, _ in rows]
     task_rows = db.execute(
         select(
             Task.source_note_id,
@@ -139,7 +148,7 @@ def notes_feed(
             Commitment.due_date,
             Commitment.source_quote,
             Commitment.related_task_id,
-        ).where(Commitment.client_id.in_({note.client_id for note, _ in rows}))
+        ).where(Commitment.client_id.in_({note.client_id for note, _, _ in rows}))
     ).all()
     task_to_note = {row_id: nid for nid, tasks in tasks_by_note.items() for row_id in [t["id"] for t in tasks]}
     commitments_by_note: dict[str, list[dict]] = {}
@@ -157,9 +166,10 @@ def notes_feed(
         )
 
     items = []
-    for note, client_name in rows:
+    for note, client_name, author_name in rows:
         payload = NoteOut.model_validate(note).model_dump()
         payload["client_name"] = client_name
+        payload["author_name"] = author_name
         linked = tasks_by_note.get(note.id, [])
         payload["task_count"] = len(linked)
         payload["open_task_count"] = sum(1 for t in linked if t["status"] == "open")
@@ -192,27 +202,35 @@ def list_notes(
     на /notes/{id}/tasks; здесь это один групповой запрос на всю ленту.
     """
     client = get_client_or_404(db, user, client_id)
-    query = select(Note).where(Note.client_id == client.id, Note.deleted_at.is_(None))
+    query = (
+        select(Note, User.full_name)
+        .outerjoin(User, User.id == Note.author_id)
+        .where(Note.client_id == client.id, Note.deleted_at.is_(None))
+    )
     if before:
         query = query.where(Note.created_at < before)
-    notes = list(db.scalars(query.order_by(Note.created_at.desc()).limit(limit)))
-    if not notes:
+    rows = list(db.execute(query.order_by(Note.created_at.desc()).limit(limit)).all())
+    if not rows:
         return {"items": [], "total": 0}
+    notes = [note for note, _ in rows]
 
     note_ids = [n.id for n in notes]
     task_rows = db.execute(
-        select(Task.source_note_id, Task.title, Task.status)
+        select(Task.source_note_id, Task.id, Task.title, Task.status, Task.source_quote)
         .where(Task.source_note_id.in_(note_ids), Task.deleted_at.is_(None))
         .order_by(Task.created_at.asc())
     ).all()
 
     by_note: dict[str, list[dict]] = {}
-    for note_id, title, task_status in task_rows:
-        by_note.setdefault(note_id, []).append({"title": title, "status": task_status})
+    for note_id, task_id, title, task_status, source_quote in task_rows:
+        by_note.setdefault(note_id, []).append(
+            {"id": task_id, "title": title, "status": task_status, "source_quote": source_quote}
+        )
 
     items = []
-    for note in notes:
+    for note, author_name in rows:
         payload = NoteOut.model_validate(note).model_dump()
+        payload["author_name"] = author_name
         linked = by_note.get(note.id, [])
         payload["task_count"] = len(linked)
         payload["tasks"] = linked[:5]

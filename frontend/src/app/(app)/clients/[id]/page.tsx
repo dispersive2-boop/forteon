@@ -39,6 +39,7 @@ import {
   ClientContract,
   ClientDetail,
   ClientDocument,
+  ClientHistoryEvent,
   FinancialSummary,
   Note,
   Project,
@@ -74,6 +75,50 @@ const TAB_KEYS: Tab[] = [
 
 function tabFromQuery(value: string | null): Tab {
   return TAB_KEYS.includes(value as Tab) ? (value as Tab) : "overview";
+}
+
+/** Как называть событие аудита человеку (A-P0-2). */
+const HISTORY_RU: Record<string, string> = {
+  "client:created": "Клиент создан",
+  "client:updated": "Карточка клиента изменена",
+  "client:deleted": "Клиент удалён",
+  "client:transferred": "Клиент передан другому менеджеру",
+  "invoice:created": "Выставлен счёт",
+  "invoice:updated": "Счёт изменён",
+  "invoice:deleted": "Счёт удалён",
+  "invoice:allocation_added": "Оплата зачтена по счёту",
+  "invoice:allocation_removed": "Зачёт оплаты отменён",
+  "payment:created": "Поступила оплата",
+  "payment:updated": "Оплата изменена",
+  "task:created": "Создана задача",
+  "task:completed": "Задача выполнена",
+  "task:reopened": "Задача возвращена в работу",
+  "task:rescheduled": "Перенесён срок задачи",
+  "task:deleted": "Задача удалена",
+  "note:created": "Добавлена заметка",
+  "note:reprocessed": "Заметка разобрана повторно",
+  "project:created": "Создан проект",
+  "project:updated": "Проект изменён",
+};
+
+/** События, которые важны для денег — их подсвечиваем. */
+const MONEY_ENTITIES = new Set(["invoice", "payment", "allocation"]);
+
+function historyTone(entity: string, action: string): string {
+  if (MONEY_ENTITIES.has(entity)) {
+    return action.includes("removed") || action === "deleted"
+      ? "bg-[var(--danger)]"
+      : "bg-[var(--success)]";
+  }
+  if (entity === "task") return "bg-[var(--warning)]";
+  return "bg-primary";
+}
+
+function historyAmount(metadata: Record<string, unknown> | null): string | null {
+  if (!metadata) return null;
+  const value = metadata.amount;
+  if (typeof value !== "number") return null;
+  return money(value);
 }
 
 /** Статусы AI по-человечески: раньше в интерфейсе висело «AI: ok». */
@@ -158,6 +203,7 @@ export default function ClientPage() {
   const [finance, setFinance] = useState<FinancialSummary | null>(null);
   const [documents, setDocuments] = useState<ClientDocument[]>([]);
   const [contracts, setContracts] = useState<ClientContract[]>([]);
+  const [history, setHistory] = useState<ClientHistoryEvent[]>([]);
   const [tab, setTabState] = useState<Tab>("overview");
   const [loading, setLoading] = useState(true);
 
@@ -183,66 +229,49 @@ export default function ClientPage() {
   const [saving, setSaving] = useState(false);
 
   /**
-   * Пункт 40: история существенных действий.
-   * Собирается из реальных данных карточки: заметки, выполненные задачи,
-   * создание и изменение карточки. Отдельного журнала по клиенту в API нет —
-   * события не выдумываем, показываем то, что действительно произошло.
+   * Пункт 40 + A-P0-2: история существенных действий из журнала аудита.
+   * Раньше она собиралась в браузере из заметок и выполненных задач — правки
+   * финансов, смены статуса и передачи клиента туда не попадали. Теперь
+   * источник — `/clients/{id}/history`, то есть фактические события сервера.
    */
-  const historyItems = useMemo(() => {
-    const events: { at: string; title: string; tone: string }[] = [];
-
-    for (const note of notes.slice(0, 20)) {
-      const flat = note.body.replace(/\s+/g, " ");
-      events.push({
-        at: note.created_at,
-        title: `Заметка: ${flat.slice(0, 90)}${flat.length > 90 ? "…" : ""}`,
-        tone: "bg-primary",
-      });
-    }
-    for (const task of tasks.slice(0, 20)) {
-      if (task.completed_at) {
-        events.push({
-          at: task.completed_at,
-          title: `Задача выполнена: ${task.title}`,
-          tone: "bg-[var(--success)]",
-        });
-      }
-    }
-    if (client) {
-      events.push({
-        at: client.created_at,
-        title: "Клиент создан в системе",
-        tone: "bg-[#94A3B8]",
-      });
-      if (client.updated_at && client.updated_at !== client.created_at) {
-        events.push({
-          at: client.updated_at,
-          title: `Карточка обновлена, статус: ${client.status}`,
-          tone: "bg-[var(--warning)]",
-        });
-      }
-    }
-
-    return events.sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 40);
-  }, [notes, tasks, client]);
+  const historyItems = useMemo(
+    () =>
+      history.map((event) => ({
+        at: event.created_at,
+        title:
+          HISTORY_RU[`${event.entity}:${event.action}`] ??
+          `${event.entity}: ${event.action}`,
+        tone: historyTone(event.entity, event.action),
+        amount: historyAmount(event.metadata),
+        actor: event.actor,
+      })),
+    [history],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [detail, projectList, taskList, notePage, fin, docs, contractList] = await Promise.all([
-        api<ClientDetail>(`/clients/${clientId}`),
-        api<Project[]>(`/clients/${clientId}/projects`),
-        api<{ items: Task[] }>(`/tasks?client_id=${clientId}&status=all&limit=200`),
-        /*
-         * Эндпоинт отдаёт {items, total}: рядом с каждой заметкой едет
-         * task_count / open_task_count / tasks. Раньше ожидался массив —
-         * из-за этого история выглядела пустой при пяти реальных заметках.
-         */
-        api<{ items: Note[]; total: number }>(`/clients/${clientId}/notes?limit=50`),
-        api<FinancialSummary>(`/clients/${clientId}/financial-summary`),
-        api<ClientDocument[]>(`/clients/${clientId}/documents`).catch(() => []),
-        api<ClientContract[]>(`/clients/${clientId}/contracts`).catch(() => []),
-      ]);
+      const [detail, projectList, taskList, notePage, fin, docs, contractList, auditPage] =
+        await Promise.all([
+          api<ClientDetail>(`/clients/${clientId}`),
+          api<Project[]>(`/clients/${clientId}/projects`),
+          api<{ items: Task[] }>(`/tasks?client_id=${clientId}&status=all&limit=200`),
+          /*
+           * Эндпоинт отдаёт {items, total}: рядом с каждой заметкой едет
+           * task_count / open_task_count / tasks. Раньше ожидался массив —
+           * из-за этого история выглядела пустой при пяти реальных заметках.
+           */
+          api<{ items: Note[]; total: number }>(`/clients/${clientId}/notes?limit=50`),
+          api<FinancialSummary>(`/clients/${clientId}/financial-summary`),
+          api<ClientDocument[]>(`/clients/${clientId}/documents`).catch(() => []),
+          api<ClientContract[]>(`/clients/${clientId}/contracts`).catch(() => []),
+          /*
+           * A-P0-2: журнал аудита по клиенту. Ошибка здесь не должна ломать
+           * карточку — остальные вкладки остаются работоспособными.
+           */
+          api<{ items: ClientHistoryEvent[] }>(`/clients/${clientId}/history?limit=100`)
+            .catch(() => ({ items: [] })),
+        ]);
       setClient(detail);
       setProjects(projectList);
       setTasks(taskList.items);
@@ -250,6 +279,7 @@ export default function ClientPage() {
       setFinance(fin);
       setDocuments(Array.isArray(docs) ? docs : []);
       setContracts(Array.isArray(contractList) ? contractList : []);
+      setHistory(Array.isArray(auditPage?.items) ? auditPage.items : []);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось загрузить карточку клиента");
@@ -754,7 +784,7 @@ export default function ClientPage() {
         <Card>
           <SectionTitle
             title="История"
-            subtitle="Существенные действия по клиенту: заметки, задачи, изменения статуса"
+            subtitle="Журнал действий по клиенту: счета и оплаты, задачи, изменения карточки"
           />
           {historyItems.length ? (
             <ol className="relative space-y-3 border-l border-[var(--border)] pl-4">
@@ -764,15 +794,25 @@ export default function ClientPage() {
                     className={`absolute -left-[21px] top-1.5 h-2 w-2 rounded-full ${item.tone}`}
                     aria-hidden
                   />
-                  <p className="text-[13.5px] leading-snug text-ink">{item.title}</p>
-                  <p className="mt-0.5 text-[11.5px] text-[var(--muted)]">{dateTimeRu(item.at)}</p>
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                    <p className="text-[13.5px] leading-snug text-ink">{item.title}</p>
+                    {item.amount ? (
+                      <span className="text-[13px] font-semibold tabular-nums text-ink">
+                        {item.amount}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-0.5 text-[11.5px] text-[var(--muted)]">
+                    {dateTimeRu(item.at)}
+                    {item.actor ? ` · ${item.actor}` : ""}
+                  </p>
                 </li>
               ))}
             </ol>
           ) : (
             <EmptyState
               title="Событий пока нет"
-              description="Здесь появятся передачи клиента, изменения статуса и последние действия."
+              description="Здесь появятся выставленные счета, поступившие оплаты, зачёты и изменения по задачам."
             />
           )}
         </Card>

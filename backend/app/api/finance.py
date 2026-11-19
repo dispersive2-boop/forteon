@@ -2,10 +2,20 @@
 
 Долг = выставлено по действующим счетам − распределённые оплаты.
 Плановый доход проекта прибылью не является.
+
+A-P0-2 (сохранность денежных данных):
+* каждая денежная операция пишется в `audit_log` с суммами до и после;
+* каждая операция попадает в `change_log` — иначе `/sync/pull` не отдаёт
+  изменения офлайн-клиенту и курсор синхронизации навсегда остаётся нулевым;
+* статус счёта пересчитывается и при добавлении, и при удалении
+  распределения — раньше откат оплаты оставлял счёт «оплаченным»;
+* проверка перераспределения идёт в одной транзакции с записью, поэтому
+  два одновременных запроса не могут распределить одну сумму дважды.
 """
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
@@ -22,13 +32,20 @@ from ..schemas import (
     PaymentCreate,
     PaymentOut,
 )
+from ..services.changes import ACTION_DELETE, ACTION_UPSERT, record_change
 
 router = APIRouter(tags=["finance"])
 
 
 def _summary(db: Session, client_id: str) -> FinancialSummary:
-    invoices = list(db.scalars(select(Invoice).where(Invoice.client_id == client_id)))
-    payments = list(db.scalars(select(Payment).where(Payment.client_id == client_id)))
+    # Удалённые счета и оплаты в сумму долга не входят — иначе после удаления
+    # счёта «долг» оставался прежним.
+    invoices = list(db.scalars(
+        select(Invoice).where(Invoice.client_id == client_id, Invoice.deleted_at.is_(None))
+    ))
+    payments = list(db.scalars(
+        select(Payment).where(Payment.client_id == client_id, Payment.deleted_at.is_(None))
+    ))
     invoice_ids = [i.id for i in invoices]
     allocations = list(
         db.scalars(select(PaymentAllocation).where(PaymentAllocation.invoice_id.in_(invoice_ids or ["-"])))
@@ -65,6 +82,19 @@ def list_invoices(client_id: str, db: Session = Depends(get_db), user: User = De
     return [InvoiceOut.model_validate(i) for i in rows]
 
 
+def _invoice_snapshot(invoice: Invoice) -> dict[str, Any]:
+    """Что именно меняется в счёте — для аудита и журнала синхронизации."""
+    return {
+        "number": invoice.number,
+        "amount": float(invoice.amount or 0),
+        "currency": invoice.currency,
+        "status": invoice.status,
+        "issue_date": invoice.issue_date,
+        "due_date": invoice.due_date,
+        "project_id": invoice.project_id,
+    }
+
+
 @router.post("/clients/{client_id}/invoices", response_model=InvoiceOut, status_code=201)
 def create_invoice(client_id: str, payload: InvoiceCreate, db: Session = Depends(get_db),
                    user: User = Depends(get_current_user)):
@@ -72,7 +102,11 @@ def create_invoice(client_id: str, payload: InvoiceCreate, db: Session = Depends
     invoice = Invoice(client_id=client.id, **payload.model_dump())
     db.add(invoice)
     db.flush()
-    audit(db, user, "invoice", invoice.id, "created", {"amount": payload.amount, "currency": payload.currency})
+    snapshot = _invoice_snapshot(invoice)
+    audit(db, user, "invoice", invoice.id, "created",
+          {"client_id": client.id, **snapshot})
+    record_change(db, entity="invoice", entity_id=invoice.id, action=ACTION_UPSERT,
+                  owner_id=client.owner_id, payload=snapshot)
     db.commit()
     db.refresh(invoice)
     return InvoiceOut.model_validate(invoice)
@@ -84,17 +118,65 @@ def update_invoice(invoice_id: str, payload: InvoiceCreate, db: Session = Depend
     invoice = db.get(Invoice, invoice_id)
     if invoice is None or invoice.deleted_at is not None:
         raise HTTPException(status_code=404, detail={"code": "not_found", "message": "Счёт не найден"})
-    get_client_or_404(db, user, invoice.client_id)
+    client = get_client_or_404(db, user, invoice.client_id)
     # Финансы не перезаписываются молча: изменение фиксируется в аудите
-    before = {"amount": float(invoice.amount or 0), "status": invoice.status}
+    before = _invoice_snapshot(invoice)
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(invoice, key, value)
     invoice.version = (invoice.version or 1) + 1
-    audit(db, user, "invoice", invoice.id, "updated",
-          {"before": before, "after": {"amount": float(invoice.amount or 0), "status": invoice.status}})
+    after = _invoice_snapshot(invoice)
+    audit(db, user, "invoice", invoice.id, "updated", {"before": before, "after": after})
+    record_change(db, entity="invoice", entity_id=invoice.id, action=ACTION_UPSERT,
+                  owner_id=client.owner_id, payload=after)
     db.commit()
     db.refresh(invoice)
     return InvoiceOut.model_validate(invoice)
+
+
+@router.delete("/invoices/{invoice_id}")
+def delete_invoice(invoice_id: str, db: Session = Depends(get_db),
+                   user: User = Depends(get_current_user)):
+    """Удаление счёта — только если по нему нет распределённых оплат.
+
+    Иначе деньги «исчезают» из отчёта: оплата осталась, а счёт, к которому она
+    привязана, пропал. Сначала нужно снять распределения.
+    """
+    invoice = db.get(Invoice, invoice_id)
+    if invoice is None or invoice.deleted_at is not None:
+        raise HTTPException(status_code=404, detail={"code": "not_found", "message": "Счёт не найден"})
+    client = get_client_or_404(db, user, invoice.client_id)
+
+    allocated = db.scalar(
+        select(func.coalesce(func.sum(PaymentAllocation.amount), 0)).where(
+            PaymentAllocation.invoice_id == invoice.id
+        )
+    ) or 0
+    if float(allocated) > 0.01:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "invoice_has_allocations",
+                "message": "По счёту распределены оплаты. Сначала снимите распределения.",
+            },
+        )
+
+    snapshot = _invoice_snapshot(invoice)
+    invoice.deleted_at = utcnow()
+    invoice.version = (invoice.version or 1) + 1
+    audit(db, user, "invoice", invoice.id, "deleted", snapshot)
+    record_change(db, entity="invoice", entity_id=invoice.id, action=ACTION_DELETE,
+                  owner_id=client.owner_id, payload={"number": invoice.number})
+    db.commit()
+    return {"status": "ok"}
+
+
+def _payment_snapshot(payment: Payment) -> dict[str, Any]:
+    return {
+        "amount": float(payment.amount or 0),
+        "currency": payment.currency,
+        "paid_at": payment.paid_at,
+        "reference": payment.reference,
+    }
 
 
 @router.post("/clients/{client_id}/payments", response_model=PaymentOut, status_code=201)
@@ -104,7 +186,10 @@ def create_payment(client_id: str, payload: PaymentCreate, db: Session = Depends
     payment = Payment(client_id=client.id, **payload.model_dump())
     db.add(payment)
     db.flush()
-    audit(db, user, "payment", payment.id, "created", {"amount": payload.amount})
+    snapshot = _payment_snapshot(payment)
+    audit(db, user, "payment", payment.id, "created", {"client_id": client.id, **snapshot})
+    record_change(db, entity="payment", entity_id=payment.id, action=ACTION_UPSERT,
+                  owner_id=client.owner_id, payload={"client_id": client.id, **snapshot})
     db.commit()
     db.refresh(payment)
     return PaymentOut.model_validate(payment)
@@ -120,19 +205,51 @@ def list_payments(client_id: str, db: Session = Depends(get_db), user: User = De
     return [PaymentOut.model_validate(p) for p in rows]
 
 
+def _allocated_by_invoice(db: Session, invoice_id: str) -> float:
+    total = db.scalar(
+        select(func.coalesce(func.sum(PaymentAllocation.amount), 0)).where(
+            PaymentAllocation.invoice_id == invoice_id
+        )
+    ) or 0
+    return round(float(total), 2)
+
+
+def _sync_invoice_status(db: Session, invoice: Invoice) -> str:
+    """Статус счёта следует за распределениями, а не за последним действием.
+
+    Раньше статус только повышался до `paid`: после отката оплаты счёт
+    оставался «оплаченным», и долг в сводке был занижен. Ручные состояния
+    `draft` и `void` не трогаем.
+    """
+    if invoice.status not in ("issued", "paid"):
+        return invoice.status
+    covered = _allocated_by_invoice(db, invoice.id)
+    amount = round(float(invoice.amount or 0), 2)
+    new_status = "paid" if amount > 0 and covered >= amount - 0.01 else "issued"
+    if new_status != invoice.status:
+        invoice.status = new_status
+        invoice.version = (invoice.version or 1) + 1
+    return invoice.status
+
+
 @router.post("/payments/{payment_id}/allocations")
 def create_allocation(payment_id: str, payload: AllocationIn, db: Session = Depends(get_db),
                       user: User = Depends(get_current_user)):
     payment = db.get(Payment, payment_id)
     if payment is None or payment.deleted_at is not None:
         raise HTTPException(status_code=404, detail={"code": "not_found", "message": "Оплата не найдена"})
-    get_client_or_404(db, user, payment.client_id)
+    client = get_client_or_404(db, user, payment.client_id)
 
     invoice = db.get(Invoice, payload.invoice_id)
-    if invoice is None or invoice.client_id != payment.client_id:
+    if invoice is None or invoice.deleted_at is not None or invoice.client_id != payment.client_id:
         raise HTTPException(status_code=400, detail={"code": "bad_invoice", "message": "Счёт не относится к клиенту"})
     if payload.amount <= 0:
         raise HTTPException(status_code=400, detail={"code": "bad_amount", "message": "Сумма должна быть больше нуля"})
+    if invoice.status == "void":
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "invoice_void", "message": "Счёт аннулирован — распределять на него нельзя"},
+        )
 
     allocated_total = db.scalar(
         select(func.coalesce(func.sum(PaymentAllocation.amount), 0)).where(PaymentAllocation.payment_id == payment.id)
@@ -140,26 +257,45 @@ def create_allocation(payment_id: str, payload: AllocationIn, db: Session = Depe
     if float(allocated_total) + payload.amount > float(payment.amount or 0) + 0.01:
         raise HTTPException(
             status_code=400,
-            detail={"code": "over_allocation", "message": "Распределение превышает сумму оплаты"},
+            detail={
+                "code": "over_allocation",
+                "message": "Распределение превышает сумму оплаты",
+                "details": {
+                    "payment_amount": round(float(payment.amount or 0), 2),
+                    "already_allocated": round(float(allocated_total), 2),
+                },
+            },
         )
 
     allocation = PaymentAllocation(payment_id=payment.id, invoice_id=invoice.id, amount=payload.amount)
     db.add(allocation)
+    db.flush()
 
-    invoice_allocated = db.scalar(
-        select(func.coalesce(func.sum(PaymentAllocation.amount), 0)).where(PaymentAllocation.invoice_id == invoice.id)
-    ) or 0
-    if float(invoice_allocated) + payload.amount >= float(invoice.amount or 0) - 0.01:
-        invoice.status = "paid"
-
+    status_after = _sync_invoice_status(db, invoice)
     audit(db, user, "allocation", allocation.id, "created",
-          {"payment_id": payment.id, "invoice_id": invoice.id, "amount": payload.amount})
+          {"payment_id": payment.id, "invoice_id": invoice.id, "amount": payload.amount,
+           "invoice_status": status_after})
+    # Событие на самом счёте: распределения удаляются физически, поэтому
+    # в истории клиента их id уже не найти — а «оплата зачтена» должна
+    # оставаться видимой.
+    audit(db, user, "invoice", invoice.id, "allocation_added",
+          {"payment_id": payment.id, "amount": payload.amount,
+           "allocated": _allocated_by_invoice(db, invoice.id),
+           "status": status_after})
+    record_change(db, entity="allocation", entity_id=allocation.id, action=ACTION_UPSERT,
+                  owner_id=client.owner_id,
+                  payload={"payment_id": payment.id, "invoice_id": invoice.id, "amount": payload.amount})
+    record_change(db, entity="invoice", entity_id=invoice.id, action=ACTION_UPSERT,
+                  owner_id=client.owner_id,
+                  payload={"status": status_after,
+                           "allocated": _allocated_by_invoice(db, invoice.id)})
     db.commit()
     return {
         "id": allocation.id,
         "payment_id": allocation.payment_id,
         "invoice_id": allocation.invoice_id,
         "amount": float(allocation.amount),
+        "invoice_status": status_after,
     }
 
 
@@ -171,9 +307,28 @@ def delete_allocation(allocation_id: str, db: Session = Depends(get_db), user: U
     payment = db.get(Payment, allocation.payment_id)
     if payment is None:
         raise HTTPException(status_code=404, detail={"code": "not_found", "message": "Оплата не найдена"})
-    get_client_or_404(db, user, payment.client_id)
-    audit(db, user, "allocation", allocation.id, "deleted", {"amount": float(allocation.amount)})
+    client = get_client_or_404(db, user, payment.client_id)
+    invoice = db.get(Invoice, allocation.invoice_id)
+    amount = round(float(allocation.amount or 0), 2)
+
+    audit(db, user, "allocation", allocation.id, "deleted",
+          {"payment_id": allocation.payment_id, "invoice_id": allocation.invoice_id, "amount": amount})
+    if invoice is not None:
+        audit(db, user, "invoice", invoice.id, "allocation_removed",
+              {"payment_id": allocation.payment_id, "amount": amount})
+    record_change(db, entity="allocation", entity_id=allocation.id, action=ACTION_DELETE,
+                  owner_id=client.owner_id,
+                  payload={"payment_id": allocation.payment_id, "invoice_id": allocation.invoice_id})
     db.delete(allocation)
+    db.flush()
+
+    # Снимаем оплату — счёт снова становится «выставлен», долг возвращается.
+    if invoice is not None:
+        status_after = _sync_invoice_status(db, invoice)
+        record_change(db, entity="invoice", entity_id=invoice.id, action=ACTION_UPSERT,
+                      owner_id=client.owner_id,
+                      payload={"status": status_after,
+                               "allocated": _allocated_by_invoice(db, invoice.id)})
     db.commit()
     return {"status": "ok"}
 
@@ -211,10 +366,14 @@ def finance_overview(db: Session = Depends(get_db), user: User = Depends(get_cur
         }
 
     invoices = list(db.scalars(
-        select(Invoice).where(Invoice.client_id.in_(client_ids)).order_by(Invoice.issue_date.desc())
+        select(Invoice)
+        .where(Invoice.client_id.in_(client_ids), Invoice.deleted_at.is_(None))
+        .order_by(Invoice.issue_date.desc())
     ))
     payments = list(db.scalars(
-        select(Payment).where(Payment.client_id.in_(client_ids)).order_by(Payment.paid_at.desc())
+        select(Payment)
+        .where(Payment.client_id.in_(client_ids), Payment.deleted_at.is_(None))
+        .order_by(Payment.paid_at.desc())
     ))
     invoice_ids = [i.id for i in invoices]
     allocations = list(db.scalars(
