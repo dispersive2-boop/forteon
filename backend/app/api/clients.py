@@ -50,6 +50,16 @@ from ..schemas import (
 router = APIRouter(tags=["clients"])
 
 
+def fold(value: str | None) -> str:
+    """Нормализация для поиска: регистр + «ё» и «е» считаются одной буквой.
+
+    casefold() — потому что SQLite LOWER() не понимает кириллицу.
+    ё→е — потому что «Новосибёрск» и «Новосибирск» для человека одно слово,
+    а для сравнения строк — разные.
+    """
+    return (value or "").casefold().replace("ё", "е")
+
+
 @router.get("/clients", response_model=PagedClients)
 def list_clients(
     q: str | None = None,
@@ -62,19 +72,69 @@ def list_clients(
     query = select(Client).where(Client.deleted_at.is_(None))
     if user.role != "admin":
         query = query.where(Client.owner_id == user.id)
-    if q:
-        pattern = f"%{q.strip().lower()}%"
-        query = query.where(
-            or_(func.lower(Client.name).like(pattern), func.lower(Client.legal_name).like(pattern))
-        )
     if status_filter:
         query = query.where(Client.status == status_filter)
-    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+
+    needle = (q or "").strip()
+    if not needle:
+        total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+        if cursor:
+            query = query.where(Client.name > cursor)
+        rows = list(db.scalars(query.order_by(Client.name).limit(limit)))
+        next_cursor = rows[-1].name if len(rows) == limit else None
+        return PagedClients(
+            items=[ClientOut.model_validate(c) for c in rows],
+            next_cursor=next_cursor,
+            total=total,
+        )
+
+    # Поиск с запросом считаем в Python, а не через SQL LIKE.
+    #
+    # Причина: SQLite применяет LOWER() только к ASCII. Для кириллицы
+    # lower('Байкальск') возвращает 'Байкальск' без изменений, поэтому
+    # запрос «байкальск» не находил клиента «Байкальская Нерпа» — поиск по
+    # русским названиям молча не работал. casefold() корректен для Unicode.
+    # Объём — сотни клиентов на менеджера, фильтрация в памяти дешевле.
+    needle_cf = fold(needle)
+
+    matched_contact_ids = {
+        client_id
+        for client_id, name, phone, email in db.execute(
+            select(
+                ClientContact.client_id,
+                ClientContact.name,
+                ClientContact.phone,
+                ClientContact.email,
+            )
+        ).all()
+        if needle_cf in fold(name)
+        or needle_cf in fold(phone)
+        or needle_cf in fold(email)
+    }
+
+    candidates = [
+        c
+        for c in db.scalars(query.order_by(Client.name))
+        if needle_cf in fold(c.name)
+        or needle_cf in fold(c.legal_name)
+        or needle_cf in fold(c.tax_id)
+        or needle_cf in fold(c.registration_id)
+        or needle_cf in fold(c.address)
+        or c.id in matched_contact_ids
+    ]
+
+    # Курсор тоже применяем в памяти: отбор уже не описывается одним WHERE.
     if cursor:
-        query = query.where(Client.name > cursor)
-    rows = list(db.scalars(query.order_by(Client.name).limit(limit)))
+        candidates = [c for c in candidates if c.name > cursor]
+
+    total = len(candidates)
+    rows = candidates[:limit]
     next_cursor = rows[-1].name if len(rows) == limit else None
-    return PagedClients(items=[ClientOut.model_validate(c) for c in rows], next_cursor=next_cursor, total=total)
+    return PagedClients(
+        items=[ClientOut.model_validate(c) for c in rows],
+        next_cursor=next_cursor,
+        total=total,
+    )
 
 
 @router.get("/clients/picker")
@@ -101,14 +161,10 @@ def clients_picker(
         query = query.where(Client.owner_id == user.id)
 
     needle = (q or "").strip()
-    needle_cf = needle.casefold()
+    needle_cf = fold(needle)
 
     # Кандидатов всегда берём из общей выборки (owner-скоуп уже применён),
-    # а совпадения считаем в Python.
-    #
-    # Почему не SQL LIKE: SQLite LOWER() не понимает кириллицу, поэтому
-    # «альфа» не находило «Альфа» — поиск по русским названиям не работал
-    # вообще, хотя выглядел рабочим. casefold() корректен для Unicode.
+    # а совпадения считаем в Python через fold() — см. комментарий к fold().
     # Объём — сотни клиентов, фильтрация в памяти дешевле ошибки поиска.
     candidates = list(db.scalars(query.limit(400)))
 
@@ -124,17 +180,17 @@ def clients_picker(
                     ClientContact.email,
                 )
             ).all()
-            if needle_cf in (name or "").casefold()
-            or needle_cf in (phone or "").casefold()
-            or needle_cf in (email or "").casefold()
+            if needle_cf in fold(name)
+            or needle_cf in fold(phone)
+            or needle_cf in fold(email)
         }
         candidates = [
             c for c in candidates
-            if needle_cf in (c.name or "").casefold()
-            or needle_cf in (c.legal_name or "").casefold()
-            or needle_cf in (c.tax_id or "").casefold()
-            or needle_cf in (c.registration_id or "").casefold()
-            or needle_cf in (c.address or "").casefold()
+            if needle_cf in fold(c.name)
+            or needle_cf in fold(c.legal_name)
+            or needle_cf in fold(c.tax_id)
+            or needle_cf in fold(c.registration_id)
+            or needle_cf in fold(c.address)
             or c.id in matched_contact_ids
         ]
 

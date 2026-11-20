@@ -521,6 +521,16 @@ export default function PlannerPage() {
                   <span className="min-w-0 flex-1 text-[13px] leading-snug text-[#8a6410]">
                     без срока или требуют уточнения
                   </span>
+                  {/* Без этой кнопки задачи без срока были видны только в режиме
+                      «День», и из «Недели» до них было не добраться: бейдж
+                      показывал число, но не давал открыть список. */}
+                  <button
+                    type="button"
+                    onClick={() => setView("day")}
+                    className="focus-ring inline-flex h-8 min-h-[44px] items-center rounded-lg border border-[#d9c07a] px-2.5 text-[12.5px] font-medium text-[#8a6410] transition-colors hover:bg-[#f6e8bd] sm:min-h-0"
+                  >
+                    Показать и задать срок
+                  </button>
                 </div>
               )}
             </div>
