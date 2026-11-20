@@ -21,10 +21,25 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 # Отдельная БД — тест не должен трогать рабочую.
+#
+# Имя переменной обязательно с префиксом FORTEON_: приложение читает
+# FORTEON_DATABASE_URL (app/config.py). Раньше здесь стояло DATABASE_URL,
+# приложение его не видело и тест работал с БОЕВОЙ базой: фикстура db()
+# делает drop_all() + create_all(), поэтому каждый прогон pytest стирал
+# рабочую БД вместе с клиентами и задачами.
 _DB_FILE = os.path.join(tempfile.gettempdir(), "forteon_test_finance_audit.db")
-os.environ["DATABASE_URL"] = f"sqlite:///{_DB_FILE}"
-os.environ.setdefault("SECRET_KEY", "test-secret-key-for-finance-audit-tests-only")
-os.environ.setdefault("APP_ENV", "test")
+os.environ["FORTEON_DATABASE_URL"] = f"sqlite:///{_DB_FILE}"
+os.environ.setdefault("FORTEON_SECRET_KEY", "test-secret-key-for-finance-audit-tests-only")
+os.environ.setdefault("FORTEON_DEBUG", "1")
+
+# Страховка: если по какой-то причине окружение не подхватилось — падаем
+# сразу, а не после drop_all() по рабочей базе.
+from app.config import settings as _settings  # noqa: E402
+
+assert "forteon_test_finance_audit" in _settings.database_url, (
+    "Тест подключён к боевой БД (%s). Проверьте FORTEON_DATABASE_URL."
+    % _settings.database_url
+)
 
 from app import models  # noqa: E402
 from app.api import finance as finance_api  # noqa: E402

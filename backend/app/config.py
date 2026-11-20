@@ -40,6 +40,35 @@ def _bool(name: str, default: bool = False) -> bool:
     return raw in ("1", "true", "yes", "on")
 
 
+def _absolutize_db_url(url: str) -> str:
+    """Разворачивает относительный путь SQLite в абсолютный от каталога backend/.
+
+    Зачем: в .env лежит FORTEON_DATABASE_URL=sqlite:///./data/forteon.db. Такой
+    путь зависит от текущего каталога процесса, и если сервер стартует не из
+    backend/ (например, через автозапуск или Планировщик задач), он открывает
+    ДРУГОЙ файл базы — свежий и пустой. Снаружи это выглядит как «все данные
+    пропали», хотя старый файл лежит на месте.
+
+    Абсолютный путь снимает зависимость от cwd. Для PostgreSQL (любая схема,
+    кроме sqlite) строка возвращается без изменений.
+    """
+    prefix = "sqlite:///"
+    if not url.startswith(prefix):
+        return url
+
+    target = url[len(prefix):]
+    # sqlite:///:memory: и sqlite:///file::memory: трогать нельзя.
+    if not target or target.startswith((":memory:", "file:")):
+        return url
+
+    path = Path(target)
+    if path.is_absolute():
+        return url
+
+    resolved = (BASE_DIR / path).resolve()
+    return f"{prefix}{resolved.as_posix()}"
+
+
 class Settings:
     """Настройки читаются из окружения при старте процесса."""
 
@@ -50,10 +79,12 @@ class Settings:
         self.debug = _bool("FORTEON_DEBUG", True)
 
         # Хранилище. По умолчанию — локальный SQLite, в production — PostgreSQL.
-        self.database_url = _env(
+        # Путь из .env может быть относительным — разворачиваем от backend/,
+        # иначе БД зависит от текущего каталога процесса (см. _absolutize_db_url).
+        self.database_url = _absolutize_db_url(_env(
             "FORTEON_DATABASE_URL",
             f"sqlite:///{(BASE_DIR / 'data' / 'forteon.db').as_posix()}",
-        )
+        ))
         self.sql_echo = _bool("FORTEON_SQL_ECHO", False)
 
         # Безопасность.
