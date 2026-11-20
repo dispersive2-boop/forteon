@@ -3,7 +3,7 @@
 /** Базовые UI-примитивы ForteOn. Маленькие, без внешних зависимостей. */
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import {
   compactMoney,
@@ -340,10 +340,48 @@ export function Modal({
   onClose: () => void;
   footer?: React.ReactNode;
 }) {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  /*
+    Пункты 4-5 списка интерактивности: модалку закрывают Esc и клик по фону.
+    Раньше работал только крестик — на телефоне другого выхода не было,
+    и при промахе пользователь оставался в форме. Дополнительно блокируем
+    прокрутку страницы под оверлеем и переносим фокус в первое поле.
+  */
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusTimer = window.setTimeout(() => {
+      dialogRef.current?.querySelector<HTMLElement>("input, select, textarea, button")?.focus();
+    }, 30);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      window.clearTimeout(focusTimer);
+    };
+  }, [open, onClose]);
+
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#0b1220]/45 p-0 sm:items-center sm:p-6">
-      <div className="animate-fade-in w-full max-w-lg rounded-t-2xl border border-[var(--border)] bg-surface shadow-lift sm:rounded-card">
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-[#0b1220]/45 p-0 sm:items-center sm:p-6"
+      role="presentation"
+      onMouseDown={(event) => {
+        // Закрываем только по клику в сам фон, не во вложенный блок.
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="animate-fade-in w-full max-w-lg rounded-t-2xl border border-[var(--border)] bg-surface shadow-lift sm:rounded-card"
+      >
         <header className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
           <h3 className="text-[14.5px] font-semibold text-ink">{title}</h3>
           <button
@@ -676,7 +714,12 @@ export function TaskItem({
           onClick={onReschedule}
           title="Перенести на другую дату"
           aria-label="Перенести"
-          className="focus-ring my-1.5 mr-1 grid h-11 w-11 shrink-0 place-items-center rounded-lg text-[var(--muted)] opacity-0 transition-colors hover:bg-[#eef2f8] hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
+          /*
+            Пункт 12: на телефоне :hover не срабатывает, поэтому кнопка
+            «Перенести» была невидима и недоступна. На узком экране она
+            видна всегда, на десктопе появляется при наведении.
+          */
+          className="focus-ring my-1.5 mr-1 grid h-11 w-11 shrink-0 place-items-center rounded-lg text-[var(--muted)] opacity-100 transition-colors hover:bg-[#eef2f8] hover:text-ink focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <rect x="3" y="4.5" width="18" height="16.5" rx="2.5" />

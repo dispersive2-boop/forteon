@@ -102,6 +102,20 @@ export default function TodayPage() {
     if (undoTimer.current) clearTimeout(undoTimer.current);
   }, []);
 
+  /*
+    Пункт 7: шторка с подробностями задачи закрывается по Esc.
+    На планшете с клавиатурой и при работе в браузере это ожидаемое
+    поведение; раньше помогала только кнопка «Закрыть» и тап по фону.
+  */
+  useEffect(() => {
+    if (!sheetOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSheetOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [sheetOpen]);
+
   const items = data?.items ?? [];
   const doneItems = data?.done ?? [];
 
@@ -382,7 +396,8 @@ export default function TodayPage() {
               <button
                 type="button"
                 onClick={() => setFilter("done")}
-                className="focus-ring rounded-lg px-2 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-[var(--primary-soft)]"
+                /* Пункт 11: зона нажатия не меньше 44px на телефоне. */
+                className="focus-ring inline-flex min-h-[44px] items-center rounded-lg px-2 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-[var(--primary-soft)] sm:min-h-0"
               >
                 Показать выполненные ({doneItems.length})
               </button>

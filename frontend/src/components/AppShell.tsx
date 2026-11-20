@@ -96,6 +96,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  /*
+    Пункт 6: выдвижное меню закрывается по Esc. Раньше на телефоне
+    единственным способом был тап по затемнению — с клавиатуры (планшет,
+    внешняя клавиатура) меню не закрывалось вообще.
+  */
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [mobileOpen]);
+
   const items = NAV_ITEMS.filter((item) => !item.adminOnly || user?.role === "admin");
 
   /** Пункт 14: счётчик просрочек у «Планировщик», обновляется без перезагрузки. */

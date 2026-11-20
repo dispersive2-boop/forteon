@@ -197,7 +197,8 @@ export default function FinancePage() {
                 type="button"
                 onClick={() => setOnlyOverdue((v) => !v)}
                 aria-pressed={onlyOverdue}
-                className={`focus-ring h-9 rounded-lg border px-3 text-[13px] font-medium transition-colors ${
+                /* Пункт 11: на телефоне высота не меньше 44px. */
+                className={`focus-ring h-11 min-h-[44px] rounded-lg border px-3 text-[13px] font-medium transition-colors sm:h-9 sm:min-h-0 ${
                   onlyOverdue
                     ? "border-[var(--danger)] bg-[var(--danger-soft)] text-[var(--danger)]"
                     : "border-[var(--border-strong)] text-[var(--muted)] hover:text-ink"
@@ -277,7 +278,10 @@ export default function FinancePage() {
                     Снять фильтр
                   </Button>
                 ) : (
-                  <Link href="/clients" className="text-[13.5px] font-medium text-primary hover:underline">
+                  <Link
+                    href="/clients"
+                    className="focus-ring inline-flex min-h-[44px] items-center rounded-lg px-2 text-[13.5px] font-medium text-primary hover:underline sm:min-h-0"
+                  >
                     Перейти к клиентам
                   </Link>
                 )

@@ -57,7 +57,12 @@ export default function HelpPage() {
             {step.href && (
               <Link
                 href={step.href}
-                className="focus-ring mt-3 inline-block rounded-lg text-[13.5px] font-medium text-primary hover:underline"
+                /*
+                  Пункт 11: ссылка-действие на телефоне была высотой 22px —
+                  попасть пальцем невозможно. Делаем её полноценной кнопкой
+                  с зоной 44px, на десктопе оставляем текстовой.
+                */
+                className="focus-ring mt-3 inline-flex min-h-[44px] items-center rounded-lg text-[13.5px] font-medium text-primary hover:underline sm:min-h-0"
               >
                 {step.cta} →
               </Link>

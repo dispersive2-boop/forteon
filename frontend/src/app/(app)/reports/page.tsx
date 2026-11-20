@@ -281,7 +281,12 @@ export default function ReportsPage() {
                     type="button"
                     onClick={() => setForm({ ...form, date_from: range.from, date_to: range.to })}
                     aria-pressed={active}
-                    className={`focus-ring h-8 rounded-lg border px-2.5 text-[12.5px] font-medium transition-colors ${
+                    /*
+                      Пункт 11: пресеты периода на телефоне не меньше 44x44 —
+                      «Год» был шириной 42px, и палец промахивался.
+                      На десктопе оставляем компактную высоту 32px.
+                    */
+                    className={`focus-ring h-11 min-h-[44px] min-w-[44px] rounded-lg border px-2.5 text-[12.5px] font-medium transition-colors sm:h-8 sm:min-h-0 ${
                       active
                         ? "border-primary bg-[var(--primary-soft)] text-primary"
                         : "border-[var(--border)] text-[var(--muted)] hover:border-primary hover:text-primary"
@@ -294,7 +299,7 @@ export default function ReportsPage() {
               <button
                 type="button"
                 onClick={() => setForm({ ...form, date_from: "", date_to: "" })}
-                className="focus-ring h-8 rounded-lg border border-[var(--border)] px-2.5 text-[12.5px] text-[var(--muted)] transition-colors hover:border-primary hover:text-primary"
+                className="focus-ring h-11 min-h-[44px] rounded-lg border border-[var(--border)] px-2.5 text-[12.5px] text-[var(--muted)] transition-colors hover:border-primary hover:text-primary sm:h-8 sm:min-h-0"
               >
                 Весь период
               </button>
