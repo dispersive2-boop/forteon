@@ -1,0 +1,39 @@
+# ==========================================================================
+# Нормализация окончаний строк.
+# Windows-разработка + Linux-контейнеры: в репозитории всегда LF,
+# рабочая копия получает LF (кроме .bat/.ps1/.cmd — им нужен CRLF).
+# ==========================================================================
+* text=auto eol=lf
+
+# Скрипты Windows должны иметь CRLF, иначе cmd.exe/PowerShell спотыкаются
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# Unix-скрипты и docker-файлы — строго LF
+*.sh    text eol=lf
+Dockerfile      text eol=lf
+*.dockerignore  text eol=lf
+
+# --- Бинарные файлы: diff и слияние не имеют смысла ---
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.pdf   binary
+*.xlsx  binary
+*.xls   binary
+*.docx  binary
+*.zip   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.db    binary
+*.sqlite3 binary
+
+# --- Сгенерированное: не показывать в diff и не мержить ---
+package-lock.json  -diff linguist-generated=true
+frontend/package-lock.json -diff linguist-generated=true
