@@ -873,6 +873,9 @@ export default function PlannerPage() {
 
 /* ------------------------------------------------------------------ День */
 
+/** Сколько задач «Без срока» показывать до нажатия «Показать все». */
+const UNDATED_PREVIEW = 12;
+
 function DayView({
   date,
   tasks,
@@ -896,6 +899,11 @@ function DayView({
 }) {
   const withTime = tasks.filter((t) => t.due_at);
   const withoutTime = tasks.filter((t) => !t.due_at);
+  // «Без срока» может содержать сотни импортированных задач. Показываем
+  // первые UNDATED_PREVIEW и даём явно раскрыть список: молча прятать
+  // 120+ задач нельзя — менеджер считает, что их нет вообще.
+  const [showAllUndated, setShowAllUndated] = useState(false);
+  const visibleUndated = showAllUndated ? undated : undated.slice(0, UNDATED_PREVIEW);
 
   return (
     <div className="space-y-3">
@@ -965,7 +973,7 @@ function DayView({
             <span className="text-[12.5px] text-[var(--muted)]">{undated.length}</span>
           </div>
           <div className="space-y-0.5">
-            {undated.slice(0, 12).map((task) => (
+            {visibleUndated.map((task) => (
               <TaskLine
                 key={task.id}
                 task={task}
@@ -979,10 +987,24 @@ function DayView({
               />
             ))}
           </div>
-          {undated.length > 12 && (
-            <p className="mt-2 text-[12.5px] text-[var(--muted)]">
-              и ещё {undated.length - 12} — задайте срок, чтобы они попали в календарь
-            </p>
+          {undated.length > UNDATED_PREVIEW && (
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[12.5px] text-[var(--muted)]">
+                {showAllUndated
+                  ? `показаны все ${undated.length} — задайте срок, чтобы они попали в календарь`
+                  : `и ещё ${undated.length - UNDATED_PREVIEW} — задайте срок, чтобы они попали в календарь`}
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowAllUndated((v) => !v)}
+                aria-expanded={showAllUndated}
+                className="focus-ring inline-flex h-8 items-center rounded-lg border border-[var(--border-strong)] px-2.5 text-[12px] font-medium text-ink transition-colors hover:bg-[#eef2f8]"
+              >
+                {showAllUndated
+                  ? `Свернуть до ${UNDATED_PREVIEW}`
+                  : `Показать все (${undated.length})`}
+              </button>
+            </div>
           )}
         </Card>
       )}
