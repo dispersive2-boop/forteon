@@ -40,3 +40,7 @@ _caddy_status.txt
 /backend/_*.py
 /backend/_*.txt
 /backend/_*.html
+
+# резервные копии боевой БД, снятые скриптами чистки
+/backend/_backup/
+/_commit_msg.txt
