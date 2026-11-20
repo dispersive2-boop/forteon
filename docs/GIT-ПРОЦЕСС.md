@@ -95,51 +95,67 @@ git push origin v1.2.0
 
 Тег на `main` — признак того, что именно развёрнуто.
 
-## 6. Подключение GitHub
+## 6. Удалённый репозиторий (уже подключён)
 
-Репозиторий локальный, remote ещё нет. Нужен пустой репозиторий на GitHub
-(**без** README и `.gitignore` — иначе первый push конфликтует).
+Репозиторий: **https://github.com/dispersive2-boop/forteon** (приватный).
+`origin` настроен; `main`, `develop` и тег `v1.1.0` отправлены.
 
-Создать репозиторий можно так:
-
-```bat
-:: через GitHub CLI, если установлен
-gh auth login
-gh repo create forteon --private --source=. --remote=origin --push
-```
-
-Без `gh` — вручную в браузере, затем:
+Повторить связку с нуля:
 
 ```bat
-cd сц\forteon
+winget install --id GitHub.cli --accept-package-agreements --accept-source-agreements
+gh auth login --hostname github.com --git-protocol https --web
+gh repo create forteon --private --description "ForteOn — AI-first CRM"
 git remote add origin https://github.com/<аккаунт>/forteon.git
 git push -u origin main
 git push -u origin develop
+git push origin v1.1.0
 ```
 
-Пароль от аккаунта не подходит: нужен **Personal Access Token**
-(Settings → Developer settings → Personal access tokens → Fine-grained tokens),
-права — `Contents: Read and write` на этот репозиторий.
-Токен вводится вместо пароля и **не** сохраняется в файлах проекта.
+`gh auth login --web` печатает одноразовый код вида `XXXX-XXXX` и открывает
+https://github.com/login/device: код вводится на странице, затем **Authorize**.
+Код живёт около 15 минут; если истёк — вход надо запустить заново и взять новый код.
+Пока код не подтверждён, `gh` висит в ожидании, а `gh auth status` пишет
+«not logged into any GitHub hosts» — это нормальное промежуточное состояние.
 
-Проверка:
+Пароль от аккаунта для git не подходит: `gh` сам подставляет токен через
+credential helper. Без `gh` нужен Personal Access Token
+(Settings → Developer settings → Personal access tokens → Fine-grained tokens)
+с правом `Contents: Read and write`; токен **не** хранится в файлах проекта.
+
+Проверка связки:
 
 ```bat
 git remote -v
 git branch -vv
-git log --oneline --graph --decorate --all
+gh run list --limit 5
 ```
 
-## 7. Защита веток на GitHub
+## 7. Защита веток на GitHub — ограничение плана
 
-После появления remote включить в Settings → Branches:
+Branch protection для **приватного** репозитория доступна только на платном плане.
+На бесплатном аккаунте API отвечает:
 
-- `main`: запретить прямой push, требовать PR, требовать зелёный CI;
-- `develop`: запретить прямой push, требовать PR.
+```
+Upgrade to GitHub Pro or make this repository public to enable this feature. (403)
+```
 
-CI уже описан в [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) и запускается
-сам на push в `main`/`develop` и на каждый PR: `pytest`, `tsc`, проверка на секреты
-в индексе и формата сообщений коммитов.
+То есть на текущем плане защита веток технически недоступна, и это ограничение
+GitHub, а не проекта. Варианты:
+
+| Вариант | Что даёт | Минус |
+|---|---|---|
+| GitHub Pro | защита веток на приватном репозитории | платно |
+| Сделать репозиторий публичным | защита веток бесплатно | код открыт |
+| Дисциплина вручную | правила из `CONTRIBUTING.md` + CI, ловящий поломки | можно случайно запушить в `main` |
+
+CI работает на любом плане. Проверено на первом же push: оба прогона
+(на `main` и на `develop`) завершились успешно — `pytest`, `tsc`, гигиена репозитория.
+
+Когда защита станет доступна, включить:
+
+- `main`: запрет прямого push, требование PR, требование зелёного CI;
+- `develop`: то же самое.
 
 ## 8. Если что-то пошло не так
 
