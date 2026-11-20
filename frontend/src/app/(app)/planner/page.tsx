@@ -29,12 +29,14 @@ import {
   ReviewChip,
   Skeleton,
   inputClass,
+  textareaClass,
 } from "@/components/ui";
-import { api, Task } from "@/lib/api";
+import { api, Task, TaskChat } from "@/lib/api";
 import {
   PRIORITY_LABELS,
   TASK_TYPE_LABELS,
   dateRu,
+  dateTimeRu,
   relativeDay,
 } from "@/lib/format";
 
@@ -154,6 +156,18 @@ export default function PlannerPage() {
   const [newDate, setNewDate] = useState<string>("");
   const [savingDate, setSavingDate] = useState(false);
 
+  /*
+    «Задача как чат» (запрос пользователя): нажал на задачу — видишь всю
+    переписку-заметки по этому клиенту и можешь сразу добавить новую,
+    не уходя на экран заметок и не теряя контекст задачи.
+  */
+  const [chatTaskId, setChatTaskId] = useState<string | null>(null);
+  const [chat, setChat] = useState<TaskChat | null>(null);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [chatDraft, setChatDraft] = useState("");
+  const [chatSending, setChatSending] = useState(false);
+
   const urlRead = useRef(false);
 
   /* --------------------------------------------------- состояние в URL */
@@ -242,6 +256,81 @@ export default function PlannerPage() {
   function openReschedule(task: Task) {
     setReschedule(task);
     setNewDate(task.due_date ?? toISO(fromDate(task)));
+  }
+
+  /**
+   * п.23: принять / изменить / отклонить предложенную задачу.
+   *
+   * В планировщике задача с needs_review раньше показывала только чип
+   * «Уточнить срок» и кнопку «Перенести» — то есть требовала назначить срок,
+   * но не позволяла сказать «это не задача». Здесь то же решение, что в
+   * заметках: accept снимает уточнение, edit — задаёт срок/формулировку,
+   * reject — убирает задачу из списка.
+   */
+  /* ------------------------------------------------- задача как чат */
+  const openChat = useCallback(async (taskId: string) => {
+    setChatTaskId(taskId);
+    setChatLoading(true);
+    setChatError(null);
+    setChat(null);
+    setChatDraft("");
+    try {
+      const data = await api<TaskChat>(`/tasks/${taskId}/chat?limit=40`);
+      setChat(data);
+    } catch (err) {
+      setChatError(err instanceof Error ? err.message : "Не удалось открыть задачу");
+    } finally {
+      setChatLoading(false);
+    }
+  }, []);
+
+  async function sendChatNote() {
+    const text = chatDraft.trim();
+    if (!text || !chat) return;
+    setChatSending(true);
+    setChatError(null);
+    try {
+      // Заметка создаётся как обычная: AI разберёт её и, если появится
+      // новое действие, задача добавится в план. Контекст задачи не теряется.
+      await api(`/clients/${chat.client.id}/notes`, {
+        method: "POST",
+        body: { body: text, run_ai: true, source_type: "text" },
+      });
+      setChatDraft("");
+      const fresh = await api<TaskChat>(`/tasks/${chat.task.id}/chat?limit=40`);
+      setChat(fresh);
+      await load();
+    } catch (err) {
+      // Текст остаётся в поле — менеджер не теряет написанное.
+      setChatError(
+        err instanceof Error
+          ? `Заметка не сохранена: ${err.message}. Текст остался в поле.`
+          : "Заметка не сохранена. Текст остался в поле.",
+      );
+    } finally {
+      setChatSending(false);
+    }
+  }
+
+  async function decideReview(
+    taskId: string,
+    decision: "accept" | "edit" | "reject",
+    extra?: { title?: string; due_date?: string | null },
+  ) {
+    setBusy(taskId);
+    try {
+      const body: Record<string, unknown> = { decision };
+      if (decision === "edit") {
+        if (extra?.title) body.title = extra.title;
+        if (extra?.due_date) body.due_date = extra.due_date;
+      }
+      await api(`/tasks/${taskId}/review`, { method: "POST", body });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось применить решение по задаче");
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function saveReschedule() {
@@ -545,6 +634,8 @@ export default function PlannerPage() {
               onComplete={complete}
               onReopen={reopen}
               onReschedule={openReschedule}
+              onDecide={decideReview}
+              onOpenChat={openChat}
             />
           )}
 
@@ -648,6 +739,134 @@ export default function PlannerPage() {
           </div>
         )}
       </Modal>
+
+      {/*
+        Задача как чат: история заметок клиента + поле ввода новой.
+        Открывается кликом по названию задачи — менеджер сразу видит,
+        о чём договаривались, и продолжает разговор на месте.
+      */}
+      <Modal
+        open={Boolean(chatTaskId)}
+        title={chat?.task.title ?? "Задача"}
+        onClose={() => {
+          setChatTaskId(null);
+          setChat(null);
+          setChatError(null);
+        }}
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setChatTaskId(null);
+                setChat(null);
+                setChatError(null);
+              }}
+            >
+              Закрыть
+            </Button>
+            {chat && (
+              <Button
+                onClick={() => void sendChatNote()}
+                loading={chatSending}
+                disabled={!chatDraft.trim()}
+              >
+                Добавить заметку
+              </Button>
+            )}
+          </>
+        }
+      >
+        {chatLoading && (
+          <div className="space-y-2">
+            <Skeleton className="h-16 rounded-control" />
+            <Skeleton className="h-16 rounded-control" />
+            <Skeleton className="h-16 rounded-control" />
+          </div>
+        )}
+
+        {chatError && !chat && (
+          <ErrorState
+            title="Не удалось открыть задачу"
+            description={chatError}
+            onRetry={() => chatTaskId && void openChat(chatTaskId)}
+          />
+        )}
+
+        {chat && (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-[var(--muted)]">
+              <Link
+                href={`/clients/${chat.client.id}`}
+                className="font-medium text-primary hover:underline focus-ring rounded"
+              >
+                {chat.client.name}
+              </Link>
+              <span>{TASK_TYPE_LABELS[chat.task.type] ?? chat.task.type}</span>
+              <span>{PRIORITY_LABELS[chat.task.priority] ?? chat.task.priority}</span>
+              <span>
+                {chat.task.due_date ? `срок ${dateRu(chat.task.due_date)}` : "без срока"}
+              </span>
+              {chat.task.source_quote && (
+                <span className="w-full border-l-2 border-[var(--border-strong)] pl-2 italic">
+                  «{chat.task.source_quote}»
+                </span>
+              )}
+            </div>
+
+            <div>
+              <p className="mb-1.5 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-[var(--muted)]">
+                История заметок клиента
+              </p>
+              {chat.notes.length === 0 ? (
+                <EmptyState
+                  title="Заметок пока нет"
+                  description="Напишите первую — она появится здесь и в ленте заметок."
+                />
+              ) : (
+                <div className="max-h-[46vh] space-y-1.5 overflow-y-auto pr-1">
+                  {chat.notes.map((note) => (
+                    <div
+                      key={note.id}
+                      className="rounded-control border border-[var(--border)] bg-[#f8fafd] px-2.5 py-2"
+                    >
+                      <div className="mb-0.5 flex flex-wrap items-center gap-x-2 text-[11.5px] text-[var(--muted)]">
+                        <span>{dateTimeRu(note.created_at)}</span>
+                        {note.author_name && <span>{note.author_name}</span>}
+                        {note.source_type === "voice" && <span>голос</span>}
+                        {note.spawned_task && (
+                          <span className="rounded-full bg-[var(--primary-soft)] px-1.5 py-0.5 text-[10.5px] font-semibold text-primary">
+                            отсюда задача
+                          </span>
+                        )}
+                      </div>
+                      <p className="whitespace-pre-wrap break-words text-[13.5px] leading-relaxed text-ink">
+                        {note.body}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {chat.has_more && (
+                <p className="mt-1.5 text-[12px] text-[var(--muted)]">
+                  Показаны последние {chat.notes.length}. Более ранние — в разделе «Заметки».
+                </p>
+              )}
+            </div>
+
+            <Field label="Новая заметка по этой задаче">
+              <textarea
+                value={chatDraft}
+                onChange={(e) => setChatDraft(e.target.value)}
+                rows={3}
+                placeholder="Например: созвонился, ждём счёт до пятницы"
+                className={textareaClass}
+              />
+            </Field>
+            {chatError && <p className="text-[12.5px] text-[var(--danger)]">{chatError}</p>}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
@@ -662,6 +881,8 @@ function DayView({
   onComplete,
   onReopen,
   onReschedule,
+  onDecide,
+  onOpenChat,
 }: {
   date: string;
   tasks: Task[];
@@ -670,6 +891,8 @@ function DayView({
   onComplete: (id: string) => void;
   onReopen: (id: string) => void;
   onReschedule: (task: Task) => void;
+  onDecide: (taskId: string, decision: "accept" | "edit" | "reject") => void;
+  onOpenChat: (taskId: string) => void;
 }) {
   const withTime = tasks.filter((t) => t.due_at);
   const withoutTime = tasks.filter((t) => !t.due_at);
@@ -697,6 +920,8 @@ function DayView({
                 onComplete={() => onComplete(task.id)}
                 onReopen={() => onReopen(task.id)}
                 onReschedule={() => onReschedule(task)}
+                onDecide={onDecide}
+                onOpenChat={() => onOpenChat(task.id)}
               />
             ))}
           </div>
@@ -717,6 +942,8 @@ function DayView({
                   onComplete={() => onComplete(task.id)}
                   onReopen={() => onReopen(task.id)}
                   onReschedule={() => onReschedule(task)}
+                  onDecide={onDecide}
+                  onOpenChat={() => onOpenChat(task.id)}
                 />
               ))}
             </div>
@@ -747,6 +974,8 @@ function DayView({
                 onComplete={() => onComplete(task.id)}
                 onReopen={() => onReopen(task.id)}
                 onReschedule={() => onReschedule(task)}
+                onDecide={onDecide}
+                onOpenChat={() => onOpenChat(task.id)}
               />
             ))}
           </div>
@@ -1047,6 +1276,8 @@ function TaskLine({
   onComplete,
   onReopen,
   onReschedule,
+  onDecide,
+  onOpenChat,
 }: {
   task: Task;
   time: string | null;
@@ -1054,6 +1285,8 @@ function TaskLine({
   onComplete: () => void;
   onReopen: () => void;
   onReschedule: () => void;
+  onDecide: (taskId: string, decision: "accept" | "edit" | "reject") => void;
+  onOpenChat: () => void;
 }) {
   const done = task.status === "done";
   const overdue = !done && task.due_date ? task.due_date < todayISO() : false;
@@ -1088,13 +1321,20 @@ function TaskLine({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
           {time && <span className="tabular text-[12px] font-medium text-primary">{time}</span>}
-          <p
-            className={`min-w-0 break-words text-[14px] leading-snug ${
+          {/*
+            Название задачи — кнопка: открывает карточку-чат с историей
+            заметок клиента. Так задача перестаёт быть строкой без контекста.
+          */}
+          <button
+            type="button"
+            onClick={onOpenChat}
+            title="Открыть задачу: история заметок и новая запись"
+            className={`min-w-0 break-words text-left text-[14px] leading-snug transition-colors hover:text-primary focus-ring rounded ${
               done ? "text-[var(--muted)] line-through" : "text-ink"
             }`}
           >
             {task.title}
-          </p>
+          </button>
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-[var(--muted)]">
           {task.client_id && (
@@ -1120,8 +1360,60 @@ function TaskLine({
             </span>
           )}
           {!done && task.due_date && <span>{relativeDay(`${task.due_date}T00:00:00Z`).toLowerCase()}</span>}
-          {task.needs_review && <ReviewChip reason={task.review_reason} />}
+          {task.event_kind === "waiting" && (
+            <span className="rounded-full bg-[#fff1d6] px-1.5 py-0.5 text-[11px] font-semibold text-[#8a6410]">
+              {task.actor === "client" ? "ждём клиента" : "ждём"}
+            </span>
+          )}
+          {task.needs_review && <ReviewChip reason={task.review_question ?? task.review_reason} />}
         </div>
+
+        {/* п.14: конкретный вопрос вместо безликого «Уточнить срок» */}
+        {task.needs_review && task.review_question && (
+          <p className="mt-1 text-[12px] leading-snug text-[#8a6410]">{task.review_question}</p>
+        )}
+
+        {/* п.17: исходная фраза — видно, из чего родилась задача */}
+        {task.source_quote && (
+          <details className="mt-1">
+            <summary className="cursor-pointer list-none text-[11.5px] font-medium text-primary hover:underline">
+              Откуда задача?
+            </summary>
+            <p className="mt-1 rounded-md border-l-2 border-[var(--border-strong)] bg-white px-2 py-1 text-[12px] italic leading-snug text-[var(--muted)]">
+              «{task.source_quote}»
+            </p>
+          </details>
+        )}
+
+        {/* п.23: принять / изменить срок / отклонить — прямо в строке */}
+        {task.needs_review && !done && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => onDecide(task.id, "accept")}
+              disabled={busy}
+              className="focus-ring inline-flex h-8 items-center rounded-lg bg-[var(--primary-soft)] px-2.5 text-[12px] font-medium text-primary transition-colors hover:bg-[#dce8fb] disabled:opacity-50"
+            >
+              Принять
+            </button>
+            <button
+              type="button"
+              onClick={onReschedule}
+              disabled={busy}
+              className="focus-ring inline-flex h-8 items-center rounded-lg border border-[var(--border-strong)] px-2.5 text-[12px] font-medium text-ink transition-colors hover:bg-[#eef2f8] disabled:opacity-50"
+            >
+              Задать срок
+            </button>
+            <button
+              type="button"
+              onClick={() => onDecide(task.id, "reject")}
+              disabled={busy}
+              className="focus-ring inline-flex h-8 items-center rounded-lg px-2.5 text-[12px] font-medium text-[var(--muted)] transition-colors hover:bg-[#eef2f8] hover:text-[var(--danger)] disabled:opacity-50"
+            >
+              Отклонить
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="flex shrink-0 items-center gap-1">

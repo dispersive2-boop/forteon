@@ -9,15 +9,18 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import audit, ensure_version, get_client_or_404, get_current_user
-from ..models import Client, Notification, Task, User, utcnow
+from ..models import Client, Note, Notification, Task, User, utcnow
 from ..schemas import (
     PlannerOut,
     PlannerSummary,
+    TaskChatNote,
+    TaskChatOut,
     TaskComplete,
     TaskCreate,
     TaskListOut,
     TaskOut,
     TaskReschedule,
+    TaskReviewDecision,
     TaskUpdate,
     TodayCounters,
     TodayOut,
@@ -100,6 +103,11 @@ def create_task(payload: TaskCreate, db: Session = Depends(get_db), user: User =
     if due_date is None and due_at is None:
         due_date = None
 
+    # П0 AI Task Extraction 2.0, п.1–2: отсутствие срока — не повод требовать
+    # уточнения. Раньше здесь стояло needs_review = (due_date is None), из-за
+    # чего ЛЮБАЯ задача, созданная вручную без даты, попадала в «Уточнить» и
+    # выглядела как ошибка разбора. Задача без срока — нормальная задача, она
+    # просто живёт в разделе «Без срока».
     task = Task(
         client_id=client.id,
         project_id=payload.project_id,
@@ -114,8 +122,8 @@ def create_task(payload: TaskCreate, db: Session = Depends(get_db), user: User =
         timezone=payload.timezone or user.timezone,
         origin="manual",
         conditional=payload.conditional,
-        needs_review=due_date is None,
-        review_reason="Срок не указан" if due_date is None else None,
+        needs_review=False,
+        review_reason=None,
         dedupe_key=make_dedupe_key(client.id, payload.title, due_at),
     )
     db.add(task)
@@ -205,6 +213,77 @@ def get_task(task_id: str, db: Session = Depends(get_db), user: User = Depends(g
     return _task_out(task, client.name if client else None)
 
 
+@router.get("/tasks/{task_id}/chat", response_model=TaskChatOut)
+def task_chat(
+    task_id: str,
+    limit: int = Query(default=30, ge=1, le=100),
+    before: datetime | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Задача как чат: карточка + вся переписка-заметки по клиенту.
+
+    Менеджер открывает задачу и видит, о чём договаривались раньше, — не
+    переключаясь на экран заметок и не теряя контекст. Всё одним запросом:
+    три отдельных запроса давали рассинхрон между задачей и лентой.
+
+    Заметки идут от новых к старым (`before` — курсор пагинации, как в ленте).
+    """
+    task = _task_for_user(db, user, task_id)
+    client = db.get(Client, task.client_id)
+    if client is None:
+        raise HTTPException(status_code=404, detail={"code": "not_found", "message": "Клиент не найден"})
+
+    query = (
+        select(Note, User.full_name)
+        .outerjoin(User, User.id == Note.author_id)
+        .where(Note.client_id == client.id, Note.deleted_at.is_(None))
+    )
+    if before is not None:
+        query = query.where(Note.created_at < before)
+    rows = db.execute(query.order_by(Note.created_at.desc()).limit(limit + 1)).all()
+
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+
+    # Какие заметки породили живую задачу — показываем меткой в ленте.
+    spawned = set(
+        db.scalars(
+            select(Task.source_note_id).where(
+                Task.client_id == client.id,
+                Task.deleted_at.is_(None),
+                Task.source_note_id.is_not(None),
+            )
+        )
+    )
+
+    notes = [
+        TaskChatNote(
+            id=note.id,
+            body=note.body,
+            source_type=note.source_type,
+            ai_status=note.ai_status,
+            created_at=note.created_at,
+            author_name=author_name,
+            spawned_task=note.id in spawned,
+        )
+        for note, author_name in rows
+    ]
+
+    return TaskChatOut(
+        task=_task_out(task, client.name),
+        client={
+            "id": client.id,
+            "name": client.name,
+            "status": client.status,
+            "type": client.type,
+        },
+        notes=notes,
+        has_more=has_more,
+        next_before=rows[-1][0].created_at if has_more and rows else None,
+    )
+
+
 @router.patch("/tasks/{task_id}", response_model=TaskOut)
 def update_task(task_id: str, payload: TaskUpdate, db: Session = Depends(get_db),
                 user: User = Depends(get_current_user)):
@@ -218,7 +297,62 @@ def update_task(task_id: str, payload: TaskUpdate, db: Session = Depends(get_db)
         task.due_date = to_date(data["due_at"])
         task.needs_review = False
         task.review_reason = None
+        task.review_question = None
+    # Менеджер снял пометку уточнения вручную — вопрос больше не нужен.
+    if data.get("needs_review") is False:
+        task.review_reason = None
+        task.review_question = None
     task.version = (task.version or 1) + 1
+    audit(db, user, "task", task.id, "updated", {k: str(v) for k, v in data.items()})
+    db.commit()
+    db.refresh(task)
+    return _task_out(task)
+
+
+@router.post("/tasks/{task_id}/review", response_model=TaskOut)
+def review_task(task_id: str, payload: TaskReviewDecision,
+                db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Решение по задаче, предложенной AI (п.23).
+
+    AI иногда ошибается: предлагает задачу на уже сделанное или неверно
+    понимает, кто действует. Менеджер должен иметь возможность принять,
+    поправить или отклонить — иначе единственный выход удалять задачу
+    вручную, и причина ошибки теряется.
+    """
+    task = _task_for_user(db, user, task_id)
+    decision = (payload.decision or "").strip().lower()
+
+    if decision == "reject":
+        task.deleted_at = utcnow()
+        task.version = (task.version or 1) + 1
+        audit(db, user, "task", task.id, "rejected_by_user",
+              {"comment": payload.comment or "", "title": task.title})
+        db.commit()
+        return _task_out(task)
+
+    if decision not in ("accept", "edit"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "bad_decision",
+                    "message": "Ожидается accept, edit или reject"},
+        )
+
+    if payload.title:
+        task.title = payload.title.strip()[:512]
+    if payload.actor in ("us", "client"):
+        task.actor = payload.actor
+    if payload.due_date is not None:
+        task.due_date = payload.due_date
+        task.due_at = datetime.combine(payload.due_date, time(10, 0))
+    if payload.comment:
+        task.description = ((task.description or "") + "\n" + payload.comment).strip()
+
+    task.needs_review = False
+    task.review_reason = None
+    task.review_question = None
+    task.version = (task.version or 1) + 1
+    audit(db, user, "task", task.id, "accepted_by_user",
+          {"decision": decision, "title": task.title})
     db.commit()
     db.refresh(task)
     return _task_out(task)
@@ -256,8 +390,12 @@ def reschedule_task(task_id: str, payload: TaskReschedule, db: Session = Depends
     task = _task_for_user(db, user, task_id)
     task.due_at = payload.due_at
     task.due_date = payload.due_date or to_date(payload.due_at)
-    task.needs_review = task.due_date is None
-    task.review_reason = None if task.due_date else "Срок требует уточнения"
+    # п.1–2: перенос без даты не возвращает задачу в «Уточнить». Уточнение —
+    # это про неясный смысл события, а не про пустой календарь. Если менеджер
+    # сознательно оставил задачу без срока, это его решение, а не ошибка AI.
+    task.needs_review = False
+    task.review_reason = None
+    task.review_question = None
     task.version = (task.version or 1) + 1
     audit(db, user, "task", task.id, "rescheduled", {"reason": payload.reason})
     db.commit()

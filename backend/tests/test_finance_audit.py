@@ -11,33 +11,28 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 # Отдельная БД — тест не должен трогать рабочую.
 #
-# Имя переменной обязательно с префиксом FORTEON_: приложение читает
-# FORTEON_DATABASE_URL (app/config.py). Раньше здесь стояло DATABASE_URL,
-# приложение его не видело и тест работал с БОЕВОЙ базой: фикстура db()
-# делает drop_all() + create_all(), поэтому каждый прогон pytest стирал
-# рабочую БД вместе с клиентами и задачами.
-_DB_FILE = os.path.join(tempfile.gettempdir(), "forteon_test_finance_audit.db")
-os.environ["FORTEON_DATABASE_URL"] = f"sqlite:///{_DB_FILE}"
-os.environ.setdefault("FORTEON_SECRET_KEY", "test-secret-key-for-finance-audit-tests-only")
-os.environ.setdefault("FORTEON_DEBUG", "1")
-
+# Настройка окружения живёт в tests/conftest.py, потому что pytest импортирует
+# все тестовые модули ДО запуска первого теста: два модуля, каждый со своим
+# FORTEON_DATABASE_URL, затирали друг друга и валили сборку. Раньше здесь
+# стояло DATABASE_URL без префикса FORTEON_ — приложение его не видело и
+# тест работал с БОЕВОЙ базой: фикстура db() делает drop_all()+create_all(),
+# поэтому каждый прогон pytest стирал рабочую БД вместе с клиентами и задачами.
+#
 # Страховка: если по какой-то причине окружение не подхватилось — падаем
 # сразу, а не после drop_all() по рабочей базе.
 from app.config import settings as _settings  # noqa: E402
 
-assert "forteon_test_finance_audit" in _settings.database_url, (
-    "Тест подключён к боевой БД (%s). Проверьте FORTEON_DATABASE_URL."
+assert "forteon_test" in _settings.database_url, (
+    "Тест подключён к боевой БД (%s). Проверьте tests/conftest.py."
     % _settings.database_url
 )
 

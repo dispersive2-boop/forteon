@@ -108,6 +108,12 @@ def notes_feed(
             Task.source_quote,
             Task.type,
             Task.needs_review,
+            # P0 AI Task Extraction 2.0: без этих полей интерфейс не может
+            # отличить «ждём клиента» от «надо сделать» и показать вопрос
+            # из уточнения (п.3, 8, 14).
+            Task.event_kind,
+            Task.actor,
+            Task.review_question,
         )
         .where(Task.source_note_id.in_(note_ids), Task.deleted_at.is_(None))
         .order_by(Task.created_at.asc())
@@ -125,6 +131,9 @@ def notes_feed(
         source_quote,
         task_type,
         needs_review,
+        event_kind,
+        actor,
+        review_question,
     ) in task_rows:
         tasks_by_note.setdefault(source_note_id, []).append(
             {
@@ -137,8 +146,40 @@ def notes_feed(
                 "type": task_type,
                 "source_quote": source_quote,
                 "needs_review": needs_review,
+                "event_kind": event_kind,
+                "actor": actor,
+                "review_question": review_question,
             }
         )
+
+    # п.18–19: кто реально обработал заметку. Отдельный запрос по всем заметкам
+    # ленты, чтобы не делать N обращений к /notes/{id}/ai-status.
+    run_rows = db.execute(
+        select(AIRun.note_id, AIRun.model, AIRun.error)
+        .where(AIRun.note_id.in_(note_ids))
+        .order_by(AIRun.created_at.desc())
+    ).all()
+    ai_by_note: dict[str, dict] = {}
+    for run_note_id, run_model, run_error in run_rows:
+        # desc-порядок: первая строка на заметку — самый свежий прогон.
+        if run_note_id in ai_by_note:
+            continue
+        fallback = bool(run_model and run_model.startswith("local-rules"))
+        if run_model == "local-rules":
+            note_text = "AI не настроен: задачи извлечены локальными правилами"
+        elif run_model == "local-rules-fallback":
+            note_text = "AI недоступен, применены локальные правила. Причина: %s" % (
+                run_error or "нет ответа от провайдера"
+            )
+        elif run_model:
+            note_text = "Задачи извлечены моделью %s" % run_model
+        else:
+            note_text = "Обработка ещё не выполнялась"
+        ai_by_note[run_note_id] = {
+            "model": run_model,
+            "used_fallback": fallback,
+            "provider_note": note_text,
+        }
 
     commit_rows = db.execute(
         select(
@@ -175,6 +216,13 @@ def notes_feed(
         payload["open_task_count"] = sum(1 for t in linked if t["status"] == "open")
         payload["tasks"] = linked
         payload["commitments"] = commitments_by_note.get(note.id, [])
+        # п.18–19: даже в ленте видно, кто разобрал заметку и был ли fallback.
+        payload.update(
+            ai_by_note.get(
+                note.id,
+                {"model": None, "used_fallback": False, "provider_note": "Обработка ещё не выполнялась"},
+            )
+        )
         items.append(payload)
 
     oldest = rows[-1][0].created_at
@@ -319,12 +367,33 @@ def ai_status(note_id: str, db: Session = Depends(get_db), user: User = Depends(
     commitments = list(db.scalars(select(Commitment).where(Commitment.client_id == note.client_id)))
 
     needs_review: list[dict] = []
+    completed: list[dict] = []
     if runs and runs[0].result_json:
         try:
             parsed = json.loads(runs[0].result_json)
             needs_review = parsed.get("needs_review") or []
+            completed = parsed.get("completed") or []
         except json.JSONDecodeError:
             needs_review = []
+            completed = []
+
+    # п.18, 19: показываем менеджеру, кто реально обработал заметку.
+    # local-rules       — ключа провайдера нет, работали правила;
+    # local-rules-fallback — AI упал (ошибка в ai_error), работали правила;
+    # иначе             — ответила модель.
+    model = runs[0].model if runs else None
+    used_fallback = bool(model and model.startswith("local-rules"))
+    if model == "local-rules":
+        provider_note = "AI не настроен: задачи извлечены локальными правилами"
+    elif model == "local-rules-fallback":
+        provider_note = (
+            "AI недоступен, применены локальные правила. Причина: %s"
+            % (runs[0].error or "нет ответа от провайдера")
+        )
+    elif model:
+        provider_note = "Задачи извлечены моделью %s" % model
+    else:
+        provider_note = "Обработка ещё не выполнялась"
 
     return AIStatusOut(
         note_id=note.id,
@@ -345,6 +414,10 @@ def ai_status(note_id: str, db: Session = Depends(get_db), user: User = Depends(
         tasks_created=len(tasks),
         commitments_created=len([c for c in commitments if c.source_quote]),
         needs_review=needs_review,
+        model=model,
+        used_fallback=used_fallback,
+        provider_note=provider_note,
+        completed=completed,
     )
 
 

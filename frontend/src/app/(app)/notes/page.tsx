@@ -57,6 +57,10 @@ type NoteTask = {
   type: string;
   source_quote: string | null;
   needs_review: boolean;
+  /** P0 AI Task Extraction 2.0 (см. lib/api.ts). */
+  event_kind?: "done" | "todo" | "waiting" | "unclear";
+  actor?: "us" | "client";
+  review_question?: string | null;
 };
 
 type NoteCommitment = {
@@ -78,6 +82,13 @@ type FeedNote = Omit<Note, "tasks"> & {
   open_task_count?: number;
   /** Локальная запись, которую ещё не подтвердил сервер (п.56). */
   optimistic?: boolean;
+  /**
+   * п.18–19: кто реально обработал заметку.
+   * model = "local-rules" — AI не настроен; "local-rules-fallback" — AI упал.
+   */
+  model?: string | null;
+  used_fallback?: boolean;
+  provider_note?: string | null;
 };
 
 type SpeechRecognitionLike = {
@@ -972,6 +983,9 @@ function NoteCard({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+  /** п.23: решение по предложенной задаче — id задачи, которую сейчас решаем. */
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
   async function saveTaskTitle(taskId: string) {
     const title = draftTitle.trim();
@@ -993,6 +1007,47 @@ function NoteCard({
     }
   }
 
+  /**
+   * п.23: менеджер принимает, правит или отклоняет предложенную задачу.
+   *
+   * Раньше единственным выходом было «Уточнить срок» без действий — задача
+   * висела в списке, и убрать её было нельзя. Здесь же явное решение:
+   *   accept — задача остаётся как есть, признак уточнения снимается;
+   *   edit   — отправляем уточнённые поля (срок и/или формулировку);
+   *   reject — задача мягко удаляется, в журнал пишется rejected_by_user.
+   */
+  async function decideReview(taskId: string, decision: "accept" | "edit" | "reject") {
+    setReviewingId(taskId);
+    setReviewError(null);
+    try {
+      const body: Record<string, unknown> = { decision };
+      if (decision === "edit") {
+        const title = draftTitle.trim();
+        if (title) body.title = title;
+      }
+      await api(`/tasks/${taskId}/review`, { method: "POST", body });
+      // Локально отражаем результат, не дожидаясь перезагрузки всей ленты.
+      const target = tasks.find((t) => t.id === taskId);
+      if (target) {
+        if (decision === "reject") {
+          target.status = "deleted";
+        } else {
+          if (decision === "edit" && body.title) target.title = String(body.title);
+          target.needs_review = false;
+          target.review_question = null;
+        }
+      }
+      setEditingId(null);
+      setDraftTitle("");
+    } catch (err) {
+      setReviewError(
+        err instanceof Error ? err.message : "Не удалось применить решение по задаче",
+      );
+    } finally {
+      setReviewingId(null);
+    }
+  }
+
   return (
     <article className="rounded-card border border-[var(--border)] bg-surface p-3.5 shadow-soft">
       <header className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -1010,7 +1065,34 @@ function NoteCard({
             {state.tone === "warning" && <span className="ml-0.5 animate-pulse">…</span>}
           </Badge>
         )}
+        {/*
+          п.18–19: менеджер должен понимать, кто реально разобрал заметку.
+          Молчать про fallback нельзя: локальные правила слабее модели, и
+          «почему задача странная» должно иметь видимую причину.
+        */}
+        {realId && note.model && (
+          <span
+            title={note.provider_note ?? undefined}
+            className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.04em] ${
+              note.used_fallback
+                ? "bg-[var(--warning-soft)] text-[#8a6410]"
+                : "bg-[var(--primary-soft)] text-primary"
+            }`}
+          >
+            {note.used_fallback ? "локальные правила" : "AI"}
+          </span>
+        )}
       </header>
+
+      {/*
+        п.19: AI упал — говорим прямо и показываем причину, но задачи всё равно
+        показываем: они пришли из локальных правил и работать с ними можно.
+      */}
+      {realId && note.used_fallback && note.model === "local-rules-fallback" && (
+        <div className="mt-1.5 rounded-control bg-[var(--warning-soft)] px-2.5 py-2 text-[12px] leading-snug text-[#8a6410]">
+          {note.provider_note ?? "AI недоступен, применены локальные правила."}
+        </div>
+      )}
 
       <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-ink">
         {note.body}
@@ -1133,13 +1215,75 @@ function NoteCard({
                     до {relativeDay(`${task.due_date}T00:00:00Z`).toLowerCase()}
                   </span>
                 )}
-                {!task.due_date && task.needs_review && <ReviewChip />}
+                {task.event_kind === "waiting" ? (
+                  <span className="shrink-0 rounded-full bg-[#fff1d6] px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.04em] text-[#8a6410]">
+                    {task.actor === "client" ? "ждём клиента" : "ждём"}
+                  </span>
+                ) : null}
+                {task.needs_review && <ReviewChip reason={task.review_question} />}
                 <span className="shrink-0 text-[11.5px] text-[var(--muted)]">
                   {PRIORITY_LABELS[task.priority] ?? task.priority}
                 </span>
               </div>
 
-              {/* «Почему создана?» — цитата из заметки (п.57) */}
+              {/* п.14: в уточнении должен быть понятный вопрос, а не «уточните» */}
+              {task.needs_review && task.review_question && (
+                <p className="mt-1 text-[12px] leading-snug text-[#8a6410]">
+                  {task.review_question}
+                </p>
+              )}
+
+              {/* п.23: решение по предложенной задаче — явными кнопками,
+                  иначе задача навсегда висит в «Уточнить» */}
+              {task.needs_review && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  {editingId === task.id ? (
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      loading={reviewingId === task.id}
+                      onClick={() => void decideReview(task.id, "edit")}
+                    >
+                      Сохранить и принять
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      loading={reviewingId === task.id}
+                      onClick={() => void decideReview(task.id, "accept")}
+                    >
+                      Принять
+                    </Button>
+                  )}
+                  {editingId !== task.id && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setEditingId(task.id);
+                        setDraftTitle(task.title);
+                      }}
+                    >
+                      Изменить
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={reviewingId === task.id}
+                    onClick={() => void decideReview(task.id, "reject")}
+                  >
+                    Отклонить
+                  </Button>
+                </div>
+              )}
+
+              {task.needs_review && reviewError && (
+                <p className="mt-1 text-[12px] text-[var(--danger)]">{reviewError}</p>
+              )}
+
+              {/* «Почему создана?» — цитата из заметки (п.17) */}
               <details className="mt-1">
                 <summary className="cursor-pointer list-none text-[12px] font-medium text-primary hover:underline">
                   Почему создана?

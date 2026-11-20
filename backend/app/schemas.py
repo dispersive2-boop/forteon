@@ -261,6 +261,15 @@ class AIStatusOut(BaseModel):
     tasks_created: int = 0
     commitments_created: int = 0
     needs_review: list[dict[str, Any]] = Field(default_factory=list)
+    # п.18: какая модель реально обработала заметку.
+    # "local-rules" — ключа нет, "local-rules-fallback" — AI упал.
+    model: str | None = None
+    # п.19: true, если AI не сработал и применены локальные правила.
+    used_fallback: bool = False
+    # п.19: человекочитаемое пояснение, что случилось с AI.
+    provider_note: str | None = None
+    # п.7: выполненные действия, зафиксированные в истории.
+    completed: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class TranscriptRequest(BaseModel):
@@ -290,6 +299,25 @@ class TaskUpdate(BaseModel):
     due_at: datetime | None = None
     due_date: date | None = None
     version: int | None = None
+    # п.23: менеджер может поправить то, что предложил AI.
+    event_kind: str | None = None
+    actor: str | None = None
+    # Снять или поставить пометку «нужно уточнить».
+    needs_review: bool | None = None
+
+
+class TaskReviewDecision(BaseModel):
+    """Решение по предложенной AI задаче (п.23).
+
+    accept   — принять как есть, снять пометку уточнения;
+    edit     — принять с правками (title/due_date/actor передаются рядом);
+    reject   — отклонить: задача удаляется, остаётся запись в аудите.
+    """
+    decision: str = Field(description="accept | edit | reject")
+    title: str | None = None
+    due_date: date | None = None
+    actor: str | None = None
+    comment: str | None = None
 
 
 class TaskComplete(BaseModel):
@@ -323,6 +351,12 @@ class TaskOut(ORMModel):
     conditional: bool
     needs_review: bool
     review_reason: str | None
+    # P0 AI Task Extraction 2.0: тип события и исполнитель.
+    # Нужны интерфейсу, чтобы отделить «мы ждём клиента» от «надо сделать»
+    # и показать конкретный вопрос из уточнения (п.3, 8, 14).
+    event_kind: str = "todo"
+    actor: str = "us"
+    review_question: str | None = None
     completed_at: datetime | None
     result_note: str | None
     version: int
@@ -331,6 +365,33 @@ class TaskOut(ORMModel):
 class TaskListOut(BaseModel):
     items: list[TaskOut]
     total: int
+
+
+# ------------------------------------------------- задача как «чат заметок»
+class TaskChatNote(BaseModel):
+    id: str
+    body: str
+    source_type: str
+    ai_status: str
+    created_at: datetime
+    author_name: str | None = None
+    #: true, если из этой заметки родилась открытая задача
+    spawned_task: bool = False
+
+
+class TaskChatOut(BaseModel):
+    """Всё, что нужно карточке задачи: сама задача, клиент и лента заметок.
+
+    Зачем одним запросом: менеджер открывает задачу и сразу видит, о чём
+    договаривались раньше, и может продолжить разговор заметкой. Если бы
+    карточка делала три запроса, между ними лента успевала разъехаться.
+    """
+
+    task: TaskOut
+    client: dict[str, Any]
+    notes: list[TaskChatNote] = Field(default_factory=list)
+    has_more: bool = False
+    next_before: datetime | None = None
 
 
 # ---------------------------------------------------------------- planner

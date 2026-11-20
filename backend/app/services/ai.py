@@ -24,18 +24,43 @@ from .dates import extract_due, is_conditional, is_negative, localize, utc_naive
 
 log = logging.getLogger("forteon.ai")
 
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"
 
 SYSTEM_PROMPT = """Ты — экстрактор задач для CRM сопровождения клиентов.
+
+Задача: разделить текст заметки на ТРИ типа событий и определить сроки.
+
+1) DONE — уже сделано: «отправил», «согласовали», «обсудили», «встретились»,
+   «подписали», «оплатили», «проверил». Такое НЕ становится задачей.
+   Оно идёт в completed — как факт истории.
+2) TODO — нам предстоит сделать. Сюда же относится будущее время от первого
+   лица («позвоню», «отправлю») и инфинитив («отправить КП»).
+3) WAITING — ждём от клиента или третьей стороны: «ждём», «обещали»,
+   «попросили», «должны со стороны клиента», «нет ответа».
+
+Отсутствие даты НЕ повод отправлять задачу на уточнение. Действие без срока
+всё равно задача — просто due_date=null.
+
 Верни СТРОГО JSON без markdown:
-{"tasks":[{"title":"","action_type":"call|email|meeting|document|payment|other",
-"due_date":"YYYY-MM-DD|null","due_time":"HH:MM|null","timezone":"IANA",
-"priority":"low|normal|high|critical","conditional":false,"source_quote":"","confidence":0.0}],
+{"tasks":[{"title":"","event_kind":"todo|waiting|unclear","actor":"us|client",
+"action_type":"call|email|meeting|document|payment|other",
+"due_date":"YYYY-MM-DD|null","due_time":"HH:MM|null",
+"priority":"low|normal|high|critical","conditional":false,
+"source_quote":"","confidence":0.0}],
 "commitments":[{"promised_by":"client|us","description":"","due_date":"YYYY-MM-DD|null","source_quote":""}],
-"needs_review":[{"reason":"","source_quote":""}]}
-Правила: не выдумывай даты; если срок неясен — due_date=null и добавь needs_review.
-Отрицания («не звонить») и условные действия («если оплатят») отмечай conditional=true.
-Максимум 6 задач. Только то, что явно следует из текста заметки."""
+"completed":[{"description":"","source_quote":""}],
+"needs_review":[{"reason":"конкретный вопрос менеджеру","source_quote":""}]}
+
+Жёсткие правила:
+* Не выдумывай даты, исполнителей, суммы и обещания, которых нет в тексте.
+* Различай дату события («вчера созвонились») и дедлайн задачи («до пятницы»).
+  Дата уже случившегося события дедлайном не является.
+* event_kind=unclear ставь только если действительно не понять: сделано уже
+  или предстоит. Тогда в needs_review напиши КОНКРЕТНЫЙ вопрос, например
+  «Документ уже отправлен или его ещё нужно подготовить?», а не «уточните».
+* Отрицания («не звонить») и условные («если оплатят») — conditional=true.
+* source_quote — дословный фрагмент заметки. Без него задача не принимается.
+* Максимум 6 задач. Только то, что явно следует из текста."""
 
 ACTION_KEYWORDS: dict[str, tuple[str, ...]] = {
     "call": ("позвонить", "созвониться", "набрать", "звонок", "перезвонить", "обзвонить"),
@@ -62,6 +87,14 @@ class ExtracteedTask:
     conditional: bool = False
     source_quote: str = ""
     confidence: float | None = None
+    # Тип события (events.py): todo | waiting | unclear.
+    # Раньше тип не различался, и «Отправил КП» становилось задачей.
+    event_kind: str = "todo"
+    actor: str = "us"
+    # Конкретный вопрос при уточнении (п.14).
+    review_question: str | None = None
+    # Почему срок такой (или почему его нет) — для показа менеджеру.
+    due_reason: str | None = None
 
 
 @dataclass
@@ -77,6 +110,9 @@ class ExtractionResult:
     tasks: list[ExtracteedTask] = field(default_factory=list)
     commitments: list[ExtracteedCommitment] = field(default_factory=list)
     needs_review: list[dict[str, Any]] = field(default_factory=list)
+    # Уже выполненные действия. Задачами не становятся — идут в историю
+    # заметки, чтобы факт не потерялся (п.7), но и не всплыл как «надо».
+    completed: list[dict[str, Any]] = field(default_factory=list)
     model: str = "local-rules"
     prompt_version: str = PROMPT_VERSION
     tokens: int | None = None
@@ -118,36 +154,45 @@ def _title_from(sentence: str) -> str:
 
 
 def local_extract(body: str, note_moment: datetime, tz_name: str) -> ExtractionResult:
-    """Детерминированный экстрактор без внешних вызовов."""
+    """Детерминированный экстрактор без внешних вызовов.
+
+    Срок определяется ОТДЕЛЬНО от действия (п.1). Отсутствие даты больше не
+    отправляет задачу в «Уточнить»: в уточнение попадает только неясный тип
+    события — когда непонятно, сделано уже или предстоит.
+
+    Тип события даёт events.classify():
+      DONE    — задача не создаётся, факт пишется в историю заметки (п.4, 7);
+      TODO    — задача менеджеру;
+      WAITING — задача контроля ожидания + обязательство клиента (п.8, 9);
+      UNCLEAR — на уточнение с конкретным вопросом (п.13, 14);
+      fact    — ничего.
+    """
+    from .events import DONE, TODO, UNCLEAR, WAITING, classify, review_question
+
     result = ExtractionResult(model="local-rules")
-    sentences = _sentences(body)
     now_local = localize(note_moment, tz_name)
 
-    for sentence in sentences:
-        low = sentence.lower()
+    for sentence in _sentences(body):
+        event = classify(sentence)
+        due_at, due_reason = extract_due(sentence, now_local, tz_name)
+        has_due = due_at is not None
 
-        if any(marker in low for marker in NEGATORS_LOCAL) and not re.search(r"(?:не\s+)?(?:надо|нужно)", low):
-            result.needs_review.append({
-                "reason": "Отрицание в тексте — действие не создаём",
+        # --- уже сделано: в историю, задачу не создаём (п.4, 7) ---
+        if event.kind == DONE:
+            result.completed.append({
+                "description": event.done_phrase or sentence,
                 "source_quote": sentence,
             })
             continue
 
-        if is_negative(sentence):
-            result.needs_review.append({"reason": "Отрицание: задача не создаётся", "source_quote": sentence})
+        if event.kind == "fact":
             continue
 
-        due_at, reason = extract_due(sentence, now_local, tz_name)
-        has_action = any(w in low for w in ("нужно", "надо", "необходимо", "подготов", "позвон",
-                                            "отправ", "напис", "подпис", "согласова", "оплат",
-                                            "встрет", "сдела", "провер", "выясн", "уточн",
-                                            "запрос", "напомн", "сформир", "переда"))
-        commitment_hit = any(marker in low for marker in COMMITMENT_MARKERS)
-
-        if commitment_hit:
+        # --- ожидание от клиента (п.8, 9) ---
+        if event.kind == WAITING:
             result.commitments.append(
                 ExtracteedCommitment(
-                    promised_by="client",
+                    promised_by=event.actor,
                     description=_title_from(sentence),
                     due_at=due_at,
                     source_quote=sentence,
@@ -156,26 +201,41 @@ def local_extract(body: str, note_moment: datetime, tz_name: str) -> ExtractionR
             result.tasks.append(
                 ExtracteedTask(
                     title=f"Проконтролировать: {_title_from(sentence)}",
-                    action_type="payment" if extract_payment_word(low) else "other",
+                    action_type="payment" if extract_payment_word(sentence.lower()) else "other",
                     due_at=due_at,
                     priority="high",
                     conditional=is_conditional(sentence),
                     source_quote=sentence,
-                    confidence=0.6,
+                    confidence=event.confidence,
+                    event_kind=WAITING,
+                    actor=event.actor,
+                    due_reason=due_reason,
                 )
             )
             continue
 
-        if not has_action and due_at is None:
-            if any(marker in low for marker in REVIEW_MARKERS):
-                result.needs_review.append({"reason": "Неоднозначная формулировка", "source_quote": sentence})
+        # --- непонятно: сделано или предстоит (п.13, 14) ---
+        if event.kind == UNCLEAR:
+            question = review_question(event)
+            result.tasks.append(
+                ExtracteedTask(
+                    title=_title_from(sentence),
+                    action_type=detect_action_type(sentence),
+                    due_at=due_at,
+                    priority=detect_priority(sentence),
+                    conditional=is_conditional(sentence),
+                    source_quote=sentence,
+                    confidence=event.confidence,
+                    event_kind=UNCLEAR,
+                    actor=event.actor,
+                    review_question=question,
+                    due_reason=due_reason,
+                )
+            )
+            result.needs_review.append({"reason": question, "source_quote": sentence})
             continue
 
-        if not has_action and due_at is not None:
-            # «в пятницу совещание» — не действие, но может быть событием: отправляем на уточнение
-            result.needs_review.append({"reason": "Дата без явного действия", "source_quote": sentence})
-            continue
-
+        # --- надо сделать (п.2: без срока — всё равно задача) ---
         result.tasks.append(
             ExtracteedTask(
                 title=_title_from(sentence),
@@ -184,12 +244,18 @@ def local_extract(body: str, note_moment: datetime, tz_name: str) -> ExtractionR
                 priority=detect_priority(sentence),
                 conditional=is_conditional(sentence),
                 source_quote=sentence,
-                confidence=0.75 if reason != "none" else 0.5,
+                confidence=event.confidence,
+                event_kind=TODO,
+                actor="us",
+                due_reason=due_reason,
             )
         )
 
-    if not result.tasks and not result.needs_review:
-        result.needs_review.append({"reason": "Действия не распознаны", "source_quote": body[:400]})
+    if not result.tasks and not result.completed:
+        result.needs_review.append({
+            "reason": "Действий не найдено: в заметке только информация",
+            "source_quote": body[:400],
+        })
 
     # Дедупликация по нормализованному заголовку внутри результата
     seen: set[str] = set()
@@ -217,8 +283,28 @@ def normalize_title(title: str) -> str:
     return low[:160]
 
 
-def make_dedupe_key(client_id: str, title: str, due_at: datetime | None) -> str:
-    raw = f"{client_id}|{normalize_title(title)}|{due_at.date().isoformat() if due_at else 'none'}"
+def make_dedupe_key(
+    client_id: str,
+    title: str,
+    due_at: datetime | None,
+    note_id: str | None = None,
+) -> str:
+    """Ключ дедупликации задачи.
+
+    note_id входит в ключ намеренно. Раньше ключ был
+    client|title|date, поэтому второе «созвонился» по тому же клиенту
+    в другой день с той же формулировкой молча отбрасывалось — законный
+    повтор считался дублем (п.22).
+
+    Теперь:
+      * повторная обработка ТОЙ ЖЕ заметки даёт тот же ключ → копий нет (п.21);
+      * то же действие из НОВОЙ заметки даёт другой ключ → задача создаётся.
+    """
+    parts = [client_id, normalize_title(title),
+             due_at.date().isoformat() if due_at else "none"]
+    if note_id:
+        parts.append(note_id)
+    raw = "|".join(parts)
     return hashlib.sha256(raw.encode()).hexdigest()[:40]
 
 
@@ -268,6 +354,34 @@ def _normalize_payload(payload: dict[str, Any], note_moment: datetime, tz_name: 
         except (TypeError, ValueError):
             confidence = None
 
+        # Модель может вернуть тип события сама. Если не вернула — определяем
+        # локально по цитате: иначе «Отправил КП» от модели снова станет задачей.
+        from .events import classify
+
+        quote = str(raw.get("source_quote") or title)
+        event = classify(quote)
+        kind = str(raw.get("event_kind") or "").lower()
+        if kind not in ("todo", "waiting", "unclear", "done", "fact"):
+            kind = event.kind
+
+        # Выполненное действием не считаем: задача не нужна, факт в историю.
+        if kind in ("done", "fact"):
+            result.completed.append({
+                "description": quote[:500],
+                "source_quote": quote[:2000],
+            })
+            continue
+
+        actor = str(raw.get("actor") or "").lower()
+        if actor not in ("us", "client"):
+            actor = event.actor
+
+        question = str(raw.get("review_question") or "").strip()[:300] or None
+        if kind == "unclear" and not question:
+            from .events import review_question
+
+            question = review_question(event)
+
         result.tasks.append(
             ExtracteedTask(
                 title=title[:200],
@@ -275,10 +389,26 @@ def _normalize_payload(payload: dict[str, Any], note_moment: datetime, tz_name: 
                 due_at=due_at,
                 priority=priority,
                 conditional=bool(raw.get("conditional")),
-                source_quote=str(raw.get("source_quote") or "")[:2000],
+                source_quote=quote[:2000],
                 confidence=confidence,
+                event_kind=kind,
+                actor=actor,
+                review_question=question,
+                due_reason=raw.get("due_reason"),
             )
         )
+
+        if kind == "waiting" and not any(
+            c.source_quote == quote for c in result.commitments
+        ):
+            result.commitments.append(
+                ExtracteedCommitment(
+                    promised_by=actor,
+                    description=title[:500],
+                    due_at=due_at,
+                    source_quote=quote[:2000],
+                )
+            )
 
     for raw in payload.get("commitments", [])[:6]:
         if not isinstance(raw, dict):

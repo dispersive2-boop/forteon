@@ -306,11 +306,43 @@ export type Task = {
   conditional: boolean;
   needs_review: boolean;
   review_reason: string | null;
+  /**
+   * P0 AI Task Extraction 2.0.
+   * event_kind: done | todo | waiting | unclear — что это за событие.
+   * actor: us | client — на чьей стороне действие.
+   * review_question: конкретный вопрос менеджеру, если тип неясен.
+   */
+  event_kind?: "done" | "todo" | "waiting" | "unclear";
+  actor?: "us" | "client";
+  review_question?: string | null;
   assignee_id?: string;
   timezone?: string;
   completed_at: string | null;
   result_note?: string | null;
   version: number;
+};
+
+/**
+ * Задача как чат: карточка задачи + весь разговор-заметки по клиенту.
+ * Один запрос вместо трёх — лента и задача не разъезжаются.
+ */
+export type TaskChatNote = {
+  id: string;
+  body: string;
+  source_type: string;
+  ai_status: string;
+  created_at: string;
+  author_name?: string | null;
+  /** true, если из этой заметки родилась живая задача */
+  spawned_task: boolean;
+};
+
+export type TaskChat = {
+  task: Task;
+  client: { id: string; name: string; status: string; type: string };
+  notes: TaskChatNote[];
+  has_more: boolean;
+  next_before: string | null;
 };
 
 export type Planner = {

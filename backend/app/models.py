@@ -221,6 +221,15 @@ class Task(Base, TimestampMixin):
     conditional: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     needs_review: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     review_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Конкретный вопрос менеджеру при уточнении (п.14): не «уточните»,
+    # а «документ уже отправлен или его ещё нужно подготовить?»
+    review_question: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Тип события (events.py): todo | waiting | unclear.
+    # done и fact задачами не становятся — они уходят в историю заметки.
+    event_kind: Mapped[str] = mapped_column(String(16), default="todo", nullable=False)
+    # Кто действует: us (мы) или client (ждём от клиента).
+    # Нужно, чтобы отделять обязательства клиента от наших задач (п.8).
+    actor: Mapped[str] = mapped_column(String(16), default="us", nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     result_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     dedupe_key: Mapped[str | None] = mapped_column(String(128), index=True, nullable=True)
