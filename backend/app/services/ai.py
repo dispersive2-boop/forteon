@@ -585,10 +585,22 @@ def extract(body: str, note_moment: datetime, tz_name: str) -> ExtractionResult:
             content = message.get("content") or ""
             if isinstance(content, list):  # некоторые провайдеры отдают массив частей
                 content = "".join(p.get("text", "") for p in content if isinstance(p, dict))
-            parsed = _strip_json(str(content))
+            raw_content = str(content)
+            parsed = _strip_json(raw_content)
             if not parsed:
                 last_error = "Ответ модели не является JSON"
-                log.warning("AI: попытка %s — %s; ответ: %s", attempt + 1, last_error, str(content)[:200])
+                # Сырой ответ в лог: без него «не JSON» — диагноз без улик.
+                # 500 символов достаточно, чтобы увидеть, что именно вернул провайдер
+                # (рассуждения, извинения, HTML-ошибку). Секретов в ответе модели нет.
+                log.warning(
+                    "AI: попытка %s — %s; сырой ответ (%s симв.): %r",
+                    attempt + 1, last_error, len(raw_content), raw_content[:500],
+                )
+                # Модель начала с рассуждений и не отдала JSON — повторяем без
+                # response_format: иногда это единственный способ получить объект.
+                if json_mode:
+                    json_mode = False
+                    log.info("AI: повтор без response_format после невалидного JSON")
                 continue
 
             result = _normalize_payload(parsed, note_moment, tz_name)

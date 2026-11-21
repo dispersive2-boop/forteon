@@ -6,6 +6,16 @@ import { useAuth } from "@/components/AuthProvider";
 import { Badge, Button, Card, Field, SectionTitle, Skeleton, inputClass } from "@/components/ui";
 import { api, Session } from "@/lib/api";
 import { dateTimeRu } from "@/lib/format";
+import {
+  applyDensity,
+  applyTheme,
+  getDensity,
+  getTheme,
+  setDensity,
+  setTheme,
+  type Density,
+  type Theme,
+} from "@/lib/prefs";
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -14,6 +24,13 @@ export default function SettingsPage() {
   const [passwords, setPasswords] = useState({ current: "", next: "", repeat: "" });
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [theme, setThemeState] = useState<Theme>("system");
+  const [density, setDensityState] = useState<Density>("cozy");
+
+  useEffect(() => {
+    setThemeState(getTheme());
+    setDensityState(getDensity());
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -141,6 +158,102 @@ export default function SettingsPage() {
               Обновить пароль
             </Button>
           </form>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <SectionTitle title="Оформление" subtitle="Тема и плотность списков" />
+          <div className="space-y-4">
+            <div>
+              <p className="mb-2 text-[12px] font-medium text-[var(--muted)]">Тема</p>
+              <div className="flex flex-wrap gap-1.5">
+                {(
+                  [
+                    { key: "light", label: "Светлая" },
+                    { key: "dark", label: "Тёмная" },
+                    { key: "system", label: "Как в системе" },
+                  ] as { key: Theme; label: string }[]
+                ).map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => {
+                      setTheme(item.key);
+                      setThemeState(item.key);
+                      applyTheme(item.key);
+                    }}
+                    aria-pressed={theme === item.key}
+                    className={`focus-ring h-11 min-h-[44px] rounded-lg px-3.5 text-[13.5px] font-medium transition-colors sm:h-9 sm:min-h-9 ${
+                      theme === item.key
+                        ? "bg-primary text-white"
+                        : "border border-[var(--border-strong)] text-ink hover:border-primary hover:text-primary"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-[11.5px] text-[var(--muted)]">
+                «Как в системе» следует за настройкой Windows. Выбор запоминается на этом устройстве.
+              </p>
+            </div>
+
+            <div>
+              <p className="mb-2 text-[12px] font-medium text-[var(--muted)]">Плотность списков</p>
+              <div className="flex flex-wrap gap-1.5">
+                {(
+                  [
+                    { key: "cozy", label: "Свободно" },
+                    { key: "compact", label: "Компактно" },
+                  ] as { key: Density; label: string }[]
+                ).map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => {
+                      setDensity(item.key);
+                      setDensityState(item.key);
+                      applyDensity(item.key);
+                    }}
+                    aria-pressed={density === item.key}
+                    className={`focus-ring h-11 min-h-[44px] rounded-lg px-3.5 text-[13.5px] font-medium transition-colors sm:h-9 sm:min-h-9 ${
+                      density === item.key
+                        ? "bg-primary text-white"
+                        : "border border-[var(--border-strong)] text-ink hover:border-primary hover:text-primary"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-[11.5px] text-[var(--muted)]">
+                Компактно — меньше отступы в задачах и клиентах: больше строк на экране.
+              </p>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <SectionTitle title="Горячие клавиши" subtitle="Работают на всём сайте" />
+          <ul className="space-y-2 text-[13px] text-[var(--muted)]">
+            <li className="flex items-center gap-2">
+              <kbd className="rounded border border-[var(--border)] px-1.5 py-0.5 font-mono text-[11px] text-ink">N</kbd>
+              новая заметка
+            </li>
+            <li className="flex items-center gap-2">
+              <kbd className="rounded border border-[var(--border)] px-1.5 py-0.5 font-mono text-[11px] text-ink">/</kbd>
+              поиск клиентов
+            </li>
+            <li className="flex items-center gap-2">
+              <kbd className="rounded border border-[var(--border)] px-1.5 py-0.5 font-mono text-[11px] text-ink">Ctrl+K</kbd>
+              командная палитра
+            </li>
+            <li className="flex items-center gap-2">
+              <kbd className="rounded border border-[var(--border)] px-1.5 py-0.5 font-mono text-[11px] text-ink">Esc</kbd>
+              закрыть окно
+            </li>
+          </ul>
         </Card>
       </div>
 

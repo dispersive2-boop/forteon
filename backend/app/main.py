@@ -84,7 +84,17 @@ async def timing_and_errors(request: Request, call_next):
         log.warning("IntegrityError: %s", exc)
         return JSONResponse(
             status_code=409,
-            content={"code": "conflict", "message": "Нарушение уникальности данных", "request_id": request.state.rid},
+            content={"code": "conflict", "message": "Нарушение уникальности данных", "request_id": getattr(request.state, "rid", None)},
+        )
+    except Exception as exc:  # не заваливаем прод стек-трейсом наружу
+        log.exception("Необработанное исключение на %s %s", request.method, request.url.path)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "code": "internal_error",
+                "message": "Внутренняя ошибка сервера",
+                "request_id": getattr(request.state, "rid", None),
+            },
         )
     response.headers["X-Process-Time"] = f"{(time.perf_counter() - started) * 1000:.1f}ms"
     response.headers["X-Request-Id"] = request.state.rid

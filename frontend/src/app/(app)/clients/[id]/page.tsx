@@ -17,6 +17,7 @@ function readTabFromUrl(): Tab | null {
   return TAB_KEYS.includes(value as Tab) ? (value as Tab) : null;
 }
 
+import { TaskChatBody, useTaskChat } from "@/components/TaskChat";
 import {
   Badge,
   Button,
@@ -227,6 +228,7 @@ export default function ClientPage() {
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteBody, setNoteBody] = useState("");
   const [saving, setSaving] = useState(false);
+  const chat = useTaskChat();
 
   /**
    * Пункт 40 + A-P0-2: история существенных действий из журнала аудита.
@@ -444,7 +446,18 @@ export default function ClientPage() {
                   {[...overdue, ...openTasks.filter((t) => t.needs_review && !isOverdue(t))]
                     .slice(0, 8)
                     .map((task) => (
-                      <TaskRow key={task.id} task={task} onComplete={complete} />
+                      <div key={task.id} className="flex items-center gap-1">
+                        <div className="min-w-0 flex-1">
+                          <TaskRow task={task} onComplete={complete} />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void chat.open(task.id)}
+                          className="focus-ring mr-1 shrink-0 rounded-lg px-2 py-1 text-[12px] font-medium text-primary hover:bg-[var(--primary-soft)]"
+                        >
+                          Чат
+                        </button>
+                      </div>
                     ))}
                 </div>
               ) : (
@@ -620,8 +633,19 @@ export default function ClientPage() {
           {tasks.length ? (
             <div className="-mx-1">
               {tasks.map((task) => (
-                <TaskRow key={task.id} task={task} onComplete={task.status === "open" ? complete : undefined} />
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  onComplete={
+                    task.status === "open"
+                      ? complete
+                      : undefined
+                  }
+                />
               ))}
+              <p className="px-2.5 py-2 text-[12px] text-[var(--muted)]">
+                Нажмите на название задачи в планировщике или на «Сегодня», чтобы открыть чат.
+              </p>
             </div>
           ) : (
             <EmptyState title="Задач нет" description="Добавьте заметку с действиями или создайте задачу вручную." />
@@ -824,6 +848,46 @@ export default function ClientPage() {
           )}
         </Card>
       )}
+
+      <Modal
+        open={Boolean(chat.taskId)}
+        title={chat.chat?.task.title ?? "Задача"}
+        onClose={chat.close}
+      >
+        <TaskChatBody
+          chat={chat.chat}
+          loading={chat.loading}
+          error={chat.error}
+          draft={chat.draft}
+          sending={chat.sending}
+          onDraft={chat.setDraft}
+          onRetry={chat.taskId ? () => void chat.open(chat.taskId!) : undefined}
+          onHistory
+          onSend={async () => {
+            const t = chat.draft.trim();
+            if (!t || !chat.chat) return;
+            chat.setSending(true);
+            chat.setError(null);
+            try {
+              await api(`/clients/${chat.chat.client.id}/notes`, {
+                method: "POST",
+                body: { body: t, run_ai: true, source_type: "text" },
+              });
+              chat.setDraft("");
+              await chat.reload();
+              await load();
+            } catch (err) {
+              chat.setError(
+                err instanceof Error
+                  ? `Заметка не сохранена: ${err.message}. Текст остался в поле.`
+                  : "Заметка не сохранена.",
+              );
+            } finally {
+              chat.setSending(false);
+            }
+          }}
+        />
+      </Modal>
 
       <Modal
         open={noteOpen}

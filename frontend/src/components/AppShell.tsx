@@ -20,6 +20,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth, UserBadge } from "@/components/AuthProvider";
+import CommandPalette, { KeyboardShortcuts } from "@/components/CommandPalette";
 import {
   IconAdmin,
   IconClients,
@@ -35,6 +36,8 @@ import {
   IconToday,
 } from "@/components/icons";
 import { MobileNav } from "@/components/MobileNav";
+import { NotificationsBell } from "@/components/NotificationsBell";
+import Onboarding from "@/components/Onboarding";
 import { api, TodayPayload } from "@/lib/api";
 
 /**
@@ -265,20 +268,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             Поиск клиента
           </Link>
 
-          <Link
-            href="/today#notifications"
-            title="Уведомления"
-            aria-label="Уведомления"
-            className="focus-ring relative grid h-11 w-11 shrink-0 place-items-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[#F1F5F9] hover:text-ink"
+          <NotificationsBell overdue={overdue} />
+
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent("forteon:palette"))}
+            title="Поиск (Ctrl+K)"
+            aria-label="Командная палитра"
+            className="focus-ring hidden h-11 w-11 shrink-0 place-items-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[#F1F5F9] hover:text-ink lg:grid"
           >
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-              <path d="M18 8a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6" />
-              <path d="M10.3 20a2 2 0 0 0 3.4 0" />
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3.6-3.6" />
             </svg>
-            {overdue > 0 && (
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[#EF4444]" />
-            )}
-          </Link>
+          </button>
 
           <Link
             href="/notes"
@@ -309,6 +312,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* §8 (п.92-94): отдельная мобильная навигация с центральной кнопкой микрофона */}
       <MobileNav overdue={overdue} />
+
+      {/* v1.2: палитра, хоткеи, онбординг */}
+      <CommandPalette />
+      <KeyboardShortcuts />
+      <Onboarding />
     </div>
   );
 }

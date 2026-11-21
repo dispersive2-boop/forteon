@@ -1,4 +1,4 @@
-"""Pydantic-схемы API v1."""
+﻿"""Pydantic-схемы API v1."""
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -328,6 +328,33 @@ class TaskReschedule(BaseModel):
     due_at: datetime | None = None
     due_date: date | None = None
     reason: str | None = None
+
+
+class TaskBulkAction(BaseModel):
+    """Массовое действие над задачами (v1.2).
+
+    complete   — закрыть выбранные;
+    reopen     — вернуть в работу;
+    reschedule — перенести срок (нужен due_date).
+    """
+    ids: list[str] = Field(min_length=1, max_length=200)
+    action: Literal["complete", "reopen", "reschedule"]
+    due_date: date | None = None
+    due_at: datetime | None = None
+    result_note: str | None = None
+
+
+class TaskHistoryItem(BaseModel):
+    id: str
+    action: str
+    actor: str | None = None
+    metadata: dict[str, Any] | None = None
+    created_at: datetime
+
+
+class TaskHistoryOut(BaseModel):
+    items: list[TaskHistoryItem]
+    total: int
 
 
 class TaskOut(ORMModel):

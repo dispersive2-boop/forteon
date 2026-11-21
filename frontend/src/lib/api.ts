@@ -438,3 +438,26 @@ export type Session = {
   device_label: string | null;
   user_agent: string | null;
 };
+
+export type NotificationItem = {
+  id: string;
+  task_id: string | null;
+  title: string;
+  body: string | null;
+  scheduled_at: string;
+  read_at: string | null;
+};
+
+export type TaskHistoryItem = {
+  id: string;
+  action: string;
+  actor: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type TaskBulkResult = {
+  done: number;
+  skipped: number;
+  action: "complete" | "reopen" | "reschedule";
+};

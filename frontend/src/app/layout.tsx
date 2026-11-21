@@ -1,4 +1,4 @@
-import type { Metadata, Viewport } from "next";
+﻿import type { Metadata, Viewport } from "next";
 
 import { AuthProvider } from "@/components/AuthProvider";
 
@@ -33,15 +33,26 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#151B29",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#151B29" },
+    { media: "(prefers-color-scheme: dark)", color: "#0B1220" },
+  ],
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  /*
+    Тема и плотность применяются до первого кадра: иначе на тёмной теме
+    экран мигает белым, а на компактной — прыгает после гидрации.
+  */
+  const bootstrap = `(function(){try{var t=localStorage.getItem("forteon.theme")||"system";var dark=t==="dark"||(t==="system"&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(dark)document.documentElement.dataset.theme="dark";var d=localStorage.getItem("forteon.density");if(d==="compact")document.documentElement.dataset.density="compact";var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content",dark?"#0B1220":"#151B29");}catch(e){}})();`;
   return (
-    <html lang="ru">
+    <html lang="ru" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: bootstrap }} />
+      </head>
       <body>
         <AuthProvider>{children}</AuthProvider>
       </body>

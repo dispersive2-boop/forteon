@@ -155,6 +155,9 @@ export default function PlannerPage() {
   const [reschedule, setReschedule] = useState<Task | null>(null);
   const [newDate, setNewDate] = useState<string>("");
   const [savingDate, setSavingDate] = useState(false);
+  /** Массовые действия (v1.2): выделенные задачи. */
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   /*
     «Задача как чат» (запрос пользователя): нажал на задачу — видишь всю
@@ -330,6 +333,56 @@ export default function PlannerPage() {
       setError(err instanceof Error ? err.message : "Не удалось применить решение по задаче");
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function runBulkReschedule(date: string) {
+    if (selected.size === 0) return;
+    setBulkBusy(true);
+    try {
+      const res = await api<{ done: number; skipped: number }>("/tasks/bulk", {
+        method: "POST",
+        body: { ids: Array.from(selected), action: "reschedule", due_date: date },
+      });
+      setSelected(new Set());
+      await load();
+      setError(`Перенесено ${res.done}, пропущено ${res.skipped}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Массовый перенос не сработал");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function runBulk(action: "complete" | "reopen", dueDate?: string) {
+    if (selected.size === 0) return;
+    setBulkBusy(true);
+    try {
+      const body: Record<string, unknown> = { ids: Array.from(selected), action };
+      if (dueDate) body.due_date = dueDate;
+      const res = await api<{ done: number; skipped: number }>("/tasks/bulk", {
+        method: "POST",
+        body,
+      });
+      setSelected(new Set());
+      await load();
+      setError(null);
+      if (res.skipped > 0) {
+        setError(`Готово: ${res.done}. Пропущено ${res.skipped} (чужие или уже закрытые).`);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Массовое действие не сработало");
+    } finally {
+      setBulkBusy(false);
     }
   }
 
@@ -563,6 +616,35 @@ export default function PlannerPage() {
         </Link>
       </div>
 
+      {selected.size > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-card border border-[var(--primary)] bg-[var(--primary-soft)] px-3 py-2.5">
+          <span className="text-[13.5px] font-medium text-primary">
+            Выбрано: {selected.size}
+          </span>
+          <Button
+            size="sm"
+            loading={bulkBusy}
+            onClick={() => void runBulk("complete")}
+          >
+            Закрыть выбранные
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            loading={bulkBusy}
+            onClick={() => {
+              const date = window.prompt("Новый срок (ГГГГ-ММ-ДД), например 2026-12-01");
+              if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) void runBulkReschedule(date);
+            }}
+          >
+            Перенести на дату
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+            Снять выделение
+          </Button>
+        </div>
+      )}
+
       {error && (
         <div className="mb-4 flex flex-wrap items-start justify-between gap-2 rounded-card border border-[#f3c7cb] bg-[var(--danger-soft)] px-3.5 py-2.5 text-[13.5px] text-[var(--danger)]">
           <span className="min-w-0 flex-1">{error}</span>
@@ -631,6 +713,8 @@ export default function PlannerPage() {
               tasks={byDate.get(anchor) ?? []}
               undated={undated}
               busy={busy}
+              selected={selected}
+              onToggle={toggleSelect}
               onComplete={complete}
               onReopen={reopen}
               onReschedule={openReschedule}
@@ -881,6 +965,8 @@ function DayView({
   tasks,
   undated,
   busy,
+  selected,
+  onToggle,
   onComplete,
   onReopen,
   onReschedule,
@@ -891,6 +977,8 @@ function DayView({
   tasks: Task[];
   undated: Task[];
   busy: string | null;
+  selected: Set<string>;
+  onToggle: (id: string) => void;
   onComplete: (id: string) => void;
   onReopen: (id: string) => void;
   onReschedule: (task: Task) => void;
@@ -925,6 +1013,8 @@ function DayView({
                 task={task}
                 time={timeOf(task.due_at)}
                 busy={busy === task.id}
+                selected={selected.has(task.id)}
+                onToggle={() => onToggle(task.id)}
                 onComplete={() => onComplete(task.id)}
                 onReopen={() => onReopen(task.id)}
                 onReschedule={() => onReschedule(task)}
@@ -947,6 +1037,8 @@ function DayView({
                   task={task}
                   time={null}
                   busy={busy === task.id}
+                  selected={selected.has(task.id)}
+                  onToggle={() => onToggle(task.id)}
                   onComplete={() => onComplete(task.id)}
                   onReopen={() => onReopen(task.id)}
                   onReschedule={() => onReschedule(task)}
@@ -979,6 +1071,8 @@ function DayView({
                 task={task}
                 time={null}
                 busy={busy === task.id}
+                selected={selected.has(task.id)}
+                onToggle={() => onToggle(task.id)}
                 onComplete={() => onComplete(task.id)}
                 onReopen={() => onReopen(task.id)}
                 onReschedule={() => onReschedule(task)}
@@ -1295,6 +1389,8 @@ function TaskLine({
   task,
   time,
   busy,
+  selected = false,
+  onToggle,
   onComplete,
   onReopen,
   onReschedule,
@@ -1304,6 +1400,8 @@ function TaskLine({
   task: Task;
   time: string | null;
   busy: boolean;
+  selected?: boolean;
+  onToggle?: () => void;
   onComplete: () => void;
   onReopen: () => void;
   onReschedule: () => void;
@@ -1314,7 +1412,30 @@ function TaskLine({
   const overdue = !done && task.due_date ? task.due_date < todayISO() : false;
 
   return (
-    <div className="group relative flex items-start gap-2 rounded-control px-1 py-1.5 transition-colors hover:bg-[#f8fafd]">
+    <div
+      className={`group relative flex items-start gap-2 rounded-control px-1 py-1.5 transition-colors hover:bg-[#f8fafd] ${
+        selected ? "bg-[var(--primary-soft)] ring-1 ring-[var(--primary)]" : ""
+      }`}
+    >
+      {onToggle && (
+        <button
+          type="button"
+          onClick={onToggle}
+          role="checkbox"
+          aria-checked={selected}
+          aria-label={selected ? "Снять выделение" : "Выбрать задачу"}
+          title="Выбрать для массового действия"
+          className={`focus-ring my-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg border transition-colors ${
+            selected
+              ? "border-primary bg-primary text-white"
+              : "border-[var(--border-strong)] text-transparent hover:border-primary"
+          }`}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+        </button>
+      )}
       {overdue && (
         <span aria-hidden className="my-1.5 w-[3px] shrink-0 self-stretch rounded-full bg-[var(--danger)]" />
       )}

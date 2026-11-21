@@ -79,8 +79,18 @@ export default function HelpPage() {
             интерактивным элементам, у каждого виден фокус.
           </li>
           <li>
-            <span className="font-medium text-ink">Esc</span> — закрыть выдвижную панель или
-            подробности задачи.
+            <span className="font-medium text-ink">Esc</span> — закрыть выдвижную панель,
+            модалку или подробности задачи.
+          </li>
+          <li>
+            <span className="font-medium text-ink">N</span> — новая заметка.
+          </li>
+          <li>
+            <span className="font-medium text-ink">/</span> — поиск клиентов.
+          </li>
+          <li>
+            <span className="font-medium text-ink">Ctrl+K</span> — командная палитра: разделы,
+            клиенты, задачи. Стрелки — выбор, Enter — открыть.
           </li>
           <li>
             На телефоне нижняя панель фиксирована, центральная кнопка открывает голосовую заметку.

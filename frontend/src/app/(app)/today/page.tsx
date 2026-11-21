@@ -27,6 +27,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/AuthProvider";
 import { IconPlus } from "@/components/icons";
+import { TaskChatBody, useTaskChat } from "@/components/TaskChat";
 import {
   Button,
   ButtonLink,
@@ -34,6 +35,7 @@ import {
   DoneTaskRow,
   EmptyState,
   ErrorState,
+  Modal,
   ReviewChip,
   SectionTitle,
   Skeleton,
@@ -81,6 +83,7 @@ export default function TodayPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [undo, setUndo] = useState<{ task: Task } | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chat = useTaskChat();
 
   const load = useCallback(async () => {
     setError(null);
@@ -412,6 +415,7 @@ export default function TodayPage() {
             onReschedule={reschedule}
             onClose={() => setSelectedId(null)}
             busy={busyId === selected?.id}
+            onOpenChat={(id) => void chat.open(id)}
           />
 
           {/* Уточнения без срока — часть работы, но не в основном списке */}
@@ -447,10 +451,52 @@ export default function TodayPage() {
               onReschedule={reschedule}
               onClose={() => setSheetOpen(false)}
               busy={busyId === selected.id}
+              onOpenChat={(id) => void chat.open(id)}
             />
           </div>
         </div>
       )}
+
+      {/* Задача как чат — из «Сегодня» тоже */}
+      <Modal
+        open={Boolean(chat.taskId)}
+        title={chat.chat?.task.title ?? "Задача"}
+        onClose={chat.close}
+      >
+        <TaskChatBody
+          chat={chat.chat}
+          loading={chat.loading}
+          error={chat.error}
+          draft={chat.draft}
+          sending={chat.sending}
+          onDraft={chat.setDraft}
+          onRetry={chat.taskId ? () => void chat.open(chat.taskId!) : undefined}
+          onHistory
+          onSend={async () => {
+            const text = chat.draft.trim();
+            if (!text || !chat.chat) return;
+            chat.setSending(true);
+            chat.setError(null);
+            try {
+              await api(`/clients/${chat.chat.client.id}/notes`, {
+                method: "POST",
+                body: { body: text, run_ai: true, source_type: "text" },
+              });
+              chat.setDraft("");
+              await chat.reload();
+              await load();
+            } catch (err) {
+              chat.setError(
+                err instanceof Error
+                  ? `Заметка не сохранена: ${err.message}. Текст остался в поле.`
+                  : "Заметка не сохранена.",
+              );
+            } finally {
+              chat.setSending(false);
+            }
+          }}
+        />
+      </Modal>
 
       {/* Пункт 25: отмена закрытия (undo) */}
       {undo && (
@@ -477,16 +523,24 @@ function ContextPanel({
   onReschedule,
   onClose,
   busy,
+  onOpenChat,
 }: {
   task: Task | null;
   onReschedule: (id: string, date: string) => void;
   onClose: () => void;
   busy: boolean;
+  onOpenChat: (id: string) => void;
 }) {
   return (
     <Card className="sticky top-[80px] hidden xl:block">
       {task ? (
-        <TaskContextContent task={task} onReschedule={onReschedule} onClose={onClose} busy={busy} />
+        <TaskContextContent
+          task={task}
+          onReschedule={onReschedule}
+          onClose={onClose}
+          busy={busy}
+          onOpenChat={onOpenChat}
+        />
       ) : (
         <div className="py-6 text-center">
           <div className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-full bg-[#f1f4f9] text-[var(--muted)]">
@@ -509,11 +563,13 @@ function TaskContextContent({
   onReschedule,
   onClose,
   busy,
+  onOpenChat,
 }: {
   task: Task;
   onReschedule: (id: string, date: string) => void;
   onClose: () => void;
   busy: boolean;
+  onOpenChat: (id: string) => void;
 }) {
   return (
     <div>
@@ -589,6 +645,13 @@ function TaskContextContent({
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onOpenChat(task.id)}
+        >
+          Чат по задаче
+        </Button>
         <ButtonLink href={`/clients/${task.client_id}`} variant="outline" size="sm">
           Открыть клиента
         </ButtonLink>

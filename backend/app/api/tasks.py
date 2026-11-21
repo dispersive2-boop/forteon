@@ -3,20 +3,24 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import audit, ensure_version, get_client_or_404, get_current_user
-from ..models import Client, Note, Notification, Task, User, utcnow
+from ..models import AuditLog, Client, Note, Notification, Task, User, utcnow
 from ..schemas import (
     PlannerOut,
     PlannerSummary,
+    TaskBulkAction,
     TaskChatNote,
     TaskChatOut,
     TaskComplete,
     TaskCreate,
+    TaskHistoryOut,
     TaskListOut,
     TaskOut,
     TaskReschedule,
@@ -413,6 +417,103 @@ def delete_task(task_id: str, db: Session = Depends(get_db), user: User = Depend
     return {"status": "ok"}
 
 
+@router.post("/tasks/bulk")
+def bulk_tasks(payload: TaskBulkAction, db: Session = Depends(get_db),
+               user: User = Depends(get_current_user)):
+    """Массовые действия: закрыть, вернуть в работу, перенести срок.
+
+    Один запрос вместо N: планировщик выделяет пачку задач и применяет
+    действие сразу. Чужие задачи и удалённые пропускаем молча —
+    менеджер не должен получить 404 из-за того, что коллега уже закрыл.
+    """
+    ids = list(dict.fromkeys(payload.ids))[:200]
+    if payload.action == "reschedule" and payload.due_date is None and payload.due_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "due_required", "message": "Для переноса нужен новый срок"},
+        )
+
+    done = 0
+    skipped = 0
+    for task_id in ids:
+        task = db.get(Task, task_id)
+        if task is None or task.deleted_at is not None:
+            skipped += 1
+            continue
+        try:
+            get_client_or_404(db, user, task.client_id)
+        except HTTPException:
+            skipped += 1
+            continue
+
+        if payload.action == "complete":
+            if task.status == "done":
+                skipped += 1
+                continue
+            task.status = "done"
+            task.completed_at = utcnow()
+            if payload.result_note:
+                task.result_note = payload.result_note
+            audit(db, user, "task", task.id, "completed", {"bulk": True})
+        elif payload.action == "reopen":
+            if task.status != "done":
+                skipped += 1
+                continue
+            task.status = "open"
+            task.completed_at = None
+            audit(db, user, "task", task.id, "reopened", {"bulk": True})
+        else:  # reschedule
+            task.due_at = payload.due_at
+            task.due_date = payload.due_date or to_date(payload.due_at)
+            task.needs_review = False
+            task.review_reason = None
+            task.review_question = None
+            audit(db, user, "task", task.id, "rescheduled", {"bulk": True, "reason": "массовый перенос"})
+        task.version = (task.version or 1) + 1
+        done += 1
+
+    db.commit()
+    return {"done": done, "skipped": skipped, "action": payload.action}
+
+
+@router.get("/tasks/{task_id}/history", response_model=TaskHistoryOut)
+def task_history(task_id: str, limit: int = Query(default=50, ge=1, le=200),
+                 db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """История задачи из журнала аудита.
+
+    Раньше был только финальный статус: менеджер не видел, кто и когда
+    закрыл/перенёс/вернул. Источник — audit_log, а не догадки интерфейса.
+    """
+    _task_for_user(db, user, task_id)
+    rows = list(
+        db.execute(
+            select(AuditLog, User.full_name)
+            .outerjoin(User, User.id == AuditLog.actor_id)
+            .where(AuditLog.entity == "task", AuditLog.entity_id == task_id)
+            .order_by(AuditLog.created_at.desc())
+            .limit(limit)
+        ).all()
+    )
+    items = []
+    for row, actor in rows:
+        meta = None
+        if row.metadata_json:
+            try:
+                meta = json.loads(row.metadata_json)
+            except (TypeError, ValueError):
+                meta = None
+        items.append(
+            {
+                "id": row.id,
+                "action": row.action,
+                "actor": actor,
+                "metadata": meta,
+                "created_at": row.created_at,
+            }
+        )
+    return TaskHistoryOut(items=items, total=len(items))
+
+
 # ---------------------------------------------------------------- planner
 def _planner_data(db: Session, user: User) -> dict[str, list[Task]]:
     today = date.today()
@@ -506,7 +607,7 @@ def list_notifications(limit: int = 50, db: Session = Depends(get_db),
     ]
 
 
-@router.post("/notifications/{notification_id}/read")
+@router.post("/notifications/{notification_id}/read", status_code=204)
 def read_notification(notification_id: str, db: Session = Depends(get_db),
                       user: User = Depends(get_current_user)):
     notification = db.get(Notification, notification_id)
@@ -515,4 +616,40 @@ def read_notification(notification_id: str, db: Session = Depends(get_db),
     notification.read_at = utcnow()
     notification.status = "read"
     db.commit()
-    return {"status": "ok"}
+    return None
+
+
+@router.post("/notifications/read-all")
+def read_all_notifications(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Прочитать все непрочитанные одним нажатием.
+
+    Раньше приходилось тыкать в каждое: при десятке просрочек это была
+    рутинная работа вместо работы с клиентом.
+    """
+    rows = list(
+        db.scalars(
+            select(Notification).where(
+                Notification.user_id == user.id,
+                Notification.read_at.is_(None),
+            )
+        )
+    )
+    now = utcnow()
+    for n in rows:
+        n.read_at = now
+        n.status = "read"
+    db.commit()
+    return {"status": "ok", "read": len(rows)}
+
+
+@router.get("/notifications/unread-count")
+def unread_notifications_count(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Счётчик для колокольчика. Отдельно от /tasks/today: уведомления
+    живут своей жизнью (просрочка может быть прочитана, а новое — нет)."""
+    total = db.scalar(
+        select(func.count()).select_from(Notification).where(
+            Notification.user_id == user.id,
+            Notification.read_at.is_(None),
+        )
+    ) or 0
+    return {"count": int(total)}
