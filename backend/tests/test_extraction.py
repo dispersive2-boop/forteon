@@ -1,4 +1,4 @@
-"""P0 AI Task Extraction 2.0 — поведение извлечения задач.
+﻿"""P0 AI Task Extraction 2.0 — поведение извлечения задач.
 
 Проверяем именно поведение (п.24):
   * выполненные действия не становятся задачами;
@@ -194,8 +194,19 @@ def db_session():
         session.close()
 
 
-def test_pipeline_note_to_planner(db_session) -> None:
-    """п.25: заметка → извлечение → БД → API-представление планировщика."""
+def test_pipeline_note_to_planner(db_session, monkeypatch) -> None:
+    """п.25: заметка → извлечение → БД → API-представление планировщика.
+
+    Фиксируем локальный экстрактор: тест про русские фразы и правила,
+    а не про живой RouterAI. Даже если кто-то включит AI в тестовом
+    окружении, этот сценарий останется детерминированным.
+    """
+    from app.services import extraction as extraction_mod
+    from app.services.ai import local_extract
+
+    # run_extraction импортирует extract из ai; патчим точку входа в extraction,
+    # чтобы тест шёл по локальным правилам, а не в RouterAI.
+    monkeypatch.setattr(extraction_mod, "extract", local_extract)
     session, user, client = db_session
 
     note = Note(

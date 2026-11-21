@@ -1,4 +1,4 @@
-"""Общая изоляция тестов от боевой базы.
+﻿"""Общая изоляция тестов от боевой базы.
 
 Зачем этот файл
 ---------------
@@ -29,6 +29,15 @@ os.environ["FORTEON_DATABASE_URL"] = f"sqlite:///{_TEST_DB_FILE}"
 os.environ["FORTEON_SECRET_KEY"] = "test-secret-key-for-forteon-test-suite-only"
 os.environ.setdefault("FORTEON_DEBUG", "1")
 os.environ.setdefault("FORTEON_ENV", "test")
+
+# Тесты не ходят в сеть и не сеют демо-данные.
+# Раньше .env пробрасывал FORTEON_AI_ENABLED=true и ключ RouterAI:
+# run_extraction делал живой HTTP (таймаут 60 с x 3 попытки), и
+# test_pipeline_note_to_planner мигал - то локальные правила, то ответ модели.
+# Watcher и demo_seed на старте TestClient тоже не нужны.
+os.environ["FORTEON_AI_ENABLED"] = "0"
+os.environ["FORTEON_NOTE_WATCHER"] = "0"
+os.environ["FORTEON_DEMO_SEED"] = "0"
 
 # Остатки прошлых прогонов: WAL-frames способны «оживить» старые строки,
 # а битый -shm вообще блокирует checkpoint. Начинаем с чистого листа.
