@@ -14,7 +14,8 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import AIRun, Commitment, Note, Notification, Task, User, utcnow
+from ..models import AIRun, Commitment, Note, Task, User, utcnow
+from .notifications import upsert_reminder
 from .ai import ExtractionResult, extract, make_dedupe_key
 from .dates import to_date
 
@@ -170,14 +171,15 @@ def run_extraction(db: Session, note: Note, author: User) -> ExtractionResult:
     # Причина ошибки всё равно сохраняется (она видна в прогоне AIRun и в
     # provider_note), но заметка считается разобранной, если задачи созданы.
     if review_tasks:
-        db.add(Notification(
+        # п.22 «30 идей»: повторный разбор той же заметки не должен копить
+        # одинаковые колокольчики. Одно живое напоминание на задачу.
+        upsert_reminder(
+            db,
             user_id=author.id,
             task_id=review_tasks[0].id,
             title="Нужно проверить разбор заметки",
             body=review_tasks[0].review_question or "Откройте задачи, которые требуют уточнения.",
-            delivered_at=utcnow(),
-            status="delivered",
-        ))
+        )
 
     produced_something = bool(result.tasks or result.commitments or result.completed)
     if result.error and not produced_something:
