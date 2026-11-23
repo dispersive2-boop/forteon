@@ -156,7 +156,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <button
           type="button"
           tabIndex={-1}
-          className="fixed inset-0 z-[45] bg-[#0b1220]/45 md:hidden"
+          className="forteon-overlay fixed inset-0 z-[45] bg-[#0b1220]/45 md:hidden"
           onClick={() => setMobileOpen(false)}
           aria-label="Закрыть меню"
         />
@@ -165,9 +165,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Пункт 1: ширина 232-248px, цвет #111827; пункт 17 — скроллится только навигация */}
       <aside
         id="forteon-sidebar"
-        className={`fixed inset-y-0 left-0 z-50 flex w-[240px] shrink-0 flex-col bg-[var(--sidebar)] transition-transform duration-200 motion-reduce:transition-none md:visible md:sticky md:top-0 md:h-dvh md:translate-x-0 ${
-          mobileOpen ? "visible translate-x-0" : "invisible -translate-x-full"
-        }`}
+        data-open={mobileOpen}
+        className="forteon-sidebar fixed inset-y-0 left-0 z-50 flex w-[240px] shrink-0 flex-col border-r border-white/10 bg-[var(--sidebar)] md:sticky md:top-0 md:h-dvh"
       >
         <div className="flex h-[68px] shrink-0 items-center justify-between gap-2 border-b border-white/10 px-3">
           <Link

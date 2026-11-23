@@ -15,7 +15,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { IconClients, IconMore, IconPlanner, IconToday } from "@/components/icons";
 
@@ -23,6 +23,20 @@ export function MobileNav({ overdue = 0 }: { overdue?: number }) {
   const pathname = usePathname();
   const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
+  const moreButton = useRef<HTMLButtonElement>(null);
+  const moreMenu = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    moreMenu.current?.querySelector("a")?.focus({ preventScroll: true });
+    function dismiss(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setMoreOpen(false);
+      moreButton.current?.focus();
+    }
+    document.addEventListener("keydown", dismiss);
+    return () => document.removeEventListener("keydown", dismiss);
+  }, [moreOpen]);
 
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
@@ -31,32 +45,36 @@ export function MobileNav({ overdue = 0 }: { overdue?: number }) {
     <>
       {moreOpen && (
         <button
-          className="fixed inset-0 z-40 bg-[#0b1220]/45 md:hidden"
-          onClick={() => setMoreOpen(false)}
+          type="button"
+          className="forteon-overlay fixed inset-0 z-40 bg-[#0b1220]/45 md:hidden"
+          onClick={() => {
+            setMoreOpen(false);
+            moreButton.current?.focus();
+          }}
           aria-label="Закрыть меню"
         />
       )}
 
-      {moreOpen && (
-        <div className="fixed inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom))] z-50 mx-3 rounded-t-2xl rounded-b-lg border border-[var(--border)] bg-surface p-2 shadow-lift md:hidden">
-          {[
-            { href: "/notes", label: "Заметки" },
-            { href: "/finance", label: "Финансы" },
-            { href: "/reports", label: "Отчёты" },
-            { href: "/settings", label: "Настройки" },
-            { href: "/help", label: "Помощь" },
-          ].map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => setMoreOpen(false)}
-              className="focus-ring flex h-12 items-center rounded-lg px-3 text-[15px] font-medium text-ink hover:bg-[#f1f4f9]"
-            >
-              {item.label}
-            </Link>
-          ))}
-        </div>
-      )}
+      <nav ref={moreMenu} id="forteon-more-menu" aria-label="Дополнительные разделы"
+        data-open={moreOpen} inert={!moreOpen}
+        className="forteon-more-menu forteon-floating fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-50 mx-3 max-h-[calc(100dvh-96px)] overflow-y-auto overscroll-contain bg-surface p-2 md:hidden">
+        {[
+          { href: "/notes", label: "Заметки" },
+          { href: "/finance", label: "Финансы" },
+          { href: "/reports", label: "Отчёты" },
+          { href: "/settings", label: "Настройки" },
+          { href: "/help", label: "Помощь" },
+        ].map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={() => setMoreOpen(false)}
+            className="focus-ring flex h-12 items-center rounded-lg px-3 text-[15px] font-medium text-ink transition-colors hover:bg-[var(--primary-soft)]"
+          >
+            {item.label}
+          </Link>
+        ))}
+      </nav>
 
       {/*
         Пункт 92: высота 64px + env(safe-area-inset-bottom) — на iPhone
@@ -102,7 +120,9 @@ export function MobileNav({ overdue = 0 }: { overdue?: number }) {
 
           <button
             type="button"
+            ref={moreButton}
             onClick={() => setMoreOpen((v) => !v)}
+            aria-controls="forteon-more-menu"
             aria-label="Ещё"
             aria-expanded={moreOpen}
             className="focus-ring flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[#64748B] transition-colors hover:text-ink"

@@ -409,3 +409,70 @@ html {
   from { opacity: .9; transform: translateY(3px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+.forteon-floating {
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
+  box-shadow: var(--shadow-lift);
+}
+
+.forteon-sheet {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@media (max-width: 639px) {
+  .forteon-sheet { border-radius: 18px 18px 0 0; }
+}
+
+.forteon-task-sheet {
+  border-radius: 18px 18px 0 0;
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+}
+
+.forteon-more-menu[data-open="false"] {
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+@media (max-width: 767px) {
+  .forteon-sidebar[data-open="false"] {
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(-100%);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .forteon-action {
+    transition: background-color 140ms ease-out, border-color 140ms ease-out, color 140ms ease-out,
+      transform 120ms ease-out;
+  }
+  .forteon-action:active:not(:disabled) { transform: scale(.98); }
+  .forteon-overlay { animation: forteon-overlay-in 150ms ease-out; }
+  .forteon-popover { animation: forteon-popover-in 170ms cubic-bezier(.2, .7, .3, 1); }
+  .forteon-sheet { animation: forteon-sheet-in 190ms cubic-bezier(.2, .7, .3, 1); }
+  .forteon-more-menu {
+    transition: transform 180ms cubic-bezier(.2, .7, .3, 1), opacity 150ms ease-out;
+  }
+  .forteon-more-menu[data-open="false"] {
+    transition: transform 160ms ease-in, opacity 130ms ease-in, visibility 0s 160ms;
+  }
+  @media (max-width: 767px) {
+    .forteon-sidebar { transition: transform 200ms cubic-bezier(.2, .7, .3, 1); }
+    .forteon-sidebar[data-open="false"] {
+      transition: transform 180ms ease-in, visibility 0s 180ms;
+    }
+  }
+}
+
+@keyframes forteon-overlay-in {
+  from { opacity: 0; }
+}
+@keyframes forteon-popover-in {
+  from { opacity: .84; transform: translateY(-6px); }
+}
+@keyframes forteon-sheet-in {
+  from { opacity: .9; transform: translateY(12px); }
+}

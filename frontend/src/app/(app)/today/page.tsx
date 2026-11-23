@@ -451,14 +451,15 @@ export default function TodayPage() {
 
       {/* ------------------------------------------------- мобильный drawer (п.8) */}
       {sheetOpen && selected && (
-        <div className="fixed inset-0 z-40 xl:hidden">
+        <div className="fixed inset-0 z-[55] xl:hidden">
           <button
-            className="absolute inset-0 bg-[#0b1220]/45"
+            type="button"
+            className="forteon-overlay absolute inset-0 bg-[#0b1220]/45"
             onClick={() => setSheetOpen(false)}
             aria-label="Закрыть подробности"
           />
-          <div className="absolute inset-x-0 bottom-0 max-h-[82vh] overflow-y-auto rounded-t-2xl bg-surface p-4 shadow-lift">
-            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[#dde5ef]" />
+          <div className="forteon-floating forteon-sheet forteon-task-sheet absolute inset-x-0 bottom-0 max-h-[82dvh] overflow-y-auto overscroll-contain bg-surface p-4">
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[var(--border-strong)]" />
             <TaskContextContent
               task={selected}
               onReschedule={reschedule}
