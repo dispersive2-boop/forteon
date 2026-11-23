@@ -3,7 +3,7 @@
 /** Базовые UI-примитивы ForteOn. Маленькие, без внешних зависимостей. */
 
 import Link from "next/link";
-import { useEffect, useId, useMemo, useRef } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef } from "react";
 
 import {
   compactMoney,
@@ -356,24 +356,26 @@ export function Modal({
     и при промахе пользователь оставался в форме. Дополнительно блокируем
     прокрутку страницы под оверлеем и переносим фокус в первое поле.
   */
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
+    const previousFocus = document.activeElement;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") closeRef.current();
     };
     document.addEventListener("keydown", onKeyDown);
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const focusTimer = window.setTimeout(() => {
-      const dialog = dialogRef.current;
-      const firstControl = dialog?.querySelector<HTMLElement>("input, select, textarea") ??
-        dialog?.querySelector<HTMLElement>("button");
-      firstControl?.focus();
-    }, 30);
+    const dialog = dialogRef.current;
+    const firstControl = dialog?.querySelector<HTMLElement>(
+      "input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled])",
+    ) ?? dialog?.querySelector<HTMLElement>("button:not([disabled])");
+    if (!dialog?.contains(document.activeElement)) firstControl?.focus({ preventScroll: true });
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = previousOverflow;
-      window.clearTimeout(focusTimer);
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
+        previousFocus.focus({ preventScroll: true });
+      }
     };
   }, [open]);
 
