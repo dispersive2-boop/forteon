@@ -18,6 +18,7 @@ function readTabFromUrl(): Tab | null {
 }
 
 import { TaskChatBody, useTaskChat } from "@/components/TaskChat";
+import { VoiceNoteForm } from "@/components/VoiceNoteForm";
 import {
   Badge,
   Button,
@@ -32,7 +33,6 @@ import {
   StatusBadge,
   TaskRow,
   inputClass,
-  textareaClass,
 } from "@/components/ui";
 import {
   api,
@@ -226,8 +226,6 @@ export default function ClientPage() {
   );
   const [error, setError] = useState<string | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
-  const [noteBody, setNoteBody] = useState("");
-  const [saving, setSaving] = useState(false);
   const chat = useTaskChat();
 
   /**
@@ -294,25 +292,38 @@ export default function ClientPage() {
     void load();
   }, [load]);
 
-  async function addNote(event: React.FormEvent) {
-    event.preventDefault();
-    if (!noteBody.trim()) return;
-    setSaving(true);
-    try {
-      await api(`/clients/${clientId}/notes`, {
+  /**
+   * п.1–5 «30 идей»: заметку создаёт единая форма VoiceNoteForm.
+   * Она сама держит черновик и ключ идемпотентности, поэтому здесь
+   * достаточно отправить запрос и перечитать карточку.
+   */
+  const createNote = useCallback(
+    async ({
+      body,
+      sourceType,
+      idempotencyKey,
+    }: {
+      body: string;
+      sourceType: "text" | "voice";
+      idempotencyKey: string;
+    }) => {
+      const note = await api<Note>(`/clients/${clientId}/notes`, {
         method: "POST",
-        body: { body: noteBody.trim(), run_ai: true, source_type: "text" },
+        body: {
+          body,
+          run_ai: true,
+          source_type: sourceType,
+          idempotency_key: idempotencyKey,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        },
       });
-      setNoteBody("");
       setNoteOpen(false);
       await load();
       setTab("notes");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось сохранить заметку");
-    } finally {
-      setSaving(false);
-    }
-  }
+      return note.id;
+    },
+    [clientId, load, setTab],
+  );
 
   async function complete(taskId: string) {
     await api(`/tasks/${taskId}/complete`, { method: "POST", body: {} });
@@ -898,33 +909,12 @@ export default function ClientPage() {
         open={noteOpen}
         title="Новая заметка"
         onClose={() => setNoteOpen(false)}
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setNoteOpen(false)}>Отмена</Button>
-            <Button onClick={addNote} loading={saving} disabled={!noteBody.trim()}>
-              Сохранить и извлечь задачи
-            </Button>
-          </>
-        }
       >
-        <form onSubmit={addNote} className="space-y-3">
-          <Field
-            label="Текст заметки"
-            hint="Даты «завтра», «в пятницу», «25.11.2026» вычисляются от времени заметки в вашем часовом поясе."
-          >
-            <textarea
-              value={noteBody}
-              onChange={(e) => setNoteBody(e.target.value)}
-              className={textareaClass}
-              rows={6}
-              placeholder="Созвонился с клиентом. Нужно отправить КП завтра. Клиент обещал оплатить счёт до 25.11.2026."
-              autoFocus
-            />
-          </Field>
-          <p className="text-[11.5px] text-[var(--muted)]">
-            Заметка сохраняется сразу. AI создаёт задачи в фоне; при сбое заметка не теряется и остаётся в статусе «failed».
-          </p>
-        </form>
+        <VoiceNoteForm
+          client={client ? { id: clientId, name: client.name } : null}
+          onSubmit={createNote}
+          submitLabel="Сохранить и извлечь задачи"
+        />
       </Modal>
     </div>
   );

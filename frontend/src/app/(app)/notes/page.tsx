@@ -32,8 +32,8 @@ import {
   ReviewChip,
   SectionTitle,
   Skeleton,
-  textareaClass,
 } from "@/components/ui";
+import { VoiceNoteForm } from "@/components/VoiceNoteForm";
 import { api, API_ROOT, ExtractionSummary, getToken, Note } from "@/lib/api";
 import { PRIORITY_LABELS, dateTimeRu, formatBytes, isOverdue, relativeDay } from "@/lib/format";
 
@@ -93,42 +93,20 @@ type FeedNote = Omit<Note, "tasks"> & {
   provider_note?: string | null;
 };
 
-type SpeechRecognitionLike = {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  onresult: (event: {
-    resultIndex: number;
-    results: { length: number; [index: number]: { isFinal: boolean; 0: { transcript: string } } };
-  }) => void;
-  onend: () => void;
-  onerror: () => void;
-  start: () => void;
-  stop: () => void;
-};
-
-/** Держим ссылку на движок, чтобы можно было остановить диктовку. */
-const recognitionEngine: { current: SpeechRecognitionLike | null } = { current: null };
-
+/*
+ * Диктовка, черновик и аудио живут в VoiceNoteForm (п.1–5 «30 идей»).
+ * Здесь остаётся только лента и выбор клиента — дублировать распознавание
+ * речи на странице больше не нужно.
+ */
 type UploadedFile = { name: string; size: number };
 
 const PAGE_SIZE = 20;
 const STORE_CLIENT = "forteon.notes.client";
 
-const EXAMPLES = [
-  "Клиент просит КП до 25.11.2026, обещал оплату по счёту №214 до 05.12.2026.",
-  "Позвонил, договорились о встрече в пятницу в 15:00 на объекте.",
-  "Нужно переделать смету, замечания от 3 ноября. Срок — до конца месяца.",
-];
-
 /** «Общались сегодня» / «12 дней назад» — понятнее, чем дата. */
 function freshness(iso: string | null): string {
   if (!iso) return "ещё не общались";
   return relativeDay(iso).replace("Сегодня", "сегодня").replace("Завтра", "завтра");
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /** Человеческая формулировка состояния разбора — без кодов (п.63). */
@@ -148,24 +126,21 @@ export default function NotesPage() {
   const [picker, setPicker] = useState<PickerClient[]>([]);
   const [clientFilter, setClientFilter] = useState<{ id: string; name: string } | null>(null);
   const [notes, setNotes] = useState<FeedNote[]>([]);
-  const [body, setBody] = useState("");
   const [loading, setLoading] = useState(true);
   const [pickerLoading, setPickerLoading] = useState(false);
-  const [sending, setSending] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feedError, setFeedError] = useState<string | null>(null);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
-  const [recording, setRecording] = useState(false);
   const [uploads, setUploads] = useState<UploadedFile[]>([]);
   /** Если правим текст уже сохранённой заметки — держим её id (п.62). */
   const [correcting, setCorrecting] = useState<string | null>(null);
+  /** Исходный текст правимой заметки — из него форма берёт значение. */
+  const [correctingText, setCorrectingText] = useState("");
   const [mobileStep, setMobileStep] = useState<"pick" | "write">("pick");
 
-  const areaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const recognitionRef = useRef<{ stop: () => void } | null>(null);
   const pollRef = useRef<number | null>(null);
 
   /* ------------------------------------------------------------ запросы */
@@ -286,7 +261,6 @@ export default function NotesPage() {
   useEffect(() => {
     return () => {
       if (pollRef.current) window.clearTimeout(pollRef.current);
-      recognitionRef.current?.stop();
     };
   }, []);
 
@@ -300,7 +274,6 @@ export default function NotesPage() {
       /* приватный режим */
     }
     setMobileStep(client ? "write" : "pick");
-    if (client) areaRef.current?.focus();
   }, []);
 
   /* -------------------------------------------------- ожидание разбора AI */
@@ -328,95 +301,95 @@ export default function NotesPage() {
   );
 
   /* ----------------------------------------------------------- отправка */
-  async function send() {
-    if (!body.trim()) return;
-    if (!clientFilter) {
-      setError("Сначала выберите клиента слева.");
-      return;
-    }
+  /**
+   * п.1–5 «30 идей»: отправку вызывает единая форма VoiceNoteForm.
+   * Она держит текст, черновик и ключ идемпотентности, а здесь остаётся
+   * только работа с сервером и лентой.
+   *
+   * Возвращаем id заметки: по нему форма понимает, что можно чистить
+   * черновик, а страница — что пора ждать разбор AI.
+   */
+  const submitNote = useCallback(
+    async ({
+      body: text,
+      sourceType,
+      idempotencyKey,
+    }: {
+      body: string;
+      sourceType: "text" | "voice";
+      idempotencyKey: string;
+    }): Promise<string | null> => {
+      const target = clientFilter;
+      if (!target) throw new Error("Сначала выберите клиента");
 
-    const text = body.trim();
-    const target = clientFilter;
-
-    // Исправление уже сохранённой заметки: PATCH, затем повторный разбор (п.62)
-    if (correcting) {
-      setSending(true);
-      setError(null);
-      try {
+      // Исправление уже сохранённой заметки: PATCH, затем повторный разбор (п.62)
+      if (correcting) {
         await api(`/notes/${correcting}`, { method: "PATCH", body: { body: text } });
         await api(`/notes/${correcting}/reprocess`, { method: "POST" });
-        setBody("");
-        setCorrecting(null);
         const id = correcting;
+        setCorrecting(null);
+        setCorrectingText("");
         setNotes((prev) =>
           prev.map((n) => (n.id === id ? { ...n, body: text, ai_status: "pending" } : n)),
         );
         pollNote(id);
-      } catch (err) {
-        // Текст остаётся в поле — менеджер не теряет работу (п.61)
-        setError(err instanceof Error ? err.message : "Не удалось сохранить исправление");
-      } finally {
-        setSending(false);
+        return id;
       }
-      return;
-    }
 
-    setSending(true);
-    setError(null);
+      const tempId = `temp-${Date.now()}`;
+      const optimistic: FeedNote = {
+        id: tempId,
+        client_id: target.id,
+        project_id: null,
+        body: text,
+        source_type: sourceType,
+        ai_status: "pending",
+        ai_error: null,
+        created_at: new Date().toISOString(),
+        version: 1,
+        client_name: target.name,
+        tasks: [],
+        commitments: [],
+        optimistic: true,
+      };
+      // Заметка видна сразу, ещё до ответа сервера (п.56)
+      setNotes((prev) => [optimistic, ...prev]);
+      setUploads([]);
 
-    const tempId = `temp-${Date.now()}`;
-    const optimistic: FeedNote = {
-      id: tempId,
-      client_id: target.id,
-      project_id: null,
-      body: text,
-      source_type: "text",
-      ai_status: "pending",
-      ai_error: null,
-      created_at: new Date().toISOString(),
-      version: 1,
-      client_name: target.name,
-      tasks: [],
-      commitments: [],
-      optimistic: true,
-    };
-    // Заметка видна сразу, ещё до ответа сервера (п.56)
-    setNotes((prev) => [optimistic, ...prev]);
-    setBody("");
-    setUploads([]);
-
-    try {
-      const note = await api<Note>(`/clients/${target.id}/notes`, {
-        method: "POST",
-        body: { body: text, run_ai: true, source_type: "text" },
-      });
-      setNotes((prev) =>
-        prev.map((n) =>
-          n.id === tempId
-            ? { ...n, id: note.id, created_at: note.created_at, optimistic: false }
-            : n,
-        ),
-      );
-      pollNote(note.id);
       try {
-        const items = await fetchPicker("");
-        setPicker(items);
-      } catch {
-        /* список клиентов не критичен */
+        const note = await api<Note>(`/clients/${target.id}/notes`, {
+          method: "POST",
+          body: {
+            body: text,
+            run_ai: true,
+            source_type: sourceType,
+            idempotency_key: idempotencyKey,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          },
+        });
+        setNotes((prev) =>
+          prev.map((n) =>
+            n.id === tempId
+              ? { ...n, id: note.id, created_at: note.created_at, optimistic: false }
+              : n,
+          ),
+        );
+        pollNote(note.id);
+        try {
+          const items = await fetchPicker("");
+          setPicker(items);
+        } catch {
+          /* список клиентов не критичен */
+        }
+        return note.id;
+      } catch (err) {
+        // Убираем пустышку: текст останется в форме и в черновике
+        setNotes((prev) => prev.filter((n) => n.id !== tempId));
+        throw err instanceof Error ? err : new Error("Заметка не сохранена");
       }
-    } catch (err) {
-      // Убираем пустышку и возвращаем текст, чтобы не потерять работу
-      setNotes((prev) => prev.filter((n) => n.id !== tempId));
-      setBody(text);
-      setError(
-        err instanceof Error
-          ? `Заметка не сохранена: ${err.message}. Текст остался в редакторе — попробуйте отправить ещё раз.`
-          : "Заметка не сохранена. Текст остался в редакторе — попробуйте ещё раз.",
-      );
-    } finally {
-      setSending(false);
-    }
-  }
+    },
+    [clientFilter, correcting, fetchPicker, pollNote],
+  );
 
   /* ------------------------------------------------- повторный разбор */
   const reprocess = useCallback(
@@ -440,10 +413,9 @@ export default function NotesPage() {
   const startCorrection = useCallback(
     (note: FeedNote) => {
       setCorrecting(note.id);
-      setBody(note.body);
+      setCorrectingText(note.body);
       if (note.client_id) chooseClient({ id: note.client_id, name: note.client_name || "Клиент" });
       setMobileStep("write");
-      requestAnimationFrame(() => areaRef.current?.focus());
     },
     [chooseClient],
   );
@@ -475,44 +447,6 @@ export default function NotesPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось прикрепить файл");
     }
-  }
-
-  /* -------------------------------------------------------------- голос */
-  function toggleDictation() {
-    const w = window as unknown as {
-      SpeechRecognition?: new () => SpeechRecognitionLike;
-      webkitSpeechRecognition?: new () => SpeechRecognitionLike;
-    };
-    const Ctor = w.SpeechRecognition || w.webkitSpeechRecognition;
-    if (!Ctor) {
-      setError("Диктовка недоступна в этом браузере — наберите текст вручную.");
-      return;
-    }
-    if (recording) {
-      recognitionRef.current?.stop();
-      return;
-    }
-    const rec = new Ctor();
-    rec.lang = "ru-RU";
-    rec.interimResults = false;
-    rec.continuous = false;
-    rec.onresult = (event) => {
-      let spoken = "";
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
-        if (event.results[i].isFinal) spoken += ` ${event.results[i][0].transcript}`;
-      }
-      const text = spoken.trim();
-      if (text) setBody((prev) => (prev ? `${prev} ${text}` : text));
-    };
-    rec.onend = () => setRecording(false);
-    rec.onerror = () => {
-      setRecording(false);
-      setError("Не удалось распознать речь. Проверьте микрофон и попробуйте снова.");
-    };
-    recognitionEngine.current = rec;
-    recognitionRef.current = rec;
-    rec.start();
-    setRecording(true);
   }
 
   /* -------------------------------------------------------- производные */
@@ -727,31 +661,20 @@ export default function NotesPage() {
             className="mb-4 shrink-0 border-[var(--border-strong)] shadow-[0_6px_24px_rgba(15,23,42,0.10)] lg:order-3 lg:mb-0 lg:mt-3"
             padded
           >
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[12.5px] font-medium text-[var(--muted)]">
-                {correcting ? "Исправление заметки" : "Новая заметка"}
-              </span>
-              <span className="min-w-0 truncate text-[12.5px] font-semibold text-ink">
-                {clientFilter ? clientFilter.name : "клиент не выбран"}
-              </span>
-            </div>
-
-            <textarea
-              ref={areaRef}
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              onKeyDown={(e) => {
-                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                  e.preventDefault();
-                  void send();
-                }
+            <VoiceNoteForm
+              client={clientFilter}
+              onSubmit={submitNote}
+              onCreated={(noteId) => {
+                setMobileStep("write");
+                pollNote(noteId);
               }}
-              rows={3}
-              placeholder="Например: отправить смету в пятницу, проверить оплату в понедельник."
-              aria-label="Текст заметки"
-              className={`${textareaClass} min-h-[84px] max-h-48 !text-base leading-relaxed`}
+              label={correcting ? "Исправление заметки" : "Новая заметка"}
+              submitLabel={correcting ? "Сохранить и разобрать" : "Отправить"}
+              initialBody={correcting ? correctingText : ""}
+              hideExamples={Boolean(correcting)}
             />
 
+            {/* Вложения остаются здесь: они привязаны к клиенту, а не к тексту. */}
             {uploads.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {uploads.map((file, index) => (
@@ -759,9 +682,6 @@ export default function NotesPage() {
                     key={`${file.name}-${index}`}
                     className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-[#eef2f8] px-2.5 py-1 text-[11.5px] text-[var(--muted)]"
                   >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                      <path d="M21 11.5a8.4 8.4 0 01-8.5 8.5 8.5 8.5 0 01-3.9-.9L3 21l1.9-5.6A8.5 8.5 0 1121 11.5z" />
-                    </svg>
                     <span className="truncate">{file.name}</span>
                     <span className="shrink-0">{formatBytes(file.size)}</span>
                   </span>
@@ -769,7 +689,7 @@ export default function NotesPage() {
               </div>
             )}
 
-            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <input
                 ref={fileRef}
                 type="file"
@@ -791,65 +711,19 @@ export default function NotesPage() {
                   <path d="M21.4 11.05l-8.9 8.9a5.2 5.2 0 01-7.4-7.4l8.2-8.2a3.5 3.5 0 014.9 4.9l-8.2 8.2a1.8 1.8 0 01-2.5-2.5l7.5-7.5" />
                 </svg>
               </button>
-              <button
-                type="button"
-                onClick={toggleDictation}
-                title={recording ? "Остановить диктовку" : "Голосовая заметка"}
-                aria-label={recording ? "Остановить диктовку" : "Голосовая заметка"}
-                aria-pressed={recording}
-                className={`focus-ring grid h-11 w-11 shrink-0 place-items-center rounded-control border transition-colors ${
-                  recording
-                    ? "border-[var(--danger)] bg-[var(--danger-soft)] text-[var(--danger)]"
-                    : "border-[var(--border-strong)] text-[var(--muted)] hover:border-primary hover:text-primary"
-                }`}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-                  <rect x="9" y="3" width="6" height="11" rx="3" />
-                  <path d="M5 11a7 7 0 0014 0M12 18v3M8.5 21h7" />
-                </svg>
-              </button>
-
-              <div className="flex-1" />
-
               {correcting && (
                 <Button
                   variant="ghost"
                   size="md"
                   onClick={() => {
                     setCorrecting(null);
-                    setBody("");
+                    setCorrectingText("");
                   }}
                 >
-                  Отменить
+                  Отменить исправление
                 </Button>
               )}
-              <Button
-                onClick={() => void send()}
-                loading={sending}
-                disabled={!body.trim() || !clientFilter}
-                size="md"
-              >
-                {correcting ? "Сохранить и разобрать" : "Отправить"}
-              </Button>
             </div>
-
-            {!body && !correcting && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {EXAMPLES.slice(0, 2).map((example) => (
-                  <button
-                    key={example}
-                    type="button"
-                    onClick={() => {
-                      setBody(example);
-                      areaRef.current?.focus();
-                    }}
-                    className="focus-ring max-w-full truncate rounded-full border border-[var(--border)] px-2.5 py-1 text-[12px] text-[var(--muted)] transition-colors hover:border-primary hover:text-primary"
-                  >
-                    {example}
-                  </button>
-                ))}
-              </div>
-            )}
           </Card>
 
           {/* ------------------------------------------------------- лента */}
