@@ -265,6 +265,21 @@ class ProjectProvenance(BaseModel):
     entries: list[ProvenanceEntry] = Field(default_factory=list)
 
 
+# ---------------------------------------------------------------- suggest
+class MessageSuggestion(BaseModel):
+    """Черновик следующего сообщения клиенту (п.25 «30 идей»).
+
+    `source_kind` и `source_label` — не украшение: менеджер должен видеть,
+    откуда взялся текст. Без источника подсказка — просто догадка.
+    """
+
+    text: str
+    source_kind: Literal["task", "commitment", "note", "none"]
+    source_id: str | None = None
+    source_quote: str | None = None
+    source_label: str
+
+
 # ---------------------------------------------------------------- contracts
 class ContractCreate(BaseModel):
     number: str | None = None

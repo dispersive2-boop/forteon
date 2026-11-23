@@ -14,6 +14,7 @@ from ..deps import audit, ensure_version, get_client_or_404, get_current_user
 from ..models import AuditLog, Client, Note, Notification, Project, Task, User, utcnow
 from ..services.digest import build_digest, send_digest
 from ..schemas import (
+    MessageSuggestion,
     PlannerOut,
     PlannerSummary,
     TaskBulkAction,
@@ -32,6 +33,7 @@ from ..schemas import (
 )
 from ..services.ai import make_dedupe_key
 from ..services.dates import to_date
+from ..services.suggest import suggest_message
 
 router = APIRouter(tags=["tasks"])
 
@@ -234,6 +236,27 @@ def get_task(task_id: str, db: Session = Depends(get_db), user: User = Depends(g
     task = _task_for_user(db, user, task_id)
     client = db.get(Client, task.client_id)
     return _task_out(task, client.name if client else None)
+
+
+@router.get("/tasks/{task_id}/suggest", response_model=MessageSuggestion)
+def suggest_next_message(task_id: str, db: Session = Depends(get_db),
+                         user: User = Depends(get_current_user)):
+    """п.25 «30 идей»: черновик следующего сообщения вместе с источником.
+
+    Решение не отдавать это модели осознанное: подсказка обязана называть
+    основание. Здесь текст строится из цитаты задачи, открытого
+    обязательства или последней заметки — и всегда говорит, из чего.
+    Когда основания нет, текст пустой: сочинять повод хуже, чем молчать.
+    """
+    task = _task_for_user(db, user, task_id)
+    suggestion = suggest_message(db, task)
+    return MessageSuggestion(
+        text=suggestion.text,
+        source_kind=suggestion.source_kind,  # type: ignore[arg-type]
+        source_id=suggestion.source_id,
+        source_quote=suggestion.source_quote,
+        source_label=suggestion.source_label,
+    )
 
 
 @router.get("/tasks/{task_id}/chat", response_model=TaskChatOut)
