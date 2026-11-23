@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import json
+
+import httpx
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ..config import settings
 from ..db import SessionLocal, get_db
 from ..deps import audit, get_client_or_404, get_current_user
 from ..models import AIRun, Commitment, Note, Task, User, utcnow
@@ -445,3 +448,33 @@ def voice_transcription(payload: TranscriptRequest, db: Session = Depends(get_db
         "provider": "client-side-stt",
         "created_at": utcnow().isoformat(),
     }
+
+
+@router.post("/voice/audio")
+def transcribe_audio(file: UploadFile = File(...), _: User = Depends(get_current_user)):
+    if not settings.stt_base_url or not settings.stt_api_key:
+        raise HTTPException(status_code=503, detail={"message": "Расшифровка аудио на сервере пока не настроена. Черновик сохранён в браузере."})
+    variants = {"audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "m4a", "audio/wav": "wav"}
+    content_type = (file.content_type or "").split(";")[0]
+    if content_type not in variants:
+        raise HTTPException(status_code=422, detail={"message": "Поддерживаются записи WebM, Ogg, M4A и WAV."})
+    limit = 10 * 1024 * 1024
+    data = file.file.read(limit + 1)
+    if not data or len(data) > limit:
+        raise HTTPException(status_code=422, detail={"message": "Проверьте, что аудиозапись непустая и не превышает 10 МБ."})
+    try:
+        with httpx.Client(timeout=60) as client:
+            response = client.post(
+                settings.stt_base_url + "/audio/transcriptions",
+                headers={"Authorization": f"Bearer {settings.stt_api_key}"},
+                data={"model": settings.stt_model, "language": "ru"},
+                files={"file": (f"note.{variants[content_type]}", data, content_type)},
+            )
+            response.raise_for_status()
+            result = response.json()
+            text = result.get("text") if isinstance(result, dict) else None
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(status_code=502, detail={"message": "Не удалось расшифровать запись. Черновик сохранён, можно попробовать ещё раз."})
+    if not isinstance(text, str) or not text.strip():
+        raise HTTPException(status_code=422, detail={"message": "В записи не удалось распознать речь."})
+    return {"text": text.strip()}

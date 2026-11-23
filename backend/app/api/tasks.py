@@ -1,11 +1,11 @@
 """Задачи и планировщик (день/неделя/месяц/год)."""
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -311,15 +311,23 @@ def update_task(task_id: str, payload: TaskUpdate, db: Session = Depends(get_db)
                 user: User = Depends(get_current_user)):
     task = _task_for_user(db, user, task_id)
     ensure_version(task, payload.version)
+    previous_due_date = task.due_date
     data = payload.model_dump(exclude_unset=True, exclude={"version"})
     for key, value in data.items():
         if value is not None:
             setattr(task, key, value)
-    if "due_at" in data and data["due_at"] is not None:
-        task.due_date = to_date(data["due_at"])
-        task.needs_review = False
-        task.review_reason = None
-        task.review_question = None
+    if "due_date" in data:
+        task.due_date = data["due_date"]
+        if "due_at" not in data and task.due_date != previous_due_date:
+            task.due_at = None
+    if "due_at" in data:
+        task.due_at = data["due_at"]
+        if "due_date" not in data:
+            task.due_date = to_date(task.due_at, task.timezone)
+        if task.due_at is not None:
+            task.needs_review = False
+            task.review_reason = None
+            task.review_question = None
     # Менеджер снял пометку уточнения вручную — вопрос больше не нужен.
     if data.get("needs_review") is False:
         task.review_reason = None
@@ -363,9 +371,11 @@ def review_task(task_id: str, payload: TaskReviewDecision,
         task.title = payload.title.strip()[:512]
     if payload.actor in ("us", "client"):
         task.actor = payload.actor
-    if payload.due_date is not None:
+    if payload.type:
+        task.type = payload.type
+    if "due_date" in payload.model_fields_set and payload.due_date != task.due_date:
         task.due_date = payload.due_date
-        task.due_at = datetime.combine(payload.due_date, time(10, 0))
+        task.due_at = None
     if payload.comment:
         task.description = ((task.description or "") + "\n" + payload.comment).strip()
 
@@ -607,7 +617,7 @@ def planner_overdue(db: Session = Depends(get_db), user: User = Depends(get_curr
 def list_notifications(limit: int = 50, db: Session = Depends(get_db),
                        user: User = Depends(get_current_user)):
     rows = db.scalars(
-        select(Notification).where(Notification.user_id == user.id)
+        select(Notification).where(Notification.user_id == user.id, Notification.scheduled_at <= utcnow())
         .order_by(Notification.scheduled_at.desc()).limit(limit)
     )
     return [
@@ -637,6 +647,26 @@ def read_notification(notification_id: str, db: Session = Depends(get_db),
     return None
 
 
+@router.post("/notifications/{notification_id}/snooze", status_code=204)
+def snooze_notification(
+    notification_id: str,
+    until: datetime = Body(embed=True),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    notification = db.get(Notification, notification_id)
+    if notification is None or notification.user_id != user.id or notification.channel != "in_app":
+        raise HTTPException(status_code=404, detail={"code": "not_found", "message": "Уведомление не найдено"})
+    if until.tzinfo is not None:
+        until = until.astimezone(timezone.utc).replace(tzinfo=None)
+    if until <= utcnow():
+        raise HTTPException(status_code=422, detail={"code": "invalid_date", "message": "Выберите время в будущем"})
+    notification.scheduled_at = until
+    notification.read_at = None
+    notification.status = "pending"
+    db.commit()
+
+
 @router.post("/notifications/read-all")
 def read_all_notifications(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Прочитать все непрочитанные одним нажатием.
@@ -649,6 +679,7 @@ def read_all_notifications(db: Session = Depends(get_db), user: User = Depends(g
             select(Notification).where(
                 Notification.user_id == user.id,
                 Notification.read_at.is_(None),
+                Notification.scheduled_at <= utcnow(),
             )
         )
     )
@@ -668,6 +699,7 @@ def unread_notifications_count(db: Session = Depends(get_db), user: User = Depen
         select(func.count()).select_from(Notification).where(
             Notification.user_id == user.id,
             Notification.read_at.is_(None),
+            Notification.scheduled_at <= utcnow(),
         )
     ) or 0
     return {"count": int(total)}

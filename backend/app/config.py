@@ -128,6 +128,10 @@ class Settings:
         self.ai_json_mode = _bool("FORTEON_AI_JSON_MODE", True)
         self.ai_referer = _env("FORTEON_AI_REFERER", "https://forteon.pro")
 
+        self.stt_base_url = _env("FORTEON_STT_BASE_URL").rstrip("/")
+        self.stt_api_key = _env("FORTEON_STT_API_KEY")
+        self.stt_model = _env("FORTEON_STT_MODEL", "whisper-1")
+
         # Наблюдатель за новыми заметками (опрос раз в N секунд).
         self.note_watcher_enabled = _bool("FORTEON_NOTE_WATCHER", True)
         self.note_watcher_interval = int(_env("FORTEON_NOTE_WATCHER_INTERVAL", "60"))

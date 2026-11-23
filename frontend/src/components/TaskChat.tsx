@@ -232,6 +232,10 @@ export function TaskChatBody({
         </>
       )}
 
+      <Link href={`/notes?client_id=${encodeURIComponent(chat.client.id)}&voice=1`}
+        className="inline-flex min-h-10 items-center font-medium text-primary hover:underline">
+        Надиктовать заметку
+      </Link>
       <Field label="Новая заметка по этой задаче">
         <textarea
           value={draft}

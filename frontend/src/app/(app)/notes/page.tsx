@@ -22,6 +22,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { AudioDraft } from "@/components/AudioDraft";
+import { useAuth } from "@/components/AuthProvider";
 
 import {
   Badge,
@@ -32,10 +34,11 @@ import {
   ReviewChip,
   SectionTitle,
   Skeleton,
+  inputClass,
   textareaClass,
 } from "@/components/ui";
 import { api, API_ROOT, getToken, Note } from "@/lib/api";
-import { PRIORITY_LABELS, dateTimeRu, formatBytes, isOverdue, relativeDay } from "@/lib/format";
+import { PRIORITY_LABELS, TASK_TYPE_LABELS, dateTimeRu, formatBytes, isOverdue, relativeDay } from "@/lib/format";
 
 type PickerClient = {
   id: string;
@@ -138,7 +141,35 @@ function aiState(note: FeedNote): { tone: "warning" | "danger" | "neutral"; labe
   return null;
 }
 
+type NoteDraft = {
+  clientId: string | null;
+  body: string;
+  dictated: boolean;
+  retry?: { clientId: string; body: string; key: string } | null;
+};
+
+function storedDraft(key: string): NoteDraft | null {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(key) || "null");
+    return typeof value?.body === "string" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistDraft(key: string, value: NoteDraft | null) {
+  try {
+    if (value) window.localStorage.setItem(key, JSON.stringify(value));
+    else window.localStorage.removeItem(key);
+  } catch {
+    // Редактор остаётся доступен, если браузер запретил локальное сохранение.
+  }
+}
+
 export default function NotesPage() {
+  const { user } = useAuth();
+  const draftKey = `forteon.notes.draft.${user?.id ?? ""}`;
+  const [draftClientOpen, setDraftClientOpen] = useState(false);
   /* ---------------------------------------------------------- состояние */
   const [query, setQuery] = useState("");
   const [picker, setPicker] = useState<PickerClient[]>([]);
@@ -231,23 +262,34 @@ export default function NotesPage() {
       setLoading(true);
       try {
         const url = new URLSearchParams(window.location.search);
+        const draft = storedDraft(draftKey);
         const requestedId = url.get("client_id");
-        setAutoSaveVoice(url.get("voice") === "1");
+        const clientToLoad = draft?.clientId || requestedId;
+        setAutoSaveVoice(url.get("voice") === "1" && !draft?.body);
         const [items, requestedClient] = await Promise.all([
           fetchPicker(""),
-          requestedId
-            ? api<{ id: string; name: string }>(`/clients/${encodeURIComponent(requestedId)}`).catch(() => null)
+          clientToLoad
+            ? api<{ id: string; name: string }>(`/clients/${encodeURIComponent(clientToLoad)}`).catch(() => null)
             : Promise.resolve(null),
         ]);
         if (cancelled) return;
         setPicker(items);
+        if (draft) {
+          setBody(draft.body);
+          setDictated(draft.dictated);
+          pendingNote.current = draft.retry ?? null;
+        }
         const storedId = window.localStorage.getItem(STORE_CLIENT);
-        const restored = requestedClient ?? (storedId ? items.find((client) => client.id === storedId) : undefined);
-        if (requestedId && !requestedClient) setError("Не удалось открыть клиента для заметки.");
+        const restored = requestedClient ?? (!draft?.clientId && !requestedId && storedId
+          ? items.find((client) => client.id === storedId) : undefined);
+        if (!restored) setClientFilter(null);
+        if (requestedId && draft?.clientId && draft.clientId !== requestedId) {
+          setError("Восстановлен черновик другого клиента. Проверьте адресата перед отправкой.");
+        } else if (requestedId && !requestedClient) setError("Не удалось открыть клиента для заметки.");
         if (restored) {
           setClientFilter({ id: restored.id, name: restored.name });
           setMobileStep("write");
-        } else if (requestedId) {
+        } else if (requestedId || draft?.body) {
           setMobileStep("write");
         }
       } catch {
@@ -259,7 +301,13 @@ export default function NotesPage() {
     return () => {
       cancelled = true;
     };
-  }, [fetchPicker]);
+  }, [draftKey, fetchPicker]);
+
+  useEffect(() => {
+    if (loading || sending || correcting) return;
+    const value = body.trim() ? { clientId: clientFilter?.id ?? null, body, dictated, retry: pendingNote.current } : null;
+    persistDraft(draftKey, value);
+  }, [body, clientFilter?.id, correcting, dictated, draftKey, loading, sending]);
 
   // Лента грузится после того, как определились с фильтром клиента
   useEffect(() => {
@@ -382,6 +430,7 @@ export default function NotesPage() {
       pendingNote.current = { clientId: target.id, body: text, key: window.crypto?.randomUUID?.() ?? `note-${Date.now()}-${Math.random().toString(36).slice(2)}` };
     }
     const noteKey = pendingNote.current.key;
+    persistDraft(draftKey, { clientId: target.id, body: text, dictated: source === "voice", retry: pendingNote.current });
     const tempId = `temp-${noteKey}`;
     const optimistic: FeedNote = {
       id: tempId,
@@ -410,6 +459,7 @@ export default function NotesPage() {
         body: { body: text, run_ai: true, source_type: source, idempotency_key: noteKey },
       });
       pendingNote.current = null;
+      persistDraft(draftKey, null);
       setNotes((prev) =>
         prev.map((n) =>
           n.id === tempId
@@ -775,15 +825,32 @@ export default function NotesPage() {
               <span className="text-[12.5px] font-medium text-[var(--muted)]">
                 {correcting ? "Исправление заметки" : "Новая заметка"}
               </span>
-              <span className="min-w-0 truncate text-[12.5px] font-semibold text-ink">
-                {clientFilter ? clientFilter.name : "клиент не выбран"}
-              </span>
+              <button type="button" disabled={recording || sending || Boolean(correcting)}
+                className="focus-ring max-w-full truncate rounded px-1 text-[13px] font-semibold text-primary"
+                aria-expanded={draftClientOpen} onClick={() => { setQuery(""); setDraftClientOpen(!draftClientOpen); }}>
+                {clientFilter ? `Клиент: ${clientFilter.name}` : "Выбрать клиента для заметки"}
+              </button>
             </div>
 
+            {draftClientOpen && (
+              <div className="mb-3 space-y-2 rounded-control border border-[var(--border)] p-2">
+                <input type="search" aria-label="Поиск клиента для черновика" value={query}
+                  placeholder="Имя, телефон или ИНН" className={inputClass} onChange={(event) => setQuery(event.target.value)} />
+                <div className="flex max-h-32 flex-wrap gap-2 overflow-auto">
+                  {picker.slice(0, 12).map((client) => (
+                    <Button key={client.id} type="button" size="sm" variant="outline" onClick={() => {
+                      chooseClient(client);
+                      setDraftClientOpen(false);
+                    }}>{client.name}</Button>
+                  ))}
+                  {!pickerLoading && picker.length === 0 && <p className="text-sm text-[var(--muted)]">Клиенты не найдены.</p>}
+                </div>
+              </div>
+            )}
             <textarea
               ref={areaRef}
               value={body}
-              readOnly={recording}
+              readOnly={recording || sending}
               onChange={(e) => setBody(e.target.value)}
               onKeyDown={(e) => {
                 if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
@@ -885,6 +952,10 @@ export default function NotesPage() {
                 Сохранить и разобрать после диктовки
               </label>
             )}
+            {user && <AudioDraft userId={user.id} disabled={recording || sending} onTranscript={(text) => {
+              setBody((current) => [current.trim(), text].filter(Boolean).join(" "));
+              setDictated(true);
+            }} />}
             {!body && !correcting && (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {EXAMPLES.slice(0, 2).map((example) => (
@@ -1005,6 +1076,17 @@ function NoteCard({
   */
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
+  const [draftDate, setDraftDate] = useState("");
+  const [draftType, setDraftType] = useState("other");
+  const [draftActor, setDraftActor] = useState<"us" | "client">("us");
+
+  function editTask(task: NoteTask) {
+    setEditingId(task.id);
+    setDraftTitle(task.title);
+    setDraftDate(task.due_date ?? "");
+    setDraftType(task.type in TASK_TYPE_LABELS ? task.type : "other");
+    setDraftActor(task.actor ?? "us");
+  }
   const [savingEdit, setSavingEdit] = useState(false);
   /** п.23: решение по предложенной задаче — id задачи, которую сейчас решаем. */
   const [reviewingId, setReviewingId] = useState<string | null>(null);
@@ -1018,13 +1100,18 @@ function NoteCard({
     }
     setSavingEdit(true);
     try {
-      await api(`/tasks/${taskId}`, { method: "PATCH", body: { title } });
+      await api(`/tasks/${taskId}`, {
+        method: "PATCH", body: { title, due_date: draftDate || null, type: draftType, actor: draftActor },
+      });
       if (taskId) {
         // Обновляем локально, чтобы не ждать перезагрузку всей ленты.
         const target = tasks.find((t) => t.id === taskId);
-        if (target) target.title = title;
+        if (target) Object.assign(target, { title, due_date: draftDate || null, type: draftType, actor: draftActor });
       }
       setEditingId(null);
+      setReviewError(null);
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : "Не удалось сохранить задачу");
     } finally {
       setSavingEdit(false);
     }
@@ -1047,6 +1134,9 @@ function NoteCard({
       if (decision === "edit") {
         const title = draftTitle.trim();
         if (title) body.title = title;
+        body.due_date = draftDate || null;
+        body.type = draftType;
+        body.actor = draftActor;
       }
       await api(`/tasks/${taskId}/review`, { method: "POST", body });
       // Локально отражаем результат, не дожидаясь перезагрузки всей ленты.
@@ -1055,7 +1145,8 @@ function NoteCard({
         if (decision === "reject") {
           target.status = "deleted";
         } else {
-          if (decision === "edit" && body.title) target.title = String(body.title);
+          if (decision === "edit") Object.assign(target, { title: draftTitle.trim() || target.title,
+            due_date: draftDate || null, type: draftType, actor: draftActor });
           target.needs_review = false;
           target.review_question = null;
         }
@@ -1165,8 +1256,12 @@ function NoteCard({
       )}
 
       {(tasks.length > 0 || commitments.length > 0) && (
-        <div className="mt-2.5 space-y-1.5 border-t border-[var(--border)] pt-2.5">
-          {tasks.map((task) => (
+        <details className="mt-2.5 border-t border-[var(--border)] pt-2.5">
+          <summary className="cursor-pointer font-medium text-ink">
+            Задачи: {tasks.filter((task) => task.status !== "deleted").length} · Ожидания: {commitments.length} · Уточнить: {tasks.filter((task) => task.needs_review && task.status !== "deleted").length}
+          </summary>
+          <div className="mt-2 space-y-1.5">
+          {tasks.filter((task) => task.status !== "deleted").map((task) => (
             <div key={task.id} className="rounded-control bg-[#f8fafd] px-2.5 py-2">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span
@@ -1215,10 +1310,7 @@ function NoteCard({
                     </span>
                     <button
                       type="button"
-                      onClick={() => {
-                        setEditingId(task.id);
-                        setDraftTitle(task.title);
-                      }}
+                      onClick={() => editTask(task)}
                       title="Исправить формулировку задачи"
                       aria-label="Исправить формулировку задачи"
                       className="focus-ring shrink-0 rounded px-1.5 py-1 text-[11.5px] font-medium text-primary hover:bg-[var(--primary-soft)]"
@@ -1249,6 +1341,17 @@ function NoteCard({
                 </span>
               </div>
 
+              {editingId === task.id && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <input type="date" aria-label="Дата задачи" value={draftDate} onChange={(e) => setDraftDate(e.target.value)} className="rounded border bg-surface px-2" />
+                  <select aria-label="Тип задачи" value={draftType} onChange={(e) => setDraftType(e.target.value)} className="rounded border bg-surface px-2">
+                    {Object.entries(TASK_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                  <select aria-label="Кто выполняет" value={draftActor} onChange={(e) => setDraftActor(e.target.value as "us" | "client")} className="rounded border bg-surface px-2">
+                    <option value="us">Мы</option><option value="client">Клиент</option>
+                  </select>
+                </div>
+              )}
               {/* п.14: в уточнении должен быть понятный вопрос, а не «уточните» */}
               {task.needs_review && task.review_question && (
                 <p className="mt-1 break-words text-[13px] leading-snug text-[var(--warning)]">
@@ -1276,17 +1379,14 @@ function NoteCard({
                       loading={reviewingId === task.id}
                       onClick={() => void decideReview(task.id, "accept")}
                     >
-                      Принять
+                      Нужно сделать
                     </Button>
                   )}
                   {editingId !== task.id && (
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => {
-                        setEditingId(task.id);
-                        setDraftTitle(task.title);
-                      }}
+                      onClick={() => editTask(task)}
                     >
                       Изменить
                     </Button>
@@ -1297,12 +1397,12 @@ function NoteCard({
                     disabled={reviewingId === task.id}
                     onClick={() => void decideReview(task.id, "reject")}
                   >
-                    Отклонить
+                    Задача не нужна
                   </Button>
                 </div>
               )}
 
-              {task.needs_review && reviewError && (
+              {reviewError && (editingId === task.id || task.needs_review) && (
                 <p className="mt-1 text-[12px] text-[var(--danger)]">{reviewError}</p>
               )}
 
@@ -1342,7 +1442,8 @@ function NoteCard({
               )}
             </div>
           ))}
-        </div>
+          </div>
+        </details>
       )}
     </article>
   );
