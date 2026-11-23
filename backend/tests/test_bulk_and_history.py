@@ -1,4 +1,4 @@
-﻿"""v1.2: массовые действия, история задачи, уведомления.
+"""v1.2: массовые действия, история задачи, уведомления.
 
 Проверяем поведение, а не «эндпоинт отвечает»:
   * bulk complete закрывает только свои открытые задачи;
@@ -10,11 +10,13 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
 import pytest
 from fastapi.testclient import TestClient
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import settings as _settings  # noqa: E402
@@ -24,7 +26,7 @@ assert "forteon_test" in _settings.database_url
 from app.db import Base, engine, get_db  # noqa: E402
 from app.deps import get_current_user  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import Client, Notification, Project, Task, User  # noqa: E402
+from app.models import Client, ClientContact, Notification, Project, Task, User  # noqa: E402
 from app.security import hash_password  # noqa: E402
 from app.services.reports import _fmt_money, build_pdf, build_xlsx  # noqa: E402
 
@@ -217,3 +219,59 @@ def test_expected_profit_requires_cost_and_stays_numeric_in_excel(api: TestClien
     assert sheet["H3"].value is None
     assert _fmt_money(project.expected_profit) == "1\u00a0250\u00a0000,50\u00a0₽"
     assert build_pdf(db, rows, "Все даты", "Тест", ["projects"]).startswith(b"%PDF")
+
+
+
+def test_snooze_does_not_get_marked_as_read(api: TestClient, db: Session) -> None:
+    own = Notification(user_id=USER_ID, title="Позвонить", status="pending")
+    other = Notification(user_id=OTHER_ID, title="Чужое", status="pending")
+    db.add_all([own, other])
+    db.commit()
+    until = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    assert api.post(f"/api/v1/notifications/{other.id}/snooze", json={"until": until}).status_code == 404
+    assert api.post(f"/api/v1/notifications/{own.id}/snooze", json={"until": until}).status_code == 204
+    assert api.get("/api/v1/notifications").json() == []
+    assert api.get("/api/v1/notifications/unread-count").json()["count"] == 0
+    assert api.post("/api/v1/notifications/read-all").json()["read"] == 0
+    own.scheduled_at -= timedelta(hours=2)
+    db.commit()
+    assert api.get("/api/v1/notifications/unread-count").json()["count"] == 1
+
+
+def test_workspace_search_links_and_respects_scope(api: TestClient, db: Session) -> None:
+    hidden = Client(name="Чужой объект", owner_id=OTHER_ID)
+    db.add(hidden)
+    db.flush()
+    own = ClientContact(client_id=CLIENT_ID, name="Алексей", phone="+7 (999) 123-45-67")
+    db.add_all([
+        own, ClientContact(client_id=hidden.id, name="Чужой контакт", phone="79991234567"),
+        Project(client_id=CLIENT_ID, name="Семёновский проект"),
+    ])
+    db.commit()
+    phone = api.get("/api/v1/workspace-search", params={"q": "999123"}).json()["items"]
+    assert len(phone) == 1
+    assert phone[0]["matched_field"] == "Телефон"
+    assert phone[0]["href"].endswith(f"?tab=overview#contact-{own.id}")
+    project = api.get("/api/v1/workspace-search", params={"q": "семеновский"}).json()["items"]
+    assert project[0]["matched_field"] == "Проект"
+
+
+def test_import_preview_does_not_save_records(api: TestClient, db: Session) -> None:
+    user = db.get(User, USER_ID)
+    user.role = "admin"
+    db.commit()
+    workbook = Workbook()
+    workbook.active.append(["Наименование", "Статус", "Место", "Дата", "Объём", "Выручка"])
+    workbook.active.append(["Новый объект", "active", "Уфа", None, 100, 150000])
+    buf = BytesIO()
+    workbook.save(buf)
+    files = {"file": ("QA 16.11.2026.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+    response = api.post("/api/v1/admin/import/grishanov/preview", files=files)
+    assert response.status_code == 200, response.text
+    assert response.json()["clients_created"] == 1
+    assert response.json()["sample"][1][0] == "Новый объект"
+    assert db.scalar(select(func.count()).select_from(Client)) == 1
+    assert db.scalar(select(func.count()).select_from(Project)) == 0
+    imported = api.post("/api/v1/admin/import/grishanov", files=files)
+    assert imported.status_code == 200, imported.text
+    assert db.scalar(select(func.count()).select_from(Client)) == 2

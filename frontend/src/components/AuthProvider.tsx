@@ -9,14 +9,38 @@ import { initials } from "@/lib/format";
 type AuthState = {
   user: AuthUser | null;
   loading: boolean;
+  photoUrl: string | null;
+  refreshPhoto: () => void;
   signOut: () => Promise<void>;
 };
 
-const AuthContext = createContext<AuthState>({ user: null, loading: true, signOut: async () => {} });
+const AuthContext = createContext<AuthState>({ user: null, loading: true, photoUrl: null, refreshPhoto: () => {}, signOut: async () => {} });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [photo, setPhoto] = useState<{ userId: string; url: string } | null>(null);
+  const [photoRevision, setPhotoRevision] = useState(0);
+  const refreshPhoto = useCallback(() => setPhotoRevision((revision) => revision + 1), []);
+
+  const userId = user?.id;
+  useEffect(() => {
+    if (!userId) {
+      setPhoto(null);
+      return;
+    }
+    const controller = new AbortController();
+    let url: string | null = null;
+    void api<Blob>("/auth/avatar", { raw: true, signal: controller.signal }).then((blob) => {
+      if (controller.signal.aborted) return;
+      if (blob.size) url = URL.createObjectURL(blob);
+      setPhoto(url ? { userId, url } : null);
+    }).catch(() => {});
+    return () => {
+      controller.abort();
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [userId, photoRevision]);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -56,7 +80,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.replace("/login");
   }, [router]);
 
-  const value = useMemo(() => ({ user, loading, signOut }), [user, loading, signOut]);
+  const photoUrl = photo?.userId === userId ? photo?.url ?? null : null;
+  const value = useMemo(() => ({ user, loading, signOut, photoUrl, refreshPhoto }), [user, loading, signOut, photoUrl, refreshPhoto]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
@@ -65,13 +90,14 @@ export function useAuth(): AuthState {
 }
 
 export function UserBadge({ user }: { user: AuthUser }) {
+  const { photoUrl } = useAuth();
   return (
     <div className="flex min-w-0 items-center gap-2.5">
       <span
-        className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[13px] font-semibold text-white"
+        className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full text-[13px] font-semibold text-white"
         style={{ background: user.avatar_color || "var(--primary)" }}
       >
-        {initials(user.full_name)}
+        {photoUrl ? <img src={photoUrl} alt="" className="h-full w-full object-cover" /> : initials(user.full_name)}
       </span>
       <span className="flex min-w-0 flex-col leading-tight">
         <span className="truncate text-[13.5px] font-semibold text-white">

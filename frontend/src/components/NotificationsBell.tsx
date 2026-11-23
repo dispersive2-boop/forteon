@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 /**
  * Колокольчик уведомлений в шапке.
@@ -17,6 +17,7 @@ import { dateTimeRu } from "@/lib/format";
 type NotificationItem = {
   id: string;
   task_id: string | null;
+  channel: string;
   title: string;
   body: string | null;
   scheduled_at: string;
@@ -28,6 +29,8 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [snoozing, setSnoozing] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState("");
 
   const refreshCount = useCallback(async () => {
     try {
@@ -43,13 +46,13 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
     try {
       const data = await api<NotificationItem[]>("/notifications?limit=20");
       setItems(data);
-      setUnread(data.filter((n) => !n.read_at).length);
+      void refreshCount();
     } catch {
       /* тихо: колокольчик не должен ронять шапку */
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshCount]);
 
   useEffect(() => {
     void refreshCount();
@@ -58,7 +61,11 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
       if (document.visibilityState === "visible") void refreshCount();
     };
     document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
+    window.addEventListener("forteon:notifications", refreshCount);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("forteon:notifications", refreshCount);
+    };
   }, [refreshCount]);
 
   useEffect(() => {
@@ -93,6 +100,27 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
     }
   }
 
+  async function snooze(id: string, tomorrow: boolean) {
+    const until = new Date(Date.now() + 60 * 60 * 1000);
+    if (tomorrow) {
+      until.setTime(Date.now());
+      until.setDate(until.getDate() + 1);
+      until.setHours(9, 0, 0, 0);
+    }
+    setSnoozing(id);
+    setFeedback("");
+    try {
+      await api(`/notifications/${id}/snooze`, { method: "POST", body: { until: until.toISOString() } });
+      setItems((current) => current.filter((item) => item.id !== id));
+      void refreshCount();
+      setFeedback(`Отложено до ${dateTimeRu(until.toISOString())}`);
+    } catch (err) {
+      setFeedback(err instanceof Error ? err.message : "Не удалось отложить уведомление");
+    } finally {
+      setSnoozing(null);
+    }
+  }
+
   const badge = unread > 0 ? unread : overdue && overdue > 0 ? overdue : 0;
 
   return (
@@ -123,7 +151,7 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
             onClick={() => setOpen(false)}
             aria-label="Закрыть уведомления"
           />
-          <div className="absolute right-0 top-[52px] z-50 w-[min(92vw,360px)] overflow-hidden rounded-card border border-[var(--border)] bg-surface shadow-lift">
+          <div className="fixed inset-x-3 top-[64px] z-50 sm:absolute sm:inset-x-auto sm:right-0 sm:top-[52px] sm:w-[360px] overflow-hidden rounded-card border border-[var(--border)] bg-surface shadow-lift">
             <div className="flex items-center justify-between border-b border-[var(--border)] px-3.5 py-2.5">
               <p className="text-[14px] font-semibold text-ink">Уведомления</p>
               {unread > 0 && (
@@ -137,14 +165,20 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
               )}
             </div>
 
-            <div className="max-h-[360px] overflow-y-auto">
+            {Boolean(overdue) && (
+              <Link href="/today" onClick={() => setOpen(false)}
+                className="block border-b border-[var(--border)] bg-[var(--danger-soft)] px-3.5 py-2.5 text-sm font-medium text-[var(--danger)] hover:underline">
+                Просроченные задачи: {overdue}
+              </Link>
+            )}
+            <div className="max-h-[min(360px,55dvh)] overflow-y-auto overscroll-contain">
               {loading && items.length === 0 ? (
                 <p className="px-3.5 py-6 text-center text-[13px] text-[var(--muted)]">
                   Загружаю…
                 </p>
               ) : items.length === 0 ? (
                 <p className="px-3.5 py-6 text-center text-[13px] text-[var(--muted)]">
-                  Пока тихо. Просрочки и напоминания появятся здесь.
+                  Новых уведомлений нет.
                 </p>
               ) : (
                 items.map((n) => (
@@ -171,6 +205,14 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
                         <p className="mt-1 text-[11.5px] text-[var(--muted)]">
                           {dateTimeRu(n.scheduled_at)}
                         </p>
+                        {n.channel === "in_app" && !n.read_at && (
+                          <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-primary">
+                            <button type="button" className="focus-ring py-1 hover:underline" disabled={Boolean(snoozing)}
+                              onClick={() => void snooze(n.id, false)}>Через час</button>
+                            <button type="button" className="focus-ring py-1 hover:underline" disabled={Boolean(snoozing)}
+                              onClick={() => void snooze(n.id, true)}>Завтра в 9:00</button>
+                          </div>
+                        )}
                       </div>
                       {!n.read_at && (
                         <button
@@ -187,8 +229,9 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
               )}
             </div>
 
+            {feedback && <p role="status" className="border-t border-[var(--border)] px-3.5 py-2 text-xs">{feedback}</p>}
             <Link
-              href="/today#notifications"
+              href="/today"
               onClick={() => setOpen(false)}
               className="focus-ring block border-t border-[var(--border)] px-3.5 py-2.5 text-center text-[13px] font-medium text-primary hover:bg-[var(--primary-soft)]"
             >

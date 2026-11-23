@@ -1,22 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { CreateTaskModal } from "@/components/CreateTaskModal";
+import { useParams, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-/*
- * ВАЖНО: здесь НЕ используется useSearchParams().
- * В Next.js 15 App Router этот хук требует Suspense-границы на уровне
- * страницы; без неё клиентский компонент зависает и страница не отдаётся
- * (замер: таймаут 90 с на /clients/{id}). Вкладку читаем из window.location
- * и пишем через history.replaceState — без ре-рендера роутера.
- */
-function readTabFromUrl(): Tab | null {
-  if (typeof window === "undefined") return null;
-  const value = new URLSearchParams(window.location.search).get("tab");
-  return TAB_KEYS.includes(value as Tab) ? (value as Tab) : null;
-}
-
+import { ClientFinanceEntry } from "@/components/ClientFinanceEntry";
+import { ProjectBudgetModal } from "@/components/ProjectBudgetModal";
 import { TaskChatBody, useTaskChat } from "@/components/TaskChat";
 import { VoiceNoteForm } from "@/components/VoiceNoteForm";
 import {
@@ -193,37 +183,69 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "history", label: "История" },
 ];
 
+function ClientLoading() {
+  return (
+    <div className="mx-auto max-w-[1240px] space-y-4" aria-busy="true">
+      <Skeleton className="h-24 rounded-card" />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-20 rounded-card" />)}
+      </div>
+      <Skeleton className="h-64 rounded-card" />
+    </div>
+  );
+}
+
 export default function ClientPage() {
-  const params = useParams<{ id: string }>();
-  const clientId = params.id;
+  return <Suspense fallback={<ClientLoading />}><ClientWorkspace /></Suspense>;
+}
+
+function ClientWorkspace() {
+  const { id: clientId } = useParams<{ id: string }>();
+  const selectedTab = useSearchParams().get("tab") as Tab | null;
+  const tab = selectedTab && TAB_KEYS.includes(selectedTab) ? selectedTab : "overview";
 
   const [client, setClient] = useState<ClientDetail | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [budgetProject, setBudgetProject] = useState<Project | null>();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [finance, setFinance] = useState<FinancialSummary | null>(null);
+  const [financeEntry, setFinanceEntry] = useState<"invoice" | "payment" | null>(null);
   const [documents, setDocuments] = useState<ClientDocument[]>([]);
   const [contracts, setContracts] = useState<ClientContract[]>([]);
   const [history, setHistory] = useState<ClientHistoryEvent[]>([]);
-  const [tab, setTabState] = useState<Tab>("overview");
-  const [loading, setLoading] = useState(true);
+  const [resolvedClientId, setResolvedClientId] = useState<string>();
+  const loadRevision = useRef(0);
+  const [createTask, setCreateTask] = useState(false);
+  const [copiedContact, setCopiedContact] = useState("");
+  const [historyFilter, setHistoryFilter] = useState("all");
 
-  // Пункт 43: вкладку восстанавливаем из URL после монтирования.
+  const setTab = useCallback((next: Tab) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", next);
+    url.hash = "";
+    window.history.replaceState(null, "", url);
+  }, []);
+
   useEffect(() => {
-    const fromUrl = readTabFromUrl();
-    if (fromUrl) setTabState(fromUrl);
-  }, [clientId]);
-
-  /** Пункт 43: вкладка в URL, смена не сбрасывает выбранного клиента. */
-  const setTab = useCallback(
-    (next: Tab) => {
-      setTabState(next);
-      const url = new URL(window.location.href);
-      url.searchParams.set("tab", next);
-      window.history.replaceState(null, "", url.toString());
-    },
-    [],
-  );
+    if (resolvedClientId !== clientId) return;
+    let frame: number;
+    function scrollToRecord() {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const id = window.location.hash.slice(1);
+        if (id) document.getElementById(id)?.scrollIntoView({ block: "center" });
+      });
+    }
+    scrollToRecord();
+    window.addEventListener("hashchange", scrollToRecord);
+    window.addEventListener("forteon:record-link", scrollToRecord);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("hashchange", scrollToRecord);
+      window.removeEventListener("forteon:record-link", scrollToRecord);
+    };
+  }, [tab, resolvedClientId, clientId]);
   const [error, setError] = useState<string | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const chat = useTaskChat();
@@ -238,18 +260,33 @@ export default function ClientPage() {
     () =>
       history.map((event) => ({
         at: event.created_at,
+        entity: event.entity,
         title:
           HISTORY_RU[`${event.entity}:${event.action}`] ??
           `${event.entity}: ${event.action}`,
         tone: historyTone(event.entity, event.action),
         amount: historyAmount(event.metadata),
         actor: event.actor,
+        moneyChanges: event.metadata?.money_changes as Record<string, { before: string | null; after: string | null }> | undefined,
       })),
     [history],
   );
 
+  const visibleHistory = historyItems.filter((item) =>
+    historyFilter === "all" || (historyFilter === "money" ? (MONEY_ENTITIES.has(item.entity) || Boolean(Object.keys(item.moneyChanges ?? {}).length)) : item.entity === historyFilter),
+  );
+
+  async function copyPhone(phone: string) {
+    try {
+      await navigator.clipboard.writeText(phone);
+      setCopiedContact("Номер скопирован");
+    } catch {
+      setCopiedContact("Не удалось скопировать номер");
+    }
+  }
+
   const load = useCallback(async () => {
-    setLoading(true);
+    const revision = ++loadRevision.current;
     try {
       const [detail, projectList, taskList, notePage, fin, docs, contractList, auditPage] =
         await Promise.all([
@@ -272,6 +309,7 @@ export default function ClientPage() {
           api<{ items: ClientHistoryEvent[] }>(`/clients/${clientId}/history?limit=100`)
             .catch(() => ({ items: [] })),
         ]);
+      if (revision !== loadRevision.current) return;
       setClient(detail);
       setProjects(projectList);
       setTasks(taskList.items);
@@ -282,14 +320,17 @@ export default function ClientPage() {
       setHistory(Array.isArray(auditPage?.items) ? auditPage.items : []);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось загрузить карточку клиента");
+      if (revision === loadRevision.current) {
+        setError(err instanceof Error ? err.message : "Не удалось загрузить карточку клиента");
+      }
     } finally {
-      setLoading(false);
+      if (revision === loadRevision.current) setResolvedClientId(clientId);
     }
   }, [clientId]);
 
   useEffect(() => {
     void load();
+    return () => { loadRevision.current += 1; };
   }, [load]);
 
   /**
@@ -330,30 +371,16 @@ export default function ClientPage() {
     await load();
   }
 
-  if (loading) {
-    return (
-      <div className="mx-auto max-w-[1240px] space-y-4">
-        <Skeleton className="h-24 rounded-card" />
-        <div className="grid gap-3 md:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-20 rounded-card" />
-          ))}
-        </div>
-        <Skeleton className="h-64 rounded-card" />
-      </div>
-    );
-  }
+  if (resolvedClientId !== clientId) return <ClientLoading />;
 
-  if (error || !client) {
+  if (!client || client.id !== clientId) {
     return (
       <Card>
         <EmptyState
           title="Клиент недоступен"
           description={error ?? "Клиент не найден или принадлежит другому менеджеру."}
           action={
-            <Link href="/clients">
-              <Button variant="subtle" size="sm">К списку клиентов</Button>
-            </Link>
+            <Link href="/clients" className="font-medium text-primary hover:underline">К списку клиентов</Link>
           }
         />
       </Card>
@@ -362,6 +389,9 @@ export default function ClientPage() {
 
   const openTasks = tasks.filter((t) => t.status === "open");
   const overdue = openTasks.filter((t) => isOverdue(t));
+  const nextStep = [...openTasks].filter((task) => task.actor !== "client").sort((a, b) =>
+    (a.due_date ?? "9999-12-31").localeCompare(b.due_date ?? "9999-12-31"),
+  )[0];
 
   return (
     <div className="mx-auto max-w-[1240px] space-y-4">
@@ -373,6 +403,7 @@ export default function ClientPage() {
         <span className="truncate text-ink">{client.name}</span>
       </nav>
 
+      {error && <p role="alert" className="rounded-control bg-[var(--danger-soft)] p-3 text-sm text-[var(--danger)]">{error}</p>}
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
@@ -394,14 +425,21 @@ export default function ClientPage() {
               <Badge tone="neutral">версия {client.version}</Badge>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setNoteOpen(true)}>
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/notes?client_id=${encodeURIComponent(clientId)}&voice=1`}
+              className="focus-ring inline-flex h-11 items-center rounded-control border border-[var(--border-strong)] px-4 text-sm font-medium text-ink hover:text-primary">
               Записать голосом
-            </Button>
-            <Button onClick={() => setNoteOpen(true)}>Добавить заметку</Button>
+            </Link>
+            <Button variant="outline" onClick={() => setNoteOpen(true)}>Добавить заметку</Button>
+            <Button onClick={() => setCreateTask(true)}>Поставить задачу</Button>
           </div>
         </div>
       </Card>
+
+      {createTask && (
+        <CreateTaskModal initialClient={client} initialDate="" onClose={() => setCreateTask(false)}
+          onCreated={() => { setCreateTask(false); setTab("tasks"); void load(); }} />
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard label="Проекты" value={client.projects_count} />
@@ -451,7 +489,21 @@ export default function ClientPage() {
         <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
           <div className="space-y-4">
             <Card>
-              <SectionTitle title="Что требует внимания" subtitle="Просрочки и задачи без срока" />
+              <SectionTitle title="Следующий шаг" />
+              {nextStep ? (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-ink">{nextStep.title}</p>
+                    <p className="text-xs text-[var(--muted)]">{nextStep.due_date ? dateRu(nextStep.due_date) : "Без срока"}</p>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => void chat.open(nextStep.id)}>Открыть задачу</Button>
+                </div>
+              ) : (
+                <Button size="sm" variant="outline" onClick={() => setCreateTask(true)}>Назначить следующий шаг</Button>
+              )}
+            </Card>
+            <Card>
+              <SectionTitle title="Что требует внимания" subtitle="Просрочки и задачи на уточнении" />
               {overdue.length || openTasks.filter((t) => t.needs_review).length ? (
                 <div className="-mx-1">
                   {[...overdue, ...openTasks.filter((t) => t.needs_review && !isOverdue(t))]
@@ -512,18 +564,27 @@ export default function ClientPage() {
               {client.contacts.length ? (
                 <ul className="space-y-2">
                   {client.contacts.map((contact) => (
-                    <li key={contact.id} className="rounded-control border border-[var(--border)] px-3 py-2">
+                    <li key={contact.id} id={`contact-${contact.id}`} className="rounded-control border border-[var(--border)] px-3 py-2 target:ring-2 target:ring-primary">
                       <p className="text-[13px] font-medium text-ink">{contact.name}</p>
                       <p className="text-[11.5px] text-[var(--muted)]">
-                        {contact.position || "—"}
-                        {contact.phone ? ` · ${contact.phone}` : ""}
+                        {[contact.position, contact.is_primary ? "Основной контакт" : null].filter(Boolean).join(" · ")}
                       </p>
+                      <div className="flex flex-wrap items-center gap-x-3 text-sm">
+                        {contact.phone && <>
+                          <a className="focus-ring inline-flex min-h-11 items-center text-primary"
+                            href={`tel:${contact.phone.replace(/[^+\d]/g, "")}`}>{contact.phone}</a>
+                          <Button variant="ghost" size="sm" type="button" onClick={() => void copyPhone(contact.phone!)}>Копировать номер</Button>
+                        </>}
+                        {contact.email && <a className="focus-ring inline-flex min-h-11 items-center break-all text-primary"
+                          href={`mailto:${contact.email}`}>{contact.email}</a>}
+                      </div>
                     </li>
                   ))}
                 </ul>
               ) : (
                 <p className="text-[13px] text-[var(--muted)]">Контакты не добавлены.</p>
               )}
+              <p role="status" className="text-xs text-[var(--muted)]">{copiedContact}</p>
             </Card>
 
             <Card>
@@ -644,15 +705,9 @@ export default function ClientPage() {
           {tasks.length ? (
             <div className="-mx-1">
               {tasks.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  onComplete={
-                    task.status === "open"
-                      ? complete
-                      : undefined
-                  }
-                />
+                <div key={task.id} id={`task-${task.id}`} className="rounded-control target:ring-2 target:ring-primary">
+                  <TaskRow task={task} onComplete={task.status === "open" ? complete : undefined} />
+                </div>
               ))}
               <p className="px-2.5 py-2 text-[12px] text-[var(--muted)]">
                 Нажмите на название задачи в планировщике или на «Сегодня», чтобы открыть чат.
@@ -678,22 +733,28 @@ export default function ClientPage() {
             </dl>
           </Card>
           <Card>
-            <SectionTitle title="Позиция по смыслу" subtitle="Разделение счёта и поступления" />
-            <ul className="space-y-2 text-[12.5px] leading-relaxed text-[var(--muted)]">
-              <li>• Плановый доход проекта не равен прибыли.</li>
-              <li>• Счёт и поступление — разные сущности; частичные платежи распределяются явно.</li>
-              <li>• Суммы подтверждаются ручным вводом, ИИ не делает выводов из предположений.</li>
-              <li>• Все корректировки финансов попадают в журнал аудита.</li>
-            </ul>
+            <SectionTitle title="Счета и поступления" />
+            <p className="mb-3 text-sm leading-relaxed text-[var(--muted)]">
+              {finance && finance.invoices === 0 ? "У клиента пока нет счетов. " : ""}
+              Чтобы оплата уменьшила долг, при записи выберите счёт.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" onClick={() => setFinanceEntry("invoice")}>Добавить счёт</Button>
+              <Button type="button" variant="outline" onClick={() => setFinanceEntry("payment")}>Записать оплату</Button>
+            </div>
           </Card>
         </div>
       )}
 
       {tab === "projects" && (
         <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold text-ink">Проекты клиента</h2>
+            <Button type="button" onClick={() => setBudgetProject(null)}>Добавить проект</Button>
+          </div>
           {projects.length ? (
             projects.map((project) => (
-              <Card key={project.id}>
+              <Card key={project.id} id={`project-${project.id}`} className="target:ring-2 target:ring-primary">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h3 className="text-[15px] font-semibold text-ink">{project.name}</h3>
@@ -702,16 +763,19 @@ export default function ClientPage() {
                       {project.stage_group ? ` · ${project.stage_group}` : ""}
                     </p>
                   </div>
-                  <StatusBadge status={project.status} />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={project.status} />
+                    <Button type="button" size="sm" variant="outline" onClick={() => setBudgetProject(project)}>Изменить суммы</Button>
+                  </div>
                 </div>
                 <dl className="mt-3 grid gap-2 sm:grid-cols-2">
                   <div className="min-w-0 rounded-control border border-[var(--border)] bg-canvas px-3 py-2.5">
                     <dt className="text-[13px] text-[var(--muted)]">Плановый доход</dt>
-                    <dd className="tabular mt-0.5 text-[15px] font-semibold text-ink">{money(project.planned_revenue)}</dd>
+                    <dd className="tabular mt-0.5 text-[15px] font-semibold text-ink">{project.planned_revenue == null ? "Не указан" : money(project.planned_revenue)}</dd>
                   </div>
                   <div className="min-w-0 rounded-control border border-[var(--border)] bg-canvas px-3 py-2.5">
                     <dt className="text-[13px] text-[var(--muted)]">Ожидаемая прибыль</dt>
-                    <dd className="tabular mt-0.5 text-[15px] font-semibold text-ink">{money(project.expected_profit)}</dd>
+                    <dd className="tabular mt-0.5 text-[15px] font-semibold text-ink">{project.expected_profit == null ? "Нужны доход и оценка затрат" : money(project.expected_profit)}</dd>
                   </div>
                 </dl>
                 <div className="mt-3 grid gap-3 md:grid-cols-3">
@@ -736,7 +800,7 @@ export default function ClientPage() {
             ))
           ) : (
             <Card>
-              <EmptyState title="Проектов нет" description="Добавьте проект клиента через API или импорт." />
+              <EmptyState title="Проектов нет" description="Добавьте проект и укажите доход и затраты, когда они известны." />
             </Card>
           )}
 
@@ -746,7 +810,7 @@ export default function ClientPage() {
               <SectionTitle title="Договоры" subtitle="Суммы договоров не равны оплатам" />
               <div className="divide-y divide-[var(--border)]">
                 {contracts.map((contract) => (
-                  <div key={contract.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                  <div key={contract.id} id={`contract-${contract.id}`} className="flex flex-wrap items-center justify-between gap-2 py-2 target:ring-2 target:ring-primary">
                     <div className="min-w-0">
                       <p className="truncate text-[13.5px] font-medium text-ink">
                         {contract.number ? `Договор №${contract.number}` : "Без номера"}
@@ -787,7 +851,7 @@ export default function ClientPage() {
           {documents.length ? (
             <div className="divide-y divide-[var(--border)]">
               {documents.map((doc) => (
-                <div key={doc.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 hover:bg-[#f8fafd]">
+                <div key={doc.id} id={`document-${doc.id}`} className="flex flex-wrap items-center gap-3 px-4 py-2.5 target:ring-2 target:ring-primary">
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[var(--primary-soft)] text-primary">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
                       <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
@@ -833,9 +897,17 @@ export default function ClientPage() {
             title="История"
             subtitle="Журнал действий по клиенту: счета и оплаты, задачи, изменения карточки"
           />
-          {historyItems.length ? (
+          <Field label="События">
+            <select className={inputClass} value={historyFilter} onChange={(event) => setHistoryFilter(event.target.value)}>
+              <option value="all">Все</option>
+              <option value="task">Задачи</option>
+              <option value="money">Счета и оплаты</option>
+              <option value="client">Карточка клиента</option>
+            </select>
+          </Field>
+          {visibleHistory.length ? (
             <ol className="relative space-y-3 border-l border-[var(--border)] pl-4">
-              {historyItems.map((item, index) => (
+              {visibleHistory.map((item, index) => (
                 <li key={`${item.at}-${index}`} className="relative">
                   <span
                     className={`absolute -left-[21px] top-1.5 h-2 w-2 rounded-full ${item.tone}`}
@@ -849,6 +921,11 @@ export default function ClientPage() {
                       </span>
                     ) : null}
                   </div>
+                  {Object.entries(item.moneyChanges ?? {}).map(([field, change]) => (
+                    <p key={field} className="text-sm text-[var(--muted)]">
+                      {field === "planned_revenue" ? "Плановая выручка" : "Ожидаемые затраты"} {money(change.before === null ? null : Number(change.before))} → {money(change.after === null ? null : Number(change.after))}
+                    </p>
+                  ))}
                   <p className="mt-0.5 text-[11.5px] text-[var(--muted)]">
                     {dateTimeRu(item.at)}
                     {item.actor ? ` · ${item.actor}` : ""}
@@ -858,13 +935,29 @@ export default function ClientPage() {
             </ol>
           ) : (
             <EmptyState
-              title="Событий пока нет"
+              title={historyFilter === "all" ? "Событий пока нет" : "По этому фильтру событий нет"}
               description="Здесь появятся выставленные счета, поступившие оплаты, зачёты и изменения по задачам."
             />
           )}
         </Card>
       )}
 
+      {financeEntry && (
+        <ClientFinanceEntry clientId={clientId} kind={financeEntry} onClose={() => setFinanceEntry(null)}
+          onSaved={() => { setFinanceEntry(null); void load(); }}
+        />
+      )}
+      {budgetProject !== undefined && (
+        <ProjectBudgetModal clientId={clientId} project={budgetProject} onClose={() => setBudgetProject(undefined)}
+          onSaved={(project) => {
+            setProjects((current) => current.some((item) => item.id === project.id)
+              ? current.map((item) => item.id === project.id ? project : item)
+              : [...current, project]);
+            setBudgetProject(undefined);
+            void load();
+          }}
+        />
+      )}
       <Modal
         open={Boolean(chat.taskId)}
         title={chat.chat?.task.title ?? "Задача"}

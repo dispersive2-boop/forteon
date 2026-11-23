@@ -96,7 +96,7 @@ function daysInMonth(year: number, month: number): number {
 /** Время из due_at (в БД хранится наивный UTC). */
 function timeOf(iso: string | null): string | null {
   if (!iso) return null;
-  const stamp = iso.endsWith("Z") ? iso : `${iso}Z`;
+  const stamp = /(?:Z|[+-]\d{2}:\d{2})$/i.test(iso) ? iso : `${iso}Z`;
   const date = new Date(stamp);
   if (Number.isNaN(date.getTime())) return null;
   return date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
@@ -199,11 +199,17 @@ export default function PlannerPage() {
 
   /* ------------------------------------------------------------- данные */
   const load = useCallback(async () => {
-    setLoading(true);
     try {
-      // status=all: нужны и закрытые (п.72), и просрочка, и «без даты»
-      const data = await api<{ items: Task[] }>("/tasks?status=all&limit=500");
-      setTasks(data.items);
+      const all = new Map<string, Task>();
+      const limit = 500;
+      for (let offset = 0; ; offset += limit) {
+        const page = await api<{ items: Task[]; total: number }>(
+          `/tasks?status=all&limit=${limit}&offset=${offset}`,
+        );
+        for (const task of page.items) all.set(task.id, task);
+        if (page.items.length < limit || offset + page.items.length >= page.total) break;
+      }
+      setTasks(Array.from(all.values()));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось загрузить задачи");
@@ -235,12 +241,18 @@ export default function PlannerPage() {
     };
   }, []);
 
+  function updateTaskInList(updated: Task) {
+    setTasks((current) => current.map((task) => task.id === updated.id
+      ? { ...updated, client_name: updated.client_name ?? task.client_name }
+      : task));
+    setError(null);
+  }
+
   /* ------------------------------------------------------------ действия */
   async function complete(taskId: string) {
     setBusy(taskId);
     try {
-      await api(`/tasks/${taskId}/complete`, { method: "POST", body: { result_note: null } });
-      await load();
+      updateTaskInList(await api<Task>(`/tasks/${taskId}/complete`, { method: "POST", body: { result_note: null } }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось закрыть задачу");
     } finally {
@@ -251,8 +263,7 @@ export default function PlannerPage() {
   async function reopen(taskId: string) {
     setBusy(taskId);
     try {
-      await api(`/tasks/${taskId}/reopen`, { method: "POST", body: {} });
-      await load();
+      updateTaskInList(await api<Task>(`/tasks/${taskId}/reopen`, { method: "POST", body: {} }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось вернуть задачу");
     } finally {
@@ -331,8 +342,7 @@ export default function PlannerPage() {
         if (extra?.title) body.title = extra.title;
         if (extra?.due_date) body.due_date = extra.due_date;
       }
-      await api(`/tasks/${taskId}/review`, { method: "POST", body });
-      await load();
+      updateTaskInList(await api<Task>(`/tasks/${taskId}/review`, { method: "POST", body }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось применить решение по задаче");
     } finally {
@@ -391,23 +401,23 @@ export default function PlannerPage() {
   }
 
   /**
-   * п.8 «30 идей»: поставить задачу без срока на дату одним нажатием.
+   * п.8 «30 идей»: задачу без срока ставим на дату одним нажатием.
    *
-   * Отдельный путь, а не openReschedule + saveReschedule: менеджер уже
-   * принял решение («это на завтра»), и лишний диалог только мешает.
-   * Ошибка не теряется — показываем её в общем баннере страницы.
+   * Обновляем строку в списке локально (updateTaskInList), а не перечитываем
+   * весь план: кнопку жмут в списке из сотни задач, и полная перезагрузка
+   * сбрасывала бы прокрутку и раскрытые группы.
    */
-  async function quickSetDate(task: Task, iso: string) {
-    setBusy(task.id);
+  async function quickSchedule(taskId: string, days: number) {
+    setBusy(taskId);
     setError(null);
     try {
-      await api(`/tasks/${task.id}/reschedule`, {
+      const updated = await api<Task>(`/tasks/${taskId}/reschedule`, {
         method: "POST",
-        body: { due_date: iso, due_at: null },
+        body: { due_date: toISO(addDays(new Date(), days)) },
       });
-      await load();
+      updateTaskInList(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось поставить срок");
+      setError(err instanceof Error ? err.message : "Не удалось назначить срок");
     } finally {
       setBusy(null);
     }
@@ -417,12 +427,12 @@ export default function PlannerPage() {
     if (!reschedule || !newDate) return;
     setSavingDate(true);
     try {
-      await api(`/tasks/${reschedule.id}/reschedule`, {
+      const updated = await api<Task>(`/tasks/${reschedule.id}/reschedule`, {
         method: "POST",
         body: { due_date: newDate, due_at: null },
       });
+      updateTaskInList(updated);
       setReschedule(null);
-      await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось перенести задачу");
     } finally {
@@ -495,6 +505,11 @@ export default function PlannerPage() {
   const openInPeriod = periodTasks.filter((t) => t.status === "open").length;
   const doneInPeriod = periodTasks.filter((t) => t.status === "done").length;
 
+  const nextScheduled = filtered.reduce<string | null>((next, task) => {
+    const date = task.due_date;
+    return date && date > range.to && (!next || date < next) ? date : next;
+  }, null);
+
   const activeFilters =
     (typeFilter !== "all" ? 1 : 0) +
     (priorityFilter !== "all" ? 1 : 0) +
@@ -535,6 +550,15 @@ export default function PlannerPage() {
           Новая задача
         </Button>
       </header>
+
+      <details className="mb-3 rounded-control border border-[var(--border)] bg-surface px-3 py-2 text-sm text-[var(--muted)]">
+        <summary className="focus-ring cursor-pointer font-medium text-ink">Как задачи попадают в планировщик</summary>
+        <div className="mt-2 space-y-1.5 leading-relaxed">
+          <p>Задачу можно создать вручную или получить из заметки. «Отправить смету завтра» появится в календаре, «Проверить документы» — в списке без срока.</p>
+          <p>«Ждём оплату от клиента» — задача контроля. «Уже отправил смету» остаётся в истории. Если из заметки неясно, выполнено ли действие, оно попадёт в «Уточнить».</p>
+          <Link href="/notes" className="inline-block font-medium text-primary hover:underline">Открыть заметки</Link>
+        </div>
+      </details>
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-card border border-[var(--border)] bg-surface p-2 sm:p-3">
         <div role="group" aria-label="Вид планировщика" className="flex rounded-control border border-[var(--border-strong)] bg-surface p-0.5">
@@ -705,6 +729,28 @@ export default function PlannerPage() {
         </div>
       ) : (
         <div className="space-y-4">
+          {view !== "day" && undated.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-control border border-[var(--border)] bg-surface px-3 py-2">
+              <span className="text-sm font-medium text-ink">Без срока: {undated.length}</span>
+              <Button variant="outline" size="sm" onClick={() => {
+                setAnchor(today);
+                setView("day");
+              }}>Открыть список без срока</Button>
+            </div>
+          )}
+          {!error && periodTasks.length === 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-control border border-[var(--border)] bg-surface px-3 py-2 text-sm">
+              <p className="text-[var(--muted)]">{activeFilters ? "Нет задач по выбранным фильтрам за этот период." : "На этот период задач с датой нет."}</p>
+              {activeFilters > 0 ? (
+                <Button variant="outline" size="sm" onClick={resetFilters}>Сбросить фильтры</Button>
+              ) : nextScheduled ? (
+                <Button variant="outline" size="sm" onClick={() => { setAnchor(nextScheduled); setView("day"); }}>
+                  Ближайшая задача ({dateRu(nextScheduled)})
+                </Button>
+              ) : null}
+            </div>
+          )}
+
           {/* Просрочка и «Уточнить» видны в любом режиме (п.74) */}
           {(overdue.length > 0 || reviewCount > 0) && (
             <div className="flex flex-wrap gap-2">
@@ -730,14 +776,18 @@ export default function PlannerPage() {
                 <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-card border border-[#f1dfae] bg-[var(--warning-soft)] px-3 py-2">
                   <Badge tone="warning">{reviewCount}</Badge>
                   <span className="min-w-0 flex-1 text-[13px] leading-snug text-[#8a6410]">
-                    без срока или требуют уточнения
+                    требуют уточнения
                   </span>
                   {/* Без этой кнопки задачи без срока были видны только в режиме
                       «День», и из «Недели» до них было не добраться: бейдж
                       показывал число, но не давал открыть список. */}
                   <button
                     type="button"
-                    onClick={() => setView("day")}
+                    onClick={() => {
+                      const task = filtered.find((item) => item.needs_review);
+                      setAnchor(task?.due_date ?? today);
+                      setView("day");
+                    }}
                     className="focus-ring inline-flex h-8 min-h-[44px] items-center rounded-lg border border-[#d9c07a] px-2.5 text-[12.5px] font-medium text-[#8a6410] transition-colors hover:bg-[#f6e8bd] sm:min-h-0"
                   >
                     Показать и задать срок
@@ -758,7 +808,7 @@ export default function PlannerPage() {
               onComplete={complete}
               onReopen={reopen}
               onReschedule={openReschedule}
-              onQuickDate={quickSetDate}
+              onQuickSchedule={quickSchedule}
               onDecide={decideReview}
               onOpenChat={openChat}
             />
@@ -1020,9 +1070,9 @@ function DayView({
   onComplete,
   onReopen,
   onReschedule,
+  onQuickSchedule,
   onDecide,
   onOpenChat,
-  onQuickDate,
 }: {
   date: string;
   tasks: Task[];
@@ -1033,10 +1083,9 @@ function DayView({
   onComplete: (id: string) => void;
   onReopen: (id: string) => void;
   onReschedule: (task: Task) => void;
+  onQuickSchedule: (taskId: string, days: number) => void;
   onDecide: (taskId: string, decision: "accept" | "edit" | "reject") => void;
   onOpenChat: (taskId: string) => void;
-  /** п.8: поставить задачу без срока на дату одним нажатием. */
-  onQuickDate: (task: Task, iso: string) => void;
 }) {
   const withTime = tasks.filter((t) => t.due_at);
   const withoutTime = tasks.filter((t) => !t.due_at);
@@ -1097,7 +1146,6 @@ function DayView({
                   onReschedule={() => onReschedule(task)}
                   onDecide={onDecide}
                   onOpenChat={() => onOpenChat(task.id)}
-                  onQuickDate={(iso) => onQuickDate(task, iso)}
                 />
               ))}
             </div>
@@ -1120,8 +1168,8 @@ function DayView({
           </div>
           <div className="space-y-0.5">
             {visibleUndated.map((task) => (
-              <TaskLine
-                key={task.id}
+              <div key={task.id} className="border-b border-[var(--border)] pb-2 last:border-0">
+                <TaskLine
                 task={task}
                 time={null}
                 busy={busy === task.id}
@@ -1132,8 +1180,19 @@ function DayView({
                 onReschedule={() => onReschedule(task)}
                 onDecide={onDecide}
                 onOpenChat={() => onOpenChat(task.id)}
-                onQuickDate={(iso) => onQuickDate(task, iso)}
-              />
+                />
+                <div className="ml-9 flex flex-wrap gap-1">
+                  <Button size="sm" variant="ghost" disabled={Boolean(busy)} onClick={() => onQuickSchedule(task.id, 0)}>
+                    На сегодня
+                  </Button>
+                  <Button size="sm" variant="ghost" disabled={Boolean(busy)} onClick={() => onQuickSchedule(task.id, 1)}>
+                    На завтра
+                  </Button>
+                  <Button size="sm" variant="ghost" disabled={Boolean(busy)} onClick={() => onQuickSchedule(task.id, 7)}>
+                    Через неделю
+                  </Button>
+                </div>
+              </div>
             ))}
           </div>
           {undated.length > UNDATED_PREVIEW && (
@@ -1451,7 +1510,6 @@ function TaskLine({
   onReschedule,
   onDecide,
   onOpenChat,
-  onQuickDate,
 }: {
   task: Task;
   time: string | null;
@@ -1463,23 +1521,9 @@ function TaskLine({
   onReschedule: () => void;
   onDecide: (taskId: string, decision: "accept" | "edit" | "reject") => void;
   onOpenChat: () => void;
-  /**
-   * п.8 «30 идей»: задачу без срока можно поставить на дату одним нажатием.
-   * Раньше единственным путём был диалог «Перенести» — три шага ради
-   * одного решения, которое менеджер уже принял.
-   */
-  onQuickDate?: (iso: string) => void;
 }) {
   const done = task.status === "done";
   const overdue = !done && task.due_date ? task.due_date < todayISO() : false;
-  const undated = !done && !task.due_date;
-  const quickDates = undated && onQuickDate
-    ? [
-        { label: "Сегодня", iso: todayISO() },
-        { label: "Завтра", iso: toISO(addDays(new Date(), 1)) },
-        { label: "Через неделю", iso: toISO(addDays(new Date(), 7)) },
-      ]
-    : [];
 
   return (
     <div
@@ -1580,28 +1624,6 @@ function TaskLine({
           )}
           {task.needs_review && <ReviewChip reason={task.review_question ?? task.review_reason} />}
         </div>
-
-        {/*
-          п.8 «30 идей»: одна кнопка вместо диалога. Задача без срока — это
-          решение, которое менеджер ещё не принял; заставлять его открывать
-          «Перенести» ради «сегодня» значит терять эти решения.
-        */}
-        {quickDates.length > 0 && (
-          <div className="mt-1 flex flex-wrap items-center gap-1">
-            <span className="text-[11.5px] text-[var(--muted)]">поставить на</span>
-            {quickDates.map((option) => (
-              <button
-                key={option.label}
-                type="button"
-                onClick={() => onQuickDate?.(option.iso)}
-                disabled={busy}
-                className="focus-ring inline-flex h-7 items-center rounded-md border border-[var(--border)] px-2 text-[11.5px] font-medium text-ink transition-colors hover:border-primary hover:text-primary disabled:opacity-50"
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        )}
 
         {/* п.14: конкретный вопрос вместо безликого «Уточнить срок» */}
         {task.needs_review && task.review_question && (

@@ -18,7 +18,29 @@ import {
 } from "@/lib/prefs";
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  const { user, photoUrl, refreshPhoto } = useAuth();
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoMessage, setPhotoMessage] = useState<{ error: boolean; text: string } | null>(null);
+
+  async function updatePhoto(file?: File) {
+    if (photoBusy) return;
+    setPhotoBusy(true);
+    setPhotoMessage(null);
+    try {
+      if (file) {
+        if (file.size > 5 * 1024 * 1024) throw new Error("Фото должно быть не больше 5 МБ.");
+        const data = new FormData();
+        data.append("file", file);
+        await api("/auth/avatar", { method: "POST", body: data });
+      } else await api("/auth/avatar", { method: "DELETE" });
+      refreshPhoto();
+      setPhotoMessage({ error: false, text: file ? "Фото сохранено." : "Фото удалено." });
+    } catch (error) {
+      setPhotoMessage({ error: true, text: error instanceof Error ? error.message : "Не удалось обновить фото." });
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [passwords, setPasswords] = useState({ current: "", next: "", repeat: "" });
@@ -86,6 +108,20 @@ export default function SettingsPage() {
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <SectionTitle title="Профиль" subtitle="Данные учётной записи" />
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            {photoUrl && <img src={photoUrl} alt="Фото профиля" className="h-12 w-12 rounded-full object-cover" />}
+            <label className="focus-within:ring-2 focus-within:ring-primary inline-flex min-h-11 cursor-pointer items-center rounded-control border border-[var(--border-strong)] px-3 text-sm font-medium">
+              <input type="file" accept="image/jpeg,image/png,image/webp" disabled={photoBusy} className="sr-only"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void updatePhoto(file);
+                  event.target.value = "";
+                }} />
+              {photoUrl ? "Заменить фото" : "Добавить фото"}
+            </label>
+            {photoUrl && <Button type="button" size="sm" variant="ghost" disabled={photoBusy} onClick={() => void updatePhoto()}>Удалить фото</Button>}
+          </div>
+          {photoMessage && <p role={photoMessage.error ? "alert" : "status"} className="mb-3 text-sm text-[var(--muted)]">{photoMessage.text}</p>}
           <dl className="space-y-2 text-[13px]">
             <div className="flex justify-between">
               <dt className="text-[var(--muted)]">Имя</dt>

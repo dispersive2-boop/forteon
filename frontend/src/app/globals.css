@@ -189,26 +189,38 @@ html {
   scrollbar-gutter: stable;
 }
 
+@media (max-width: 767px) {
+  html:has(.forteon-mobile-nav) {
+    scroll-padding-top: 68px;
+    scroll-padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+}
+
 .focus-ring:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
-/* Скелетоны */
+/* Короткая загрузка проходит без вспышки заглушек. */
 .skeleton {
-  background: linear-gradient(90deg, #eef2f8 25%, #f7f9fc 37%, #eef2f8 63%);
-  background-size: 500px 100%;
-  animation: shimmer 1.4s linear infinite;
+  background: var(--border);
+  background: color-mix(in srgb, var(--surface) 48%, var(--border));
   border-radius: 8px;
 }
 
-@keyframes shimmer {
-  0% {
-    background-position: -500px 0;
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton {
+    animation: forteon-placeholder-in 150ms ease-out 120ms backwards;
   }
-  100% {
-    background-position: 500px 0;
-  }
+}
+
+@keyframes forteon-placeholder-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -322,4 +334,66 @@ html {
 
 [data-density="compact"] .gap-4 {
   gap: 0.75rem;
+}
+
+/* Знак и надпись используют один SVG, цвет надписи следует теме. */
+.forteon-brand {
+  display: inline-block;
+  flex: none;
+  width: 148px;
+  height: 40px;
+  background: linear-gradient(90deg, #397fff 0 25%, currentColor 25% 100%);
+  mask: url("/logo.svg") center / contain no-repeat;
+}
+
+.forteon-nav-icon svg {
+  transition: transform 140ms ease-out, color 140ms ease-out;
+}
+
+.forteon-nav-link:is(:hover, :focus-visible) .forteon-nav-icon svg {
+  transform: translateY(-2px) rotate(-5deg);
+}
+
+.forteon-nav-link:active .forteon-nav-icon svg {
+  transform: scale(.92);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .forteon-nav-link .forteon-nav-icon svg {
+    transform: none !important;
+  }
+}
+
+.sidebar-link-progress {
+  position: absolute;
+  right: 8px;
+  bottom: 3px;
+  left: 8px;
+  pointer-events: none;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0;
+  transform: scaleX(.28);
+  transform-origin: left;
+}
+
+.sidebar-link-progress.is-pending {
+  opacity: .55;
+  transform: scaleX(.8);
+  transition: opacity 140ms 110ms ease-out, transform 700ms 110ms ease-out;
+}
+
+.forteon-page-title {
+  animation: forteon-title-in 160ms ease-out;
+}
+
+@keyframes forteon-title-in {
+  from { opacity: .78; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-link-progress.is-pending { transform: none; }
+  .forteon-page-title { animation: none; }
 }

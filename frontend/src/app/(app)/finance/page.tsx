@@ -26,6 +26,7 @@ import {
   Skeleton,
   Stat,
   Tabs,
+  inputClass,
 } from "@/components/ui";
 import { api } from "@/lib/api";
 import { dateRu, money, statusLabel } from "@/lib/format";
@@ -77,7 +78,6 @@ export default function FinancePage() {
   const [onlyOverdue, setOnlyOverdue] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
       const payload = await api<Overview>("/finance/overview");
@@ -130,8 +130,8 @@ export default function FinancePage() {
             Финансы
           </h1>
           <p className="mt-1 text-[13px] text-[var(--muted)]">
-            Сводка по {data?.clients ?? 0} доступным клиентам. Суммы считаются по счетам и
-            распределённым оплатам, не по заметкам ИИ.
+            {data ? `Доступных клиентов: ${data.clients}. ` : ""}
+            Суммы по счетам и распределённым оплатам.
           </p>
         </div>
         <Link
@@ -142,28 +142,11 @@ export default function FinancePage() {
         </Link>
       </header>
 
-      {/* Пункт 80: четыре ключевых показателя сверху */}
-      <div className="flex flex-wrap gap-2">
-        {loading ? (
-          Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-[62px] flex-1 rounded-control sm:w-[150px] sm:flex-none" />
-          ))
-        ) : (
-          <>
-            <Stat label="Выставлено" value={money(data?.billed ?? 0)} />
-            <Stat label="Оплачено" value={money(data?.paid ?? 0)} tone="success" />
-            <Stat
-              label="Долг"
-              value={money(data?.debt ?? 0)}
-              tone={(data?.debt ?? 0) > 0 ? "danger" : "neutral"}
-            />
-            <Stat
-              label="Просрочено"
-              value={money(data?.overdue_amount ?? 0)}
-              tone={(data?.overdue_amount ?? 0) > 0 ? "danger" : "neutral"}
-            />
-          </>
-        )}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:max-w-[650px]" aria-busy={loading}>
+        <Stat label="Выставлено" value={money(data?.billed)} />
+        <Stat label="Оплачено" value={money(data?.paid)} tone="success" />
+        <Stat label="Долг" value={money(data?.debt)} tone={(data?.debt ?? 0) > 0 ? "danger" : "neutral"} />
+        <Stat label="Просрочено" value={money(data?.overdue_amount)} tone={(data?.overdue_amount ?? 0) > 0 ? "danger" : "neutral"} />
       </div>
 
       {error && data && (
@@ -179,8 +162,8 @@ export default function FinancePage() {
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3">
           <Tabs
             items={[
-              { key: "invoices" as Tab, label: "Счета", count: data?.invoices ?? 0 },
-              { key: "payments" as Tab, label: "Платежи", count: payments.length },
+              { key: "invoices" as Tab, label: "Счета", count: data?.invoices },
+              { key: "payments" as Tab, label: "Платежи", count: data ? payments.length : undefined },
             ]}
             value={tab}
             onChange={setTab}
@@ -189,8 +172,10 @@ export default function FinancePage() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Клиент или номер счёта"
-              className="focus-ring h-9 w-[220px] rounded-lg border border-[var(--border-strong)] px-3 text-[13px] text-ink placeholder:text-[#6B7280]"
+              placeholder={tab === "invoices" ? "Клиент или номер счёта" : "Поиск по клиенту"}
+              aria-label={tab === "invoices" ? "Поиск по счетам" : "Поиск по оплатам"}
+              type="search"
+              className={`${inputClass} w-[min(220px,100%)] text-[13px] focus:placeholder:text-transparent sm:h-9`}
             />
             {tab === "invoices" && (
               <button
@@ -211,9 +196,14 @@ export default function FinancePage() {
         </div>
 
         {loading ? (
-          <div className="space-y-2 p-4">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-11 rounded-control" />
+          <div className="min-h-56 p-4" role="status">
+            <span className="sr-only">Загружаем финансы</span>
+            {Array.from({ length: 4 }, (_, index) => (
+              <div key={index} className="grid h-11 grid-cols-3 items-center gap-4 border-b border-[var(--border)] last:border-0" aria-hidden>
+                <Skeleton className="h-3 max-w-40" />
+                <Skeleton className="h-3 max-w-24" />
+                <Skeleton className="ml-auto h-3 w-14 sm:w-24" />
+              </div>
             ))}
           </div>
         ) : tab === "invoices" ? (

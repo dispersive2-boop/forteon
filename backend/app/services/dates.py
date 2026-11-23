@@ -77,8 +77,17 @@ def utc_naive(moment: datetime) -> datetime:
 DATE_FORMATS = ("%d.%m.%Y", "%d.%m.%y", "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d %m %Y")
 
 
-def parse_explicit_date(text: str) -> date | None:
-    """Ищет абсолютную дату в тексте."""
+def parse_explicit_date(text: str, reference: date | None = None) -> date | None:
+    """Ищет абсолютную дату. Год без явного указания берёт из даты заметки."""
+    reference = reference or date.today()
+
+    def with_optional_year(day: int, month: int, text_year: str | None) -> date:
+        if text_year is not None:
+            year = int(text_year) + (2000 if len(text_year) == 2 else 0)
+            return date(year, month, day)
+        result = date(reference.year, month, day)
+        return result if result >= reference else date(reference.year + 1, month, day)
+
     m = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", text)
     if m:
         try:
@@ -92,11 +101,8 @@ def parse_explicit_date(text: str) -> date | None:
         month = int(m.group(2))
         year_raw = m.group(3)
         if 1 <= day <= 31 and 1 <= month <= 12:
-            year = datetime.now().year
-            if year_raw:
-                year = int(year_raw) + (2000 if len(year_raw) == 2 else 0)
             try:
-                return date(year, month, day)
+                return with_optional_year(day, month, year_raw)
             except ValueError:
                 return None
 
@@ -104,9 +110,8 @@ def parse_explicit_date(text: str) -> date | None:
     if m and m.group(2) in MONTHS:
         day = int(m.group(1))
         month = MONTHS[m.group(2)]
-        year = int(m.group(3)) if m.group(3) else datetime.now().year
         try:
-            return date(year, month, day)
+            return with_optional_year(day, month, m[3])
         except ValueError:
             return None
     return None
@@ -182,21 +187,13 @@ def extract_due(text: str, note_moment: datetime, tz_name: str | None) -> tuple[
     if any(marker in low for marker in NO_DEADLINE):
         return None, "none"
 
-    explicit = parse_explicit_date(text)
-    if explicit is not None:
-        local_due = datetime(explicit.year, explicit.month, explicit.day, 10, 0, tzinfo=local_ref.tzinfo)
-        if local_due.date() < local_ref.date():
-            local_due = local_due.replace(year=local_due.year + 1)
-        return utc_naive(local_due), "explicit"
-
-    relative = parse_relative_date(text, local_ref)
-    if relative is not None:
-        hour = 10
-        m = re.search(r"\b([01]?\d|2[0-3]):([0-5]\d)\b", text)
-        if m:
-            hour = int(m.group(1))
-        local_due = datetime(relative.year, relative.month, relative.day, hour, 0, tzinfo=local_ref.tzinfo)
-        return utc_naive(local_due), "relative"
+    explicit = parse_explicit_date(text, local_ref.date())
+    day = explicit or parse_relative_date(text, local_ref)
+    if day is not None:
+        match = re.search(r"\b([01]?\d|2[0-3]):([0-5]\d)\b", text)
+        hour, minute = (int(match[1]), int(match[2])) if match else (10, 0)
+        local_due = datetime(day.year, day.month, day.day, hour, minute, tzinfo=local_ref.tzinfo)
+        return utc_naive(local_due), "explicit" if explicit else "relative"
 
     return None, "none"
 
@@ -211,7 +208,10 @@ def is_conditional(text: str) -> bool:
     return any(marker in low for marker in CONDITIONAL_MARKERS)
 
 
-def to_date(due_at: datetime | None) -> date | None:
+def to_date(due_at: datetime | None, tz_name: str | None = None) -> date | None:
     if due_at is None:
         return None
+    if tz_name:
+        instant = due_at if due_at.tzinfo else due_at.replace(tzinfo=timezone.utc)
+        return instant.astimezone(get_tz(tz_name)).date()
     return due_at.date()

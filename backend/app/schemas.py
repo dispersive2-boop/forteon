@@ -316,6 +316,7 @@ class TaskUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
     type: str | None = None
+    actor: Literal["us", "client"] | None = None
     priority: str | None = None
     due_at: datetime | None = None
     due_date: date | None = None
@@ -337,7 +338,8 @@ class TaskReviewDecision(BaseModel):
     decision: str = Field(description="accept | edit | reject")
     title: str | None = None
     due_date: date | None = None
-    actor: str | None = None
+    actor: Literal["us", "client"] | None = None
+    type: str | None = None
     comment: str | None = None
 
 
@@ -514,11 +516,13 @@ class InvoiceOut(ORMModel):
     amount: float
     currency: str
     status: str
+    remaining: float | None = None
 
 
 class PaymentCreate(BaseModel):
+    invoice_id: str | None = None
     paid_at: date | None = None
-    amount: float
+    amount: float = Field(gt=0, allow_inf_nan=False)
     currency: str = "RUB"
     reference: str | None = None
 
@@ -658,6 +662,10 @@ class ImportResult(BaseModel):
     problems_created: int
     skipped_rows: list[int]
     warnings: list[str] = Field(default_factory=list)
+
+
+class ImportPreview(ImportResult):
+    sample: list[list[str]]
 
 
 class DashboardOut(BaseModel):

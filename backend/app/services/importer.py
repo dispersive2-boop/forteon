@@ -6,17 +6,20 @@
 """
 from __future__ import annotations
 
+import hashlib
 import re
+from contextlib import closing
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import openpyxl
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import Client, ClientContact, Note, Project, Task, User, utcnow
+from ..models import Client, Note, Project, Task, User, utcnow
 from .ai import make_dedupe_key, normalize_title
+from .dates import extract_due, to_date
 
 COLUMNS = {
     "name": 1,
@@ -115,13 +118,15 @@ def import_xlsx(db: Session, path: str | Path, owner: User) -> ImportStats:
     if not path.exists():
         raise FileNotFoundError(f"Файл не найден: {path}")
 
-    wb = openpyxl.load_workbook(path, data_only=True)
-    ws = wb.worksheets[0]
+    with closing(openpyxl.load_workbook(path, read_only=True, data_only=True)) as wb:
+        rows = list(wb.worksheets[0].iter_rows(min_row=2, max_col=max(COLUMNS.values()), values_only=True))
     stats = ImportStats()
     section = "Импорт"
+    report_match = re.search(r"\d{1,2}\.\d{1,2}\.\d{4}", path.name)
+    report_date = _as_date(report_match[0]) if report_match else None
+    report_moment = datetime.combine(report_date, datetime.min.time(), tzinfo=timezone.utc) if report_date else None
 
-    for row_idx in range(2, ws.max_row + 1):
-        values = [ws.cell(row=row_idx, column=c).value for c in range(1, 13)]
+    for row_idx, values in enumerate(rows, start=2):
         is_section, section_title = _is_section_row(values)
         if is_section:
             section = section_title or section
@@ -147,7 +152,7 @@ def import_xlsx(db: Session, path: str | Path, owner: User) -> ImportStats:
         problems = _text(values[COLUMNS["problems"] - 1])
         comment = _text(values[COLUMNS["meeting_comment"] - 1])
 
-        if not any((status != "new", location, planned_revenue, done_before, done_last, next_sprint, problems)):
+        if not any(value is not None for value in values[1:]):
             stats.skipped_rows.append(row_idx)
             continue
 
@@ -171,14 +176,6 @@ def import_xlsx(db: Session, path: str | Path, owner: User) -> ImportStats:
             db.add(client)
             db.flush()
             stats.clients_created += 1
-            db.add(
-                ClientContact(
-                    client_id=client.id,
-                    name="Контакт из отчёта",
-                    position="Основной контакт",
-                    is_primary=False,
-                )
-            )
         else:
             stats.clients_reused += 1
             if location and not client.address:
@@ -243,12 +240,17 @@ def import_xlsx(db: Session, path: str | Path, owner: User) -> ImportStats:
             history_lines.append(f"Комментарий совещания: {comment}")
 
         if history_lines:
-            note_key = f"import:{path.name}:{row_idx}"
+            body = "\n".join(history_lines)
+            signature = hashlib.sha256(body.encode("utf-8")).hexdigest()[:32]
+            note_key = f"import:project:{project.id}:{signature}"
             exists = db.scalar(
-                select(Note).where(
+                select(Note.id).where(
                     Note.client_id == client.id,
-                    Note.idempotency_key == note_key,
-                )
+                    Note.project_id == project.id,
+                    Note.source_type == "import",
+                    Note.body == body,
+                    Note.deleted_at.is_(None),
+                ).limit(1)
             )
             if exists is None:
                 db.add(
@@ -256,7 +258,7 @@ def import_xlsx(db: Session, path: str | Path, owner: User) -> ImportStats:
                         client_id=client.id,
                         project_id=project.id,
                         author_id=owner.id,
-                        body="\n".join(history_lines),
+                        body=body,
                         source_type="import",
                         ai_status="imported",
                         idempotency_key=note_key,
@@ -277,18 +279,20 @@ def import_xlsx(db: Session, path: str | Path, owner: User) -> ImportStats:
             if key in existing_keys or normalize_title(item) in {""}:
                 continue
             existing_keys.add(key)
+            due_at, _ = extract_due(item, report_moment, owner.timezone) if report_moment else (None, None)
             db.add(
                 Task(
                     client_id=client.id,
                     project_id=project.id,
                     assignee_id=owner.id,
                     title=item[:480],
+                    due_at=due_at,
+                    due_date=to_date(due_at, owner.timezone),
                     type="other",
                     priority="high" if problems else "normal",
                     status="open",
                     origin="import",
-                    needs_review=True,
-                    review_reason="Срок из отчёта не определён однозначно",
+                    needs_review=False,
                     dedupe_key=key,
                     timezone=owner.timezone,
                 )
@@ -297,7 +301,6 @@ def import_xlsx(db: Session, path: str | Path, owner: User) -> ImportStats:
 
         # Проблемы → отдельные задачи-контроля
         if problems:
-            responsible_match = re.search(r"([А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+)", problems)
             for item in split_items(problems):
                 low = item.lower()
                 if not any(w in low for w in ("проблем", "риск", "просроч", "долг", "задолж",
@@ -313,12 +316,12 @@ def import_xlsx(db: Session, path: str | Path, owner: User) -> ImportStats:
                         project_id=project.id,
                         assignee_id=owner.id,
                         title=("Проблема: " + item)[:480],
-                        description=responsible_match.group(1) if responsible_match else None,
+                        source_quote=item,
                         type="other",
                         priority="critical",
                         status="open",
                         due_date=due_hint,
-                        due_at=datetime.combine(due_hint, datetime.min.time()) if due_hint else None,
+                        due_at=None,
                         origin="import",
                         needs_review=due_hint is None,
                         review_reason=None if due_hint else "Ответственный и срок требуют уточнения",

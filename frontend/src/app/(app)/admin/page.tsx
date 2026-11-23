@@ -37,6 +37,8 @@ type ImportResult = {
   tasks_created: number;
   problems_created: number;
   skipped_rows: number[];
+  warnings: string[];
+  sample?: string[][];
 };
 
 type AiSettings = {
@@ -69,6 +71,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [importFile, setImportFile] = useState<File>();
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [newUser, setNewUser] = useState({ email: "", full_name: "", password: "", role: "manager" });
   const [creating, setCreating] = useState(false);
@@ -168,16 +171,19 @@ export default function AdminPage() {
     }
   }
 
-  async function runImport() {
+  async function runImport(preview: boolean) {
     setImporting(true);
-    setImportResult(null);
+    setError("");
+    if (preview) setImportResult(null);
     try {
-      const result = await api<ImportResult>("/admin/import/grishanov", {
+      const body = new FormData();
+      if (importFile) body.append("file", importFile);
+      const result = await api<ImportResult>(`/admin/import/grishanov${preview ? "/preview" : ""}`, {
         method: "POST",
-        body: new FormData(),
+        body,
       });
       setImportResult(result);
-      await load();
+      if (!preview) await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Импорт не выполнен");
     } finally {
@@ -218,9 +224,6 @@ export default function AdminPage() {
             Учётные записи, передачи клиентов, импорт и журнал аудита
           </p>
         </div>
-        <Button variant="outline" onClick={() => void runImport()} loading={importing}>
-          Импортировать отчёт Гришанова
-        </Button>
       </header>
 
       {error && (
@@ -229,19 +232,55 @@ export default function AdminPage() {
         </div>
       )}
 
+      <Card>
+        <SectionTitle title="Импорт отчёта Гришанова" />
+        <div className="flex flex-wrap items-end gap-3">
+          <Field label="Файл XLSX">
+            <input type="file" accept=".xlsx" disabled={importing} className={inputClass}
+              onChange={(event) => { setImportFile(event.target.files?.[0]); setImportResult(null); }} />
+          </Field>
+          <Button variant="outline" onClick={() => void runImport(true)} loading={importing}>
+            Предпросмотр
+          </Button>
+        </div>
+        <p className="mt-2 text-xs text-[var(--muted)]">Если файл не выбран, ForteOn ищет отчёт на рабочем столе сервера.</p>
+      </Card>
+
       {importResult && (
         <Card className="border-[#c4e6d6] bg-[var(--success-soft)]">
-          <SectionTitle title="Импорт выполнен" subtitle={importResult.source} />
+          <SectionTitle title={importResult.sample ? "Предварительный результат импорта" : "Импорт выполнен"} subtitle={importResult.source} />
           <div className="grid grid-cols-2 gap-2 text-[12.5px] md:grid-cols-5">
-            <Stat label="Клиентов создано" value={importResult.clients_created} />
+            <Stat label={importResult.sample ? "Новые клиенты" : "Клиентов создано"} value={importResult.clients_created} />
             <Stat label="Клиентов найдено" value={importResult.clients_reused} />
             <Stat label="Проектов" value={importResult.projects_created} />
             <Stat label="Задач" value={importResult.tasks_created} />
             <Stat label="Проблем" value={importResult.problems_created} />
           </div>
-          <p className="mt-2 text-[11.5px] text-[var(--muted)]">
-            Импорт идемпотентен: повторный запуск не создаёт дублей клиентов и задач.
-          </p>
+          {importResult.skipped_rows.length > 0 && (
+            <p className="mt-2 text-sm">Пропущенные строки: {importResult.skipped_rows.join(", ")}</p>
+          )}
+          {importResult.warnings.length > 0 && (
+            <ul className="mt-2 space-y-1 text-sm">
+              {importResult.warnings.map((warning, index) => <li key={index}>{warning}</li>)}
+            </ul>
+          )}
+          {importResult.sample && (
+            <>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead>
+                    <tr>{importResult.sample[0]?.map((cell, index) => <th className="border border-[var(--border)] p-2" key={index}>{cell || `Колонка ${index + 1}`}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {importResult.sample.slice(1).map((row, rowIndex) => (
+                      <tr key={rowIndex}>{row.map((cell, index) => <td className="min-w-20 border border-[var(--border)] p-2 align-top" key={index}>{cell}</td>)}</tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Button className="mt-3" disabled={importing} onClick={() => void runImport(false)}>Подтвердить импорт</Button>
+            </>
+          )}
         </Card>
       )}
 

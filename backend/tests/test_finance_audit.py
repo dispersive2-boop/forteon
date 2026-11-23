@@ -223,3 +223,24 @@ def test_changes_are_recorded_for_sync(api: TestClient, db: Session) -> None:
     assert {"invoice", "payment", "allocation"} <= entities
     assert all(r.owner_id == USER_ID for r in rows), "владелец нужен для /sync/pull"
     assert any(r.action == "upsert" for r in rows)
+
+
+def test_payment_can_allocate_in_one_transaction(api: TestClient) -> None:
+    invoice = _create_invoice(api, 100.50)
+    path = f"/api/v1/clients/{CLIENT_ID}/payments"
+
+    refused = api.post(path, json={"invoice_id": invoice["id"], "amount": 100.51})
+    assert refused.status_code == 422
+    assert api.get(path).json() == []
+
+    accepted = api.post(path, json={"invoice_id": invoice["id"], "amount": 100.49})
+    assert accepted.status_code == 201
+    updated = api.get(f"/api/v1/clients/{CLIENT_ID}/invoices").json()[0]
+    assert updated["status"] == "issued"
+    assert updated["remaining"] == 0.01
+
+    last_cent = api.post(path, json={"invoice_id": invoice["id"], "amount": 0.01})
+    assert last_cent.status_code == 201
+    updated = api.get(f"/api/v1/clients/{CLIENT_ID}/invoices").json()[0]
+    assert updated["status"] == "paid"
+    assert updated["remaining"] == 0
