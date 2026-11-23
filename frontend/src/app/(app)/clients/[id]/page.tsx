@@ -2,21 +2,8 @@
 
 import Link from "next/link";
 import { CreateTaskModal } from "@/components/CreateTaskModal";
-import { useParams, usePathname } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
-
-/*
- * ВАЖНО: здесь НЕ используется useSearchParams().
- * В Next.js 15 App Router этот хук требует Suspense-границы на уровне
- * страницы; без неё клиентский компонент зависает и страница не отдаётся
- * (замер: таймаут 90 с на /clients/{id}). Вкладку читаем из window.location
- * и пишем через history.replaceState — без ре-рендера роутера.
- */
-function readTabFromUrl(): Tab | null {
-  if (typeof window === "undefined") return null;
-  const value = new URLSearchParams(window.location.search).get("tab");
-  return TAB_KEYS.includes(value as Tab) ? (value as Tab) : null;
-}
+import { useParams, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ClientFinanceEntry } from "@/components/ClientFinanceEntry";
 import { ProjectBudgetModal } from "@/components/ProjectBudgetModal";
@@ -196,10 +183,26 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "history", label: "История" },
 ];
 
+function ClientLoading() {
+  return (
+    <div className="mx-auto max-w-[1240px] space-y-4" aria-busy="true">
+      <Skeleton className="h-24 rounded-card" />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-20 rounded-card" />)}
+      </div>
+      <Skeleton className="h-64 rounded-card" />
+    </div>
+  );
+}
+
 export default function ClientPage() {
-  const params = useParams<{ id: string }>();
-  const clientId = params.id;
-  const pathname = usePathname();
+  return <Suspense fallback={<ClientLoading />}><ClientWorkspace /></Suspense>;
+}
+
+function ClientWorkspace() {
+  const { id: clientId } = useParams<{ id: string }>();
+  const selectedTab = useSearchParams().get("tab") as Tab | null;
+  const tab = selectedTab && TAB_KEYS.includes(selectedTab) ? selectedTab : "overview";
 
   const [client, setClient] = useState<ClientDetail | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -211,28 +214,38 @@ export default function ClientPage() {
   const [documents, setDocuments] = useState<ClientDocument[]>([]);
   const [contracts, setContracts] = useState<ClientContract[]>([]);
   const [history, setHistory] = useState<ClientHistoryEvent[]>([]);
-  const [tab, setTabState] = useState<Tab>("overview");
-  const [loading, setLoading] = useState(true);
+  const [resolvedClientId, setResolvedClientId] = useState<string>();
+  const loadRevision = useRef(0);
   const [createTask, setCreateTask] = useState(false);
   const [copiedContact, setCopiedContact] = useState("");
   const [historyFilter, setHistoryFilter] = useState("all");
 
-  // Пункт 43: вкладку восстанавливаем из URL после монтирования.
-  useEffect(() => {
-    const fromUrl = readTabFromUrl();
-    if (fromUrl) setTabState(fromUrl);
-  }, [clientId]);
+  const setTab = useCallback((next: Tab) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", next);
+    url.hash = "";
+    window.history.replaceState(null, "", url);
+  }, []);
 
-  /** Пункт 43: вкладка в URL, смена не сбрасывает выбранного клиента. */
-  const setTab = useCallback(
-    (next: Tab) => {
-      setTabState(next);
-      const url = new URL(window.location.href);
-      url.searchParams.set("tab", next);
-      window.history.replaceState(null, "", url.toString());
-    },
-    [],
-  );
+  useEffect(() => {
+    if (resolvedClientId !== clientId) return;
+    let frame: number;
+    function scrollToRecord() {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const id = window.location.hash.slice(1);
+        if (id) document.getElementById(id)?.scrollIntoView({ block: "center" });
+      });
+    }
+    scrollToRecord();
+    window.addEventListener("hashchange", scrollToRecord);
+    window.addEventListener("forteon:record-link", scrollToRecord);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("hashchange", scrollToRecord);
+      window.removeEventListener("forteon:record-link", scrollToRecord);
+    };
+  }, [tab, resolvedClientId, clientId]);
   const [error, setError] = useState<string | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteBody, setNoteBody] = useState("");
@@ -275,7 +288,7 @@ export default function ClientPage() {
   }
 
   const load = useCallback(async () => {
-    setLoading(true);
+    const revision = ++loadRevision.current;
     try {
       const [detail, projectList, taskList, notePage, fin, docs, contractList, auditPage] =
         await Promise.all([
@@ -298,6 +311,7 @@ export default function ClientPage() {
           api<{ items: ClientHistoryEvent[] }>(`/clients/${clientId}/history?limit=100`)
             .catch(() => ({ items: [] })),
         ]);
+      if (revision !== loadRevision.current) return;
       setClient(detail);
       setProjects(projectList);
       setTasks(taskList.items);
@@ -308,14 +322,17 @@ export default function ClientPage() {
       setHistory(Array.isArray(auditPage?.items) ? auditPage.items : []);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось загрузить карточку клиента");
+      if (revision === loadRevision.current) {
+        setError(err instanceof Error ? err.message : "Не удалось загрузить карточку клиента");
+      }
     } finally {
-      setLoading(false);
+      if (revision === loadRevision.current) setResolvedClientId(clientId);
     }
   }, [clientId]);
 
   useEffect(() => {
     void load();
+    return () => { loadRevision.current += 1; };
   }, [load]);
 
   async function addNote(event: React.FormEvent) {
@@ -343,19 +360,7 @@ export default function ClientPage() {
     await load();
   }
 
-  if (loading && client?.id !== clientId) {
-    return (
-      <div className="mx-auto max-w-[1240px] space-y-4">
-        <Skeleton className="h-24 rounded-card" />
-        <div className="grid gap-3 md:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-20 rounded-card" />
-          ))}
-        </div>
-        <Skeleton className="h-64 rounded-card" />
-      </div>
-    );
-  }
+  if (resolvedClientId !== clientId) return <ClientLoading />;
 
   if (!client || client.id !== clientId) {
     return (

@@ -15,7 +15,7 @@
  *      «Проекты» отдельным пунктом не выводим.
  */
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
@@ -75,6 +75,11 @@ function pageTitle(pathname: string): string {
   if (pathname.startsWith("/clients/")) return "Карточка клиента";
   if (PAGE_TITLES[base]) return PAGE_TITLES[base];
   return "ForteOn";
+}
+
+function SidebarLinkProgress() {
+  const { pending } = useLinkStatus();
+  return <span aria-hidden className={`sidebar-link-progress ${pending ? "is-pending" : ""}`} />;
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -183,7 +188,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 href={href}
                 onClick={() => setMobileOpen(false)}
                 aria-current={active ? "page" : undefined}
-                className={`forteon-nav-link focus-ring flex h-11 items-center gap-2.5 rounded-lg px-2.5 text-[14px] font-medium transition-colors ${
+                className={`forteon-nav-link focus-ring relative flex h-11 items-center gap-2.5 rounded-lg px-2.5 text-[14px] font-medium transition-colors ${
                   active
                     ? "bg-[#2563EB] text-white"
                     : "text-[#CBD5E1] hover:bg-white/8 hover:text-white"
@@ -194,6 +199,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <Icon size={20} />
                 </span>
                 <span className="min-w-0 flex-1 truncate">{label}</span>
+                <SidebarLinkProgress />
                 {showBadge && (
                   <span className="shrink-0 rounded-full bg-[#EF4444] px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white">
                     {overdue}
@@ -244,7 +250,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             а название дублировалось в топбаре и в теле (п.11).
             На мобильном показываем короткий контекст, на десктопе — пусто.
           */}
-          <span className="min-w-0 flex-1 truncate text-[17px] font-semibold tracking-[-0.02em] text-ink md:hidden">
+          <span key={pathname} className="forteon-page-title min-w-0 flex-1 truncate text-[17px] font-semibold tracking-[-0.02em] text-ink md:hidden">
             {pageTitle(pathname)}
           </span>
           <span className="hidden min-w-0 flex-1 md:block" aria-hidden />
