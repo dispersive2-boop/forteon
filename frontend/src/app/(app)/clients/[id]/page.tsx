@@ -571,13 +571,28 @@ function ClientWorkspace() {
                         {[contact.position, contact.is_primary ? "Основной контакт" : null].filter(Boolean).join(" · ")}
                       </p>
                       <div className="flex flex-wrap items-center gap-x-3 text-sm">
-                        {contact.phone && <>
-                          <a className="focus-ring inline-flex min-h-11 items-center text-primary"
+                        {contact.phone && (
+                          <a className="focus-ring inline-flex min-h-11 items-center tabular text-primary"
                             href={`tel:${contact.phone.replace(/[^+\d]/g, "")}`}>{contact.phone}</a>
-                          <Button variant="ghost" size="sm" type="button" onClick={() => void copyPhone(contact.phone!)}>Копировать номер</Button>
-                        </>}
-                        {contact.email && <a className="focus-ring inline-flex min-h-11 items-center break-all text-primary"
-                          href={`mailto:${contact.email}`}>{contact.email}</a>}
+                        )}
+                        {/* п.16: действия рядом с контактом, а не «найди номер и скопируй» */}
+                        {contact.phone && (
+                          <Button variant="ghost" size="sm" type="button" onClick={() => void copyPhone(contact.phone!)}>
+                            Копировать
+                          </Button>
+                        )}
+                        {contact.email && (
+                          <a className="focus-ring inline-flex min-h-11 items-center break-all text-primary"
+                            href={`mailto:${contact.email}`}>{contact.email}</a>
+                        )}
+                        {contact.email && (
+                          <a
+                            className="focus-ring inline-flex min-h-11 items-center text-[12.5px] font-medium text-primary hover:underline"
+                            href={`mailto:${contact.email}?subject=${encodeURIComponent(`ForteOn: ${client.name}`)}`}
+                          >
+                            Написать
+                          </a>
+                        )}
                       </div>
                     </li>
                   ))}
