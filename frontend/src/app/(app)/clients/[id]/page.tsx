@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { CreateTaskModal } from "@/components/CreateTaskModal";
+import { useParams, usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 /*
@@ -198,6 +199,7 @@ const TABS: { key: Tab; label: string }[] = [
 export default function ClientPage() {
   const params = useParams<{ id: string }>();
   const clientId = params.id;
+  const pathname = usePathname();
 
   const [client, setClient] = useState<ClientDetail | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -211,6 +213,9 @@ export default function ClientPage() {
   const [history, setHistory] = useState<ClientHistoryEvent[]>([]);
   const [tab, setTabState] = useState<Tab>("overview");
   const [loading, setLoading] = useState(true);
+  const [createTask, setCreateTask] = useState(false);
+  const [copiedContact, setCopiedContact] = useState("");
+  const [historyFilter, setHistoryFilter] = useState("all");
 
   // Пункт 43: вкладку восстанавливаем из URL после монтирования.
   useEffect(() => {
@@ -244,15 +249,30 @@ export default function ClientPage() {
     () =>
       history.map((event) => ({
         at: event.created_at,
+        entity: event.entity,
         title:
           HISTORY_RU[`${event.entity}:${event.action}`] ??
           `${event.entity}: ${event.action}`,
         tone: historyTone(event.entity, event.action),
         amount: historyAmount(event.metadata),
         actor: event.actor,
+        moneyChanges: event.metadata?.money_changes as Record<string, { before: string | null; after: string | null }> | undefined,
       })),
     [history],
   );
+
+  const visibleHistory = historyItems.filter((item) =>
+    historyFilter === "all" || (historyFilter === "money" ? (MONEY_ENTITIES.has(item.entity) || Boolean(Object.keys(item.moneyChanges ?? {}).length)) : item.entity === historyFilter),
+  );
+
+  async function copyPhone(phone: string) {
+    try {
+      await navigator.clipboard.writeText(phone);
+      setCopiedContact("Номер скопирован");
+    } catch {
+      setCopiedContact("Не удалось скопировать номер");
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -353,6 +373,9 @@ export default function ClientPage() {
 
   const openTasks = tasks.filter((t) => t.status === "open");
   const overdue = openTasks.filter((t) => isOverdue(t));
+  const nextStep = [...openTasks].filter((task) => task.actor !== "client").sort((a, b) =>
+    (a.due_date ?? "9999-12-31").localeCompare(b.due_date ?? "9999-12-31"),
+  )[0];
 
   return (
     <div className="mx-auto max-w-[1240px] space-y-4">
@@ -391,10 +414,16 @@ export default function ClientPage() {
               className="focus-ring inline-flex h-11 items-center rounded-control border border-[var(--border-strong)] px-4 text-sm font-medium text-ink hover:text-primary">
               Записать голосом
             </Link>
-            <Button onClick={() => setNoteOpen(true)}>Добавить заметку</Button>
+            <Button variant="outline" onClick={() => setNoteOpen(true)}>Добавить заметку</Button>
+            <Button onClick={() => setCreateTask(true)}>Поставить задачу</Button>
           </div>
         </div>
       </Card>
+
+      {createTask && (
+        <CreateTaskModal initialClient={client} initialDate="" onClose={() => setCreateTask(false)}
+          onCreated={() => { setCreateTask(false); setTab("tasks"); void load(); }} />
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard label="Проекты" value={client.projects_count} />
@@ -444,7 +473,21 @@ export default function ClientPage() {
         <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
           <div className="space-y-4">
             <Card>
-              <SectionTitle title="Что требует внимания" subtitle="Просрочки и задачи без срока" />
+              <SectionTitle title="Следующий шаг" />
+              {nextStep ? (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-ink">{nextStep.title}</p>
+                    <p className="text-xs text-[var(--muted)]">{nextStep.due_date ? dateRu(nextStep.due_date) : "Без срока"}</p>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => void chat.open(nextStep.id)}>Открыть задачу</Button>
+                </div>
+              ) : (
+                <Button size="sm" variant="outline" onClick={() => setCreateTask(true)}>Назначить следующий шаг</Button>
+              )}
+            </Card>
+            <Card>
+              <SectionTitle title="Что требует внимания" subtitle="Просрочки и задачи на уточнении" />
               {overdue.length || openTasks.filter((t) => t.needs_review).length ? (
                 <div className="-mx-1">
                   {[...overdue, ...openTasks.filter((t) => t.needs_review && !isOverdue(t))]
@@ -505,18 +548,27 @@ export default function ClientPage() {
               {client.contacts.length ? (
                 <ul className="space-y-2">
                   {client.contacts.map((contact) => (
-                    <li key={contact.id} className="rounded-control border border-[var(--border)] px-3 py-2">
+                    <li key={contact.id} id={`contact-${contact.id}`} className="rounded-control border border-[var(--border)] px-3 py-2 target:ring-2 target:ring-primary">
                       <p className="text-[13px] font-medium text-ink">{contact.name}</p>
                       <p className="text-[11.5px] text-[var(--muted)]">
-                        {contact.position || "—"}
-                        {contact.phone ? ` · ${contact.phone}` : ""}
+                        {[contact.position, contact.is_primary ? "Основной контакт" : null].filter(Boolean).join(" · ")}
                       </p>
+                      <div className="flex flex-wrap items-center gap-x-3 text-sm">
+                        {contact.phone && <>
+                          <a className="focus-ring inline-flex min-h-11 items-center text-primary"
+                            href={`tel:${contact.phone.replace(/[^+\d]/g, "")}`}>{contact.phone}</a>
+                          <Button variant="ghost" size="sm" type="button" onClick={() => void copyPhone(contact.phone!)}>Копировать номер</Button>
+                        </>}
+                        {contact.email && <a className="focus-ring inline-flex min-h-11 items-center break-all text-primary"
+                          href={`mailto:${contact.email}`}>{contact.email}</a>}
+                      </div>
                     </li>
                   ))}
                 </ul>
               ) : (
                 <p className="text-[13px] text-[var(--muted)]">Контакты не добавлены.</p>
               )}
+              <p role="status" className="text-xs text-[var(--muted)]">{copiedContact}</p>
             </Card>
 
             <Card>
@@ -637,15 +689,9 @@ export default function ClientPage() {
           {tasks.length ? (
             <div className="-mx-1">
               {tasks.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  onComplete={
-                    task.status === "open"
-                      ? complete
-                      : undefined
-                  }
-                />
+                <div key={task.id} id={`task-${task.id}`} className="rounded-control target:ring-2 target:ring-primary">
+                  <TaskRow task={task} onComplete={task.status === "open" ? complete : undefined} />
+                </div>
               ))}
               <p className="px-2.5 py-2 text-[12px] text-[var(--muted)]">
                 Нажмите на название задачи в планировщике или на «Сегодня», чтобы открыть чат.
@@ -692,7 +738,7 @@ export default function ClientPage() {
           </div>
           {projects.length ? (
             projects.map((project) => (
-              <Card key={project.id}>
+              <Card key={project.id} id={`project-${project.id}`} className="target:ring-2 target:ring-primary">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h3 className="text-[15px] font-semibold text-ink">{project.name}</h3>
@@ -748,7 +794,7 @@ export default function ClientPage() {
               <SectionTitle title="Договоры" subtitle="Суммы договоров не равны оплатам" />
               <div className="divide-y divide-[var(--border)]">
                 {contracts.map((contract) => (
-                  <div key={contract.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                  <div key={contract.id} id={`contract-${contract.id}`} className="flex flex-wrap items-center justify-between gap-2 py-2 target:ring-2 target:ring-primary">
                     <div className="min-w-0">
                       <p className="truncate text-[13.5px] font-medium text-ink">
                         {contract.number ? `Договор №${contract.number}` : "Без номера"}
@@ -789,7 +835,7 @@ export default function ClientPage() {
           {documents.length ? (
             <div className="divide-y divide-[var(--border)]">
               {documents.map((doc) => (
-                <div key={doc.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 hover:bg-[#f8fafd]">
+                <div key={doc.id} id={`document-${doc.id}`} className="flex flex-wrap items-center gap-3 px-4 py-2.5 target:ring-2 target:ring-primary">
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[var(--primary-soft)] text-primary">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
                       <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
@@ -835,9 +881,17 @@ export default function ClientPage() {
             title="История"
             subtitle="Журнал действий по клиенту: счета и оплаты, задачи, изменения карточки"
           />
-          {historyItems.length ? (
+          <Field label="События">
+            <select className={inputClass} value={historyFilter} onChange={(event) => setHistoryFilter(event.target.value)}>
+              <option value="all">Все</option>
+              <option value="task">Задачи</option>
+              <option value="money">Счета и оплаты</option>
+              <option value="client">Карточка клиента</option>
+            </select>
+          </Field>
+          {visibleHistory.length ? (
             <ol className="relative space-y-3 border-l border-[var(--border)] pl-4">
-              {historyItems.map((item, index) => (
+              {visibleHistory.map((item, index) => (
                 <li key={`${item.at}-${index}`} className="relative">
                   <span
                     className={`absolute -left-[21px] top-1.5 h-2 w-2 rounded-full ${item.tone}`}
@@ -851,6 +905,11 @@ export default function ClientPage() {
                       </span>
                     ) : null}
                   </div>
+                  {Object.entries(item.moneyChanges ?? {}).map(([field, change]) => (
+                    <p key={field} className="text-sm text-[var(--muted)]">
+                      {field === "planned_revenue" ? "Плановая выручка" : "Ожидаемые затраты"} {money(change.before === null ? null : Number(change.before))} → {money(change.after === null ? null : Number(change.after))}
+                    </p>
+                  ))}
                   <p className="mt-0.5 text-[11.5px] text-[var(--muted)]">
                     {dateTimeRu(item.at)}
                     {item.actor ? ` · ${item.actor}` : ""}
@@ -860,7 +919,7 @@ export default function ClientPage() {
             </ol>
           ) : (
             <EmptyState
-              title="Событий пока нет"
+              title={historyFilter === "all" ? "Событий пока нет" : "По этому фильтру событий нет"}
               description="Здесь появятся выставленные счета, поступившие оплаты, зачёты и изменения по задачам."
             />
           )}

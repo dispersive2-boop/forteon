@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 /**
  * Горячие клавиши и командная палитра (Ctrl+K).
@@ -13,16 +13,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { api, Task } from "@/lib/api";
-import { TASK_TYPE_LABELS } from "@/lib/format";
+import { api } from "@/lib/api";
 
 type PaletteItem = {
   id: string;
   label: string;
   hint?: string;
-  group: "nav" | "client" | "task";
+  group: "nav" | "record";
   href?: string;
   action?: () => void;
+};
+
+type WorkspaceHit = {
+  id: string;
+  label: string;
+  matched_field: string;
+  matched_value: string;
+  client_name: string;
+  href: string;
 };
 
 const NAV: { label: string; href: string }[] = [
@@ -56,8 +64,8 @@ export default function CommandPalette() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [results, setResults] = useState<{ query: string; hits: WorkspaceHit[]; error?: string }>();
+  const term = query.trim();
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -81,28 +89,21 @@ export default function CommandPalette() {
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
-  // Клиенты и открытые задачи грузим один раз при первом открытии,
-  // дальше фильтруем локально — палитра не должна ждать сеть на каждую букву.
   useEffect(() => {
-    if (!open || clients.length) return;
-    let cancelled = false;
-    (async () => {
+    if (!open || term.length < 2) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
       try {
-        const [c, t] = await Promise.all([
-          api<{ items: { id: string; name: string }[] }>("/clients/picker?limit=50"),
-          api<{ items: Task[] }>("/tasks?status=open&limit=100"),
-        ]);
-        if (cancelled) return;
-        setClients(c.items);
-        setTasks(t.items);
+        const data = await api<{ items: WorkspaceHit[] }>(`/workspace-search?q=${encodeURIComponent(term)}`, {
+          signal: controller.signal,
+        });
+        if (!controller.signal.aborted) setResults({ query: term, hits: data.items });
       } catch {
-        /* палитра без данных всё равно навигирует */
+        if (!controller.signal.aborted) setResults({ query: term, hits: [], error: "Поиск недоступен. Попробуйте ещё раз." });
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [open, clients.length]);
+    }, 220);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [open, term]);
 
   const items = useMemo<PaletteItem[]>(() => {
     const q = query.trim().toLowerCase();
@@ -114,33 +115,17 @@ export default function CommandPalette() {
       }
     }
 
-    if (q) {
-      for (const c of clients) {
-        if (c.name.toLowerCase().includes(q)) {
-          result.push({
-            id: `client:${c.id}`,
-            label: c.name,
-            hint: "клиент",
-            group: "client",
-            href: `/clients/${c.id}`,
-          });
-        }
-      }
-      for (const t of tasks) {
-        if (t.title.toLowerCase().includes(q) || (t.client_name ?? "").toLowerCase().includes(q)) {
-          result.push({
-            id: `task:${t.id}`,
-            label: t.title,
-            hint: t.client_name ?? TASK_TYPE_LABELS[t.type] ?? "задача",
-            group: "task",
-            href: `/planner?view=day&date=${t.due_date ?? ""}`,
-          });
-        }
+    if (results?.query === term) {
+      for (const hit of results.hits) {
+        result.push({
+          id: hit.id, label: hit.label, group: "record", href: hit.href,
+          hint: [hit.matched_field, hit.matched_value === hit.label ? null : hit.matched_value,
+            hit.client_name === hit.label ? null : hit.client_name].filter(Boolean).join(" · "),
+        });
       }
     }
-
-    return result.slice(0, 20);
-  }, [query, clients, tasks]);
+    return result;
+  }, [term, results]);
 
   useEffect(() => setActive(0), [query]);
 
@@ -148,7 +133,15 @@ export default function CommandPalette() {
     (item: PaletteItem | undefined) => {
       if (!item) return;
       setOpen(false);
-      if (item.href) router.push(item.href);
+      if (item.href) {
+        const url = new URL(item.href, window.location.origin);
+        if (item.group === "record" && url.pathname === window.location.pathname) {
+          window.history.pushState(null, "", item.href);
+          window.dispatchEvent(new Event("forteon:record-link"));
+        } else {
+          router.push(item.href, { scroll: !url.hash });
+        }
+      }
       item.action?.();
     },
     [router],
@@ -158,8 +151,7 @@ export default function CommandPalette() {
 
   const groups: { key: PaletteItem["group"]; label: string }[] = [
     { key: "nav", label: "Разделы" },
-    { key: "client", label: "Клиенты" },
-    { key: "task", label: "Задачи" },
+    { key: "record", label: "Записи CRM" },
   ];
 
   let index = -1;
@@ -198,7 +190,7 @@ export default function CommandPalette() {
             onKeyDown={(e) => {
               if (e.key === "ArrowDown") {
                 e.preventDefault();
-                setActive((v) => Math.min(v + 1, items.length - 1));
+                setActive((v) => Math.max(0, Math.min(v + 1, items.length - 1)));
               }
               if (e.key === "ArrowUp") {
                 e.preventDefault();
@@ -209,8 +201,8 @@ export default function CommandPalette() {
                 go(items[active]);
               }
             }}
-            placeholder="Куда идём? Клиент, задача, раздел…"
-            aria-label="Поиск по разделам, клиентам и задачам"
+            placeholder="Имя, телефон, номер договора…"
+            aria-label="Поиск по CRM"
             className="min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-[var(--muted)]"
           />
           <kbd className="shrink-0 rounded border border-[var(--border)] px-1.5 py-0.5 text-[11px] text-[var(--muted)]">
@@ -221,7 +213,8 @@ export default function CommandPalette() {
         <div className="max-h-[50vh] overflow-y-auto p-1.5">
           {items.length === 0 ? (
             <p className="px-3 py-6 text-center text-[13px] text-[var(--muted)]">
-              Ничего не нашлось. Попробуйте имя клиента или «заметки».
+              {term.length < 2 ? "Введите минимум два символа." : results?.query !== term
+                ? "Ищу…" : results.error ?? "Ничего не нашлось."}
             </p>
           ) : (
             groups.map((group) => {
@@ -249,7 +242,7 @@ export default function CommandPalette() {
                       >
                         <span className="min-w-0 flex-1 truncate">{item.label}</span>
                         {item.hint && (
-                          <span className="shrink-0 text-[11.5px] text-[var(--muted)]">
+                          <span title={item.hint} className="max-w-[47%] truncate text-[11.5px] text-[var(--muted)]">
                             {item.hint}
                           </span>
                         )}

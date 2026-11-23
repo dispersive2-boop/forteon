@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from openpyxl import load_workbook
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -15,13 +18,14 @@ from ..models import AuditLog, Client, ClientTransfer, Task, User, utcnow
 from ..schemas import (
     AISettingsIn,
     ImportResult,
+    ImportPreview,
     TransferRequest,
     UserCreate,
     UserOut,
     UserUpdate,
 )
 from ..security import hash_password
-from ..services.importer import import_xlsx
+from ..services.importer import COLUMNS, import_xlsx
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -198,68 +202,70 @@ def update_ai_settings(payload: AISettingsIn, db: Session = Depends(get_db),
     return {"status": "ok", "applied": payload.model_dump(exclude_none=True)}
 
 
+def _desktop_report() -> Path | None:
+    desktop = Path("C:/Users/Gamer/Desktop")
+    preferred = desktop / "Отчетная таблица Гришанов к совещанию 16.11.2026.xlsx"
+    return preferred if preferred.is_file() else next(iter(sorted(desktop.glob("*Гришанов*.xlsx"))), None)
+
+
 @router.post("/import/grishanov", response_model=ImportResult)
+@router.post("/import/grishanov/preview", response_model=ImportPreview)
 async def import_grishanov(
+    request: Request,
     file: UploadFile | None = File(default=None),
     default_path: bool = True,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    """Импорт отчётной таблицы. Если файл не передан — ищет на рабочем столе."""
-    source_name: str
-    target: Path
+    preview = request.url.path.endswith("/preview")
+    with TemporaryDirectory(prefix="forteon-import-") as directory:
+        if file is not None:
+            source_name = Path((file.filename or "table.xlsx").replace(chr(92), "/")).name
+            if Path(source_name).suffix.lower() != ".xlsx":
+                raise HTTPException(status_code=415, detail={"code": "invalid_file", "message": "Выберите файл XLSX"})
+            data = await file.read(settings.max_upload_bytes + 1)
+            if len(data) > settings.max_upload_bytes:
+                raise HTTPException(status_code=413, detail={"code": "file_too_large", "message": "Таблица превышает допустимый размер"})
+            target = Path(directory) / source_name
+            target.write_bytes(data)
+        else:
+            target = _desktop_report() if default_path else None
+            if target is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail={"code": "file_not_found", "message": "Отчёт на рабочем столе сервера не найден. Выберите файл XLSX."},
+                )
+            source_name = target.name
 
-    if file is not None:
-        target = settings.storage_dir / f"import_{utcnow().strftime('%Y%m%d%H%M%S')}_{file.filename}"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open("wb") as output:
-            while chunk := await file.read(1024 * 512):
-                output.write(chunk)
-        source_name = file.filename or target.name
-    else:
-        candidates = [
-            Path("C:/Users/Gamer/Desktop/Отчетная таблица Гришанов к совещанию 16.11.2026.xlsx"),
-            Path("C:/Users/Gamer/Desktop"),
-        ]
-        found: Path | None = None
-        for candidate in candidates:
-            if candidate.is_file() and candidate.suffix == ".xlsx":
-                found = candidate
-                break
-            if candidate.is_dir():
-                matches = sorted(candidate.glob("*Гришанов*.xlsx"))
-                if matches:
-                    found = matches[0]
-                    break
-        if found is None or not default_path:
+        try:
+            if preview:
+                workbook = load_workbook(target, read_only=True, data_only=True)
+                try:
+                    rows = [
+                        [str(value) if value is not None else "" for value in row]
+                        for row in workbook.worksheets[0].iter_rows(
+                            max_row=6, max_col=max(COLUMNS.values()), values_only=True,
+                        )
+                    ]
+                finally:
+                    workbook.close()
+                transaction = db.begin_nested()
+                try:
+                    stats = import_xlsx(db, target, admin)
+                finally:
+                    transaction.rollback()
+                return ImportPreview(source=source_name, **vars(stats), sample=rows)
+            stats = import_xlsx(db, target, admin)
+        except Exception:
+            db.rollback()
             raise HTTPException(
-                status_code=404,
-                detail={"code": "file_not_found", "message": "Файл отчёта не найден, передайте его в запросе"},
+                status_code=400,
+                detail={"code": "import_failed", "message": "Не удалось прочитать или обработать таблицу. Проверьте её формат."},
             )
-        target = found
-        source_name = found.name
-
-    try:
-        stats = import_xlsx(db, target, admin)
-    except Exception as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail={"code": "import_failed", "message": f"{type(exc).__name__}: {exc}"},
-        )
 
     audit(db, admin, "import", None, "grishanov", {"file": source_name})
     db.commit()
-    return ImportResult(
-        source=source_name,
-        clients_created=stats.clients_created,
-        clients_reused=stats.clients_reused,
-        projects_created=stats.projects_created,
-        tasks_created=stats.tasks_created,
-        problems_created=stats.problems_created,
-        skipped_rows=stats.skipped_rows,
-        warnings=stats.warnings,
-    )
+    return ImportResult(source=source_name, **vars(stats))
 
 
 @router.get("/stats")

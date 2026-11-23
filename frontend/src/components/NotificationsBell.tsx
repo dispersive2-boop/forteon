@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 /**
  * Колокольчик уведомлений в шапке.
@@ -17,6 +17,7 @@ import { dateTimeRu } from "@/lib/format";
 type NotificationItem = {
   id: string;
   task_id: string | null;
+  channel: string;
   title: string;
   body: string | null;
   scheduled_at: string;
@@ -28,6 +29,8 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [snoozing, setSnoozing] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState("");
 
   const refreshCount = useCallback(async () => {
     try {
@@ -94,6 +97,27 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
       setUnread((v) => Math.max(0, v - 1));
     } catch {
       /* не критично */
+    }
+  }
+
+  async function snooze(id: string, tomorrow: boolean) {
+    const until = new Date(Date.now() + 60 * 60 * 1000);
+    if (tomorrow) {
+      until.setTime(Date.now());
+      until.setDate(until.getDate() + 1);
+      until.setHours(9, 0, 0, 0);
+    }
+    setSnoozing(id);
+    setFeedback("");
+    try {
+      await api(`/notifications/${id}/snooze`, { method: "POST", body: { until: until.toISOString() } });
+      setItems((current) => current.filter((item) => item.id !== id));
+      void refreshCount();
+      setFeedback(`Отложено до ${dateTimeRu(until.toISOString())}`);
+    } catch (err) {
+      setFeedback(err instanceof Error ? err.message : "Не удалось отложить уведомление");
+    } finally {
+      setSnoozing(null);
     }
   }
 
@@ -181,6 +205,14 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
                         <p className="mt-1 text-[11.5px] text-[var(--muted)]">
                           {dateTimeRu(n.scheduled_at)}
                         </p>
+                        {n.channel === "in_app" && !n.read_at && (
+                          <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-primary">
+                            <button type="button" className="focus-ring py-1 hover:underline" disabled={Boolean(snoozing)}
+                              onClick={() => void snooze(n.id, false)}>Через час</button>
+                            <button type="button" className="focus-ring py-1 hover:underline" disabled={Boolean(snoozing)}
+                              onClick={() => void snooze(n.id, true)}>Завтра в 9:00</button>
+                          </div>
+                        )}
                       </div>
                       {!n.read_at && (
                         <button
@@ -197,6 +229,7 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
               )}
             </div>
 
+            {feedback && <p role="status" className="border-t border-[var(--border)] px-3.5 py-2 text-xs">{feedback}</p>}
             <Link
               href="/today"
               onClick={() => setOpen(false)}

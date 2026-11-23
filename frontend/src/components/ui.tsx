@@ -96,16 +96,19 @@ export function ButtonLink({
 }
 
 export function Card({
+  id,
   children,
   className = "",
   padded = true,
 }: {
+  id?: string;
   children: React.ReactNode;
   className?: string;
   padded?: boolean;
 }) {
   return (
     <section
+      id={id}
       className={`rounded-card border border-[var(--border)] bg-surface shadow-soft ${padded ? "p-4" : ""} ${className}`}
     >
       {children}

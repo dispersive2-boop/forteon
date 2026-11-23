@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useAuth } from "@/components/AuthProvider";
 
 import {
   Badge,
@@ -20,6 +21,8 @@ import { dateRu } from "@/lib/format";
 
 const PAGE_SIZE = 100;
 
+type ClientView = { name: string; query: string; status: string };
+
 const STATUS_OPTIONS = [
   { value: "", label: "Все статусы" },
   { value: "active", label: "Активные" },
@@ -27,6 +30,12 @@ const STATUS_OPTIONS = [
 ];
 
 export default function ClientsPage() {
+  const { user } = useAuth();
+  const viewKey = user ? `forteon.client-views.${user.id}` : null;
+  const [views, setViews] = useState<ClientView[]>([]);
+  const [viewName, setViewName] = useState("");
+  const [viewOpen, setViewOpen] = useState(false);
+  const [viewError, setViewError] = useState("");
   const [clients, setClients] = useState<Client[]>([]);
   const [total, setTotal] = useState(0);
   const [query, setQuery] = useState("");
@@ -71,6 +80,30 @@ export default function ClientsPage() {
       controller.abort();
     };
   }, [query, status, offset, revision]);
+
+  useEffect(() => {
+    setViews([]);
+    if (!viewKey) return;
+    try {
+      const stored = JSON.parse(localStorage.getItem(viewKey) ?? "[]");
+      if (Array.isArray(stored)) setViews(stored);
+    } catch {
+      setViewError("Не удалось прочитать сохранённые фильтры.");
+    }
+  }, [viewKey]);
+
+  function writeViews(next: ClientView[]) {
+    if (!viewKey) return false;
+    try {
+      localStorage.setItem(viewKey, JSON.stringify(next));
+      setViews(next);
+      setViewError("");
+      return true;
+    } catch {
+      setViewError("Не удалось сохранить фильтры в этом браузере.");
+      return false;
+    }
+  }
 
   async function createClient(event: React.FormEvent) {
     event.preventDefault();
@@ -150,6 +183,39 @@ export default function ClientsPage() {
             ))}
           </select>
         </div>
+
+        {viewKey && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] px-3 py-2">
+            {views.map((view) => (
+              <span key={view.name} className="inline-flex items-center rounded-control border border-[var(--border)]">
+                <Button size="sm" variant="ghost" onClick={() => { setQuery(view.query); setStatus(view.status); setOffset(0); }}>
+                  {view.name}
+                </Button>
+                <Button size="sm" variant="ghost" aria-label={`Удалить фильтр «${view.name}»`}
+                  onClick={() => writeViews(views.filter((item) => item.name !== view.name))}>×</Button>
+              </span>
+            ))}
+            {viewOpen ? (
+              <form className="flex flex-wrap gap-2" onSubmit={(event) => {
+                event.preventDefault();
+                const name = viewName.trim();
+                if (!name) return;
+                if (writeViews([...views.filter((item) => item.name !== name), { name, query, status }])) {
+                  setViewName(""); setViewOpen(false);
+                }
+              }}>
+                <input className="focus-ring rounded-control border border-[var(--border)] bg-surface px-2 text-sm"
+                  aria-label="Название фильтра" placeholder="Название фильтра" maxLength={40} value={viewName}
+                  onChange={(event) => setViewName(event.target.value)} />
+                <Button type="submit" size="sm" disabled={!viewName.trim()}>Сохранить</Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => setViewOpen(false)}>Отмена</Button>
+              </form>
+            ) : (
+              <Button size="sm" variant="ghost" onClick={() => setViewOpen(true)}>Сохранить фильтр</Button>
+            )}
+            {viewError && <span role="alert" className="text-xs text-[var(--danger)]">{viewError}</span>}
+          </div>
+        )}
 
         {error && (
           <div role="alert" className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f3c7cb] bg-[var(--danger-soft)] px-3.5 py-2.5 text-[13px] text-[var(--danger)]">

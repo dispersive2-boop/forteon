@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import mimetypes
+import re
 import shutil
 import uuid
 from datetime import date
@@ -58,6 +59,57 @@ def fold(value: str | None) -> str:
     а для сравнения строк — разные.
     """
     return (value or "").casefold().replace("ё", "е")
+
+
+@router.get("/workspace-search")
+def search_workspace(
+    q: str = Query(min_length=2, max_length=100),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    needle = fold(q.strip())
+    if len(needle) < 2:
+        return {"items": []}
+    phone_needle = re.sub(r"\D", "", needle) if re.fullmatch(r"[+()0-9. -]+", needle) else ""
+    owned = [Client.deleted_at.is_(None)]
+    if user.role != "admin":
+        owned.append(Client.owner_id == user.id)
+    sources = (
+        ("client", Client, Client.name, "", (("Название", Client.name), ("Юрлицо", Client.legal_name), ("ИНН", Client.tax_id))),
+        ("contact", ClientContact, ClientContact.name, "overview", (("Контакт", ClientContact.name), ("Телефон", ClientContact.phone), ("Почта", ClientContact.email))),
+        ("project", Project, Project.name, "projects", (("Проект", Project.name), ("Адрес", Project.location))),
+        ("contract", Contract, Contract.number, "projects", (("Номер договора", Contract.number),)),
+        ("document", Document, Document.filename, "documents", (("Файл", Document.filename), ("ID документа", Document.id))),
+        ("task", Task, Task.title, "tasks", (("Задача", Task.title),)),
+    )
+    results = []
+    for kind, model, title, tab, fields in sources:
+        query = select(
+            model.id, Client.id, Client.name, title, *(column for _, column in fields),
+        ).select_from(model).where(*owned)
+        if model is not Client:
+            query = query.join(Client, Client.id == model.client_id)
+        if model in (Project, Task):
+            query = query.where(model.deleted_at.is_(None))
+        found = 0
+        for entity_id, client_id, client_name, label, *values in db.execute(query.order_by(title, model.id)):
+            for (field, _), value in zip(fields, values):
+                number_match = field == "Телефон" and len(phone_needle) >= 3 and phone_needle in re.sub(r"\D", "", value or "")
+                if needle in fold(value) or number_match:
+                    results.append({
+                        "id": f"{kind}:{entity_id}",
+                        "kind": kind,
+                        "label": label or client_name,
+                        "client_name": client_name,
+                        "matched_field": field,
+                        "matched_value": value,
+                        "href": f"/clients/{client_id}?tab={tab}#{kind}-{entity_id}" if tab else f"/clients/{client_id}",
+                    })
+                    found += 1
+                    break
+            if found >= 5:
+                break
+    return {"items": results}
 
 
 @router.get("/clients", response_model=PagedClients)
@@ -439,11 +491,21 @@ def update_project(project_id: str, payload: ProjectUpdate, db: Session = Depend
     get_client_or_404(db, user, project.client_id)
     ensure_version(project, payload.version)
     changes = payload.model_dump(exclude_unset=True, exclude={"version"})
+    money_changes = {
+        key: {
+            "before": str(getattr(project, key)) if getattr(project, key) is not None else None,
+            "after": str(changes[key]) if changes[key] is not None else None,
+        }
+        for key in ("planned_revenue", "estimated_cost")
+        if key in changes and changes[key] != getattr(project, key)
+    }
     for key, value in changes.items():
         if value is not None or key in ("planned_revenue", "estimated_cost"):
             setattr(project, key, value)
     project.version = (project.version or 1) + 1
-    audit(db, user, "project", project.id, "updated", {"client_id": project.client_id, "fields": list(changes)})
+    audit(db, user, "project", project.id, "updated", {
+        "client_id": project.client_id, "fields": list(changes), "name": project.name, "money_changes": money_changes,
+    })
     db.commit()
     db.refresh(project)
     return ProjectOut.model_validate(project)

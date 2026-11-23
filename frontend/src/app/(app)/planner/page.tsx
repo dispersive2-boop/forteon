@@ -400,6 +400,22 @@ export default function PlannerPage() {
     }
   }
 
+  async function quickSchedule(taskId: string, days: number) {
+    setBusy(taskId);
+    setError(null);
+    try {
+      const updated = await api<Task>(`/tasks/${taskId}/reschedule`, {
+        method: "POST",
+        body: { due_date: toISO(addDays(new Date(), days)) },
+      });
+      updateTaskInList(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось назначить срок");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function saveReschedule() {
     if (!reschedule || !newDate) return;
     setSavingDate(true);
@@ -785,6 +801,7 @@ export default function PlannerPage() {
               onComplete={complete}
               onReopen={reopen}
               onReschedule={openReschedule}
+              onQuickSchedule={quickSchedule}
               onDecide={decideReview}
               onOpenChat={openChat}
             />
@@ -1046,6 +1063,7 @@ function DayView({
   onComplete,
   onReopen,
   onReschedule,
+  onQuickSchedule,
   onDecide,
   onOpenChat,
 }: {
@@ -1058,6 +1076,7 @@ function DayView({
   onComplete: (id: string) => void;
   onReopen: (id: string) => void;
   onReschedule: (task: Task) => void;
+  onQuickSchedule: (taskId: string, days: number) => void;
   onDecide: (taskId: string, decision: "accept" | "edit" | "reject") => void;
   onOpenChat: (taskId: string) => void;
 }) {
@@ -1142,8 +1161,8 @@ function DayView({
           </div>
           <div className="space-y-0.5">
             {visibleUndated.map((task) => (
-              <TaskLine
-                key={task.id}
+              <div key={task.id} className="border-b border-[var(--border)] pb-2 last:border-0">
+                <TaskLine
                 task={task}
                 time={null}
                 busy={busy === task.id}
@@ -1154,7 +1173,16 @@ function DayView({
                 onReschedule={() => onReschedule(task)}
                 onDecide={onDecide}
                 onOpenChat={() => onOpenChat(task.id)}
-              />
+                />
+                <div className="ml-9 flex flex-wrap gap-1">
+                  <Button size="sm" variant="ghost" disabled={Boolean(busy)} onClick={() => onQuickSchedule(task.id, 0)}>
+                    На сегодня
+                  </Button>
+                  <Button size="sm" variant="ghost" disabled={Boolean(busy)} onClick={() => onQuickSchedule(task.id, 1)}>
+                    На завтра
+                  </Button>
+                </div>
+              </div>
             ))}
           </div>
           {undated.length > UNDATED_PREVIEW && (
