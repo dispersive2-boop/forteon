@@ -17,7 +17,7 @@
 
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { useAuth, UserBadge } from "@/components/AuthProvider";
 import CommandPalette, { KeyboardShortcuts } from "@/components/CommandPalette";
@@ -46,10 +46,12 @@ import { api, TodayPayload } from "@/lib/api";
  * они дублировали название и мешали быстрому сканированию.
  */
 const NAV_ITEMS = [
+  { href: "/free-note", label: "Свободная заметка", Icon: IconPlus },
   { href: "/today", label: "Сегодня", Icon: IconToday },
   { href: "/planner", label: "Планировщик", Icon: IconPlanner, badge: "overdue" as const },
   { href: "/clients", label: "Клиенты", Icon: IconClients },
   { href: "/notes", label: "Заметки", Icon: IconNotes },
+  { href: "/mail", label: "Форти и почта", Icon: IconNotes },
   { href: "/finance", label: "Финансы", Icon: IconFinance },
   { href: "/reports", label: "Отчёты", Icon: IconReports },
   { href: "/settings", label: "Настройки", Icon: IconSettings },
@@ -58,6 +60,8 @@ const NAV_ITEMS = [
 ];
 
 const PAGE_TITLES: Record<string, string> = {
+  "/mail": "Форти и почта",
+  "/free-note": "Свободная заметка",
   "/today": "Сегодня",
   "/planner": "Планировщик",
   "/clients": "Клиенты",
@@ -87,6 +91,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [overdue, setOverdue] = useState(0);
+  const mainRef = useRef<HTMLElement>(null);
+  const previousPath = useRef(pathname);
+
+  useLayoutEffect(() => {
+    const changed = previousPath.current !== pathname;
+    previousPath.current = pathname;
+    if (!changed || document.documentElement.dataset.motion === "off" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const animation = mainRef.current?.animate([{ opacity: 0.94 }, { opacity: 1 }], {
+      duration: 150,
+      easing: "ease-out",
+    });
+    return () => animation?.cancel();
+  }, [pathname]);
   /**
    * П.128: статус сети виден интерфейсу. navigator.onLine не идеален, но
    * даёт честный сигнал при обрыве; запросы всё равно упадут с ошибкой,
@@ -143,7 +160,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <button
           type="button"
           tabIndex={-1}
-          className="fixed inset-0 z-[45] bg-[#0b1220]/45 md:hidden"
+          className="forteon-overlay fixed inset-0 z-[45] bg-[#0b1220]/45 md:hidden"
           onClick={() => setMobileOpen(false)}
           aria-label="Закрыть меню"
         />
@@ -152,9 +169,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Пункт 1: ширина 232-248px, цвет #111827; пункт 17 — скроллится только навигация */}
       <aside
         id="forteon-sidebar"
-        className={`fixed inset-y-0 left-0 z-50 flex w-[240px] shrink-0 flex-col bg-[var(--sidebar)] transition-transform duration-200 motion-reduce:transition-none md:visible md:sticky md:top-0 md:h-dvh md:translate-x-0 ${
-          mobileOpen ? "visible translate-x-0" : "invisible -translate-x-full"
-        }`}
+        data-open={mobileOpen}
+        className="forteon-sidebar fixed inset-y-0 left-0 z-50 flex w-[240px] shrink-0 flex-col border-r border-white/10 bg-[var(--sidebar)] md:sticky md:top-0 md:h-dvh"
       >
         <div className="flex h-[68px] shrink-0 items-center justify-between gap-2 border-b border-white/10 px-3">
           <Link
@@ -314,7 +330,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Пункт 10: никакой горизонтальной прокрутки всего приложения */}
-        <main className="min-w-0 max-w-full flex-1 px-3 pb-24 pt-4 md:px-6 md:pb-8 md:pt-6">
+        <main ref={mainRef} className="min-w-0 max-w-full flex-1 px-3 pb-24 pt-4 md:px-6 md:pb-8 md:pt-6">
           {children}
         </main>
       </div>

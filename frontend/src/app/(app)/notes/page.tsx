@@ -20,9 +20,11 @@
  *  - выбранный клиент восстанавливается (п.60).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import { useAuth } from "@/components/AuthProvider";
 import {
   Badge,
   Button,
@@ -55,6 +57,9 @@ type PickerClient = {
 
 /** Задача, которую AI вытащил из заметки (приходит вместе с лентой). */
 type NoteTask = {
+  /** Объект и клиент приходят в ленте, чтобы показать «Объект: …». */
+  project_name?: string | null;
+  client_name?: string | null;
   id: string;
   title: string;
   status: string;
@@ -128,6 +133,36 @@ function aiState(note: FeedNote): { tone: "warning" | "danger" | "neutral"; labe
 }
 
 export default function NotesPage() {
+  /*
+   * Обёртка нужна из-за useSearchParams: без Suspense Next 15 ругается
+   * на клиентский рендер при сборке. Внутри — вся рабочая часть.
+   */
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-[1280px] space-y-4">
+          <Skeleton className="h-24 rounded-card" />
+          <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+            <Skeleton className="h-[420px] rounded-card" />
+            <Skeleton className="h-[520px] rounded-card" />
+          </div>
+        </div>
+      }
+    >
+      <NotesWorkspace />
+    </Suspense>
+  );
+}
+
+function NotesWorkspace() {
+  const params = useSearchParams();
+  const router = useRouter();
+  /** /free-note — та же лента, но без клиента: личный план менеджера. */
+  const free = usePathname() === "/free-note";
+  const requestedId = params.get("client_id");
+  const voiceRequested = params.get("voice") === "1";
+  const { user } = useAuth();
+
   /* ---------------------------------------------------------- состояние */
   const [query, setQuery] = useState("");
   const [picker, setPicker] = useState<PickerClient[]>([]);
@@ -146,6 +181,8 @@ export default function NotesPage() {
   /** Исходный текст правимой заметки — из него форма берёт значение. */
   const [correctingText, setCorrectingText] = useState("");
   const [mobileStep, setMobileStep] = useState<"pick" | "write">("pick");
+  /** Текущий текст формы — нужен кнопке «Письмо с Форти». */
+  const [composerBody, setComposerBody] = useState("");
 
   const fileRef = useRef<HTMLInputElement | null>(null);
   const pollRef = useRef<number | null>(null);
@@ -161,11 +198,13 @@ export default function NotesPage() {
   const feedUrl = useCallback(
     (limit: number, before?: string | null) => {
       const params = new URLSearchParams({ limit: String(limit) });
-      if (clientFilter) params.set("client_id", clientFilter.id);
+      // В личном плане лента без клиента: сервер отбирает по free=true.
+      if (free) params.set("free", "true");
+      else if (clientFilter) params.set("client_id", clientFilter.id);
       if (before) params.set("before", before);
       return `/notes/feed?${params.toString()}`;
     },
-    [clientFilter],
+    [clientFilter, free],
   );
 
   const loadFirstPage = useCallback(async () => {
@@ -212,13 +251,33 @@ export default function NotesPage() {
     (async () => {
       setLoading(true);
       try {
+        /*
+         * Личный план: клиента нет, черновик один и тот же, сразу пишем.
+         * Список клиентов не запрашиваем — он здесь не нужен.
+         */
+        if (free) {
+          setClientFilter({ id: "free", name: "Личный план" });
+          setMobileStep("write");
+          if (!cancelled) setLoading(false);
+          return;
+        }
+
+        // Пришли по ссылке «надиктовать этому клиенту» — сразу открываем редактор.
+        if (voiceRequested) setMobileStep("write");
+
         const items = await fetchPicker("");
         if (cancelled) return;
         setPicker(items);
-        // Восстанавливаем клиента, с которым работали в прошлый раз (п.60)
+
+        /*
+         * п.60: восстанавливаем клиента. Приоритет у явного client_id из
+         * ссылки, иначе — последний, с кем работали. Ссылка сильнее, потому
+         * что переход из карточки клиента не должен открывать чужую заметку.
+         */
         const storedId =
           typeof window !== "undefined" ? window.localStorage.getItem(STORE_CLIENT) : null;
-        const restored = storedId ? items.find((c) => c.id === storedId) : undefined;
+        const wantedId = requestedId ?? storedId;
+        const restored = wantedId ? items.find((c) => c.id === wantedId) : undefined;
         if (restored) {
           setClientFilter({ id: restored.id, name: restored.name });
           setMobileStep("write");
@@ -232,7 +291,7 @@ export default function NotesPage() {
     return () => {
       cancelled = true;
     };
-  }, [fetchPicker]);
+  }, [fetchPicker, free, requestedId, voiceRequested]);
 
   // Лента грузится после того, как определились с фильтром клиента
   useEffect(() => {
@@ -247,6 +306,7 @@ export default function NotesPage() {
 
   // Поиск клиента с задержкой, чтобы не дёргать сервер на каждую букву
   useEffect(() => {
+    if (free) return;
     let cancelled = false;
     setPickerLoading(true);
     const id = setTimeout(async () => {
@@ -263,7 +323,7 @@ export default function NotesPage() {
       cancelled = true;
       clearTimeout(id);
     };
-  }, [query, fetchPicker]);
+  }, [query, fetchPicker, free]);
 
   useEffect(() => {
     return () => {
@@ -364,7 +424,11 @@ export default function NotesPage() {
       setUploads([]);
 
       try {
-        const note = await api<Note>(`/clients/${target.id}/notes`, {
+        /*
+         * Личный план уходит на /notes/free: сервер сам заводит служебного
+         * клиента «Личный план», поэтому id клиента здесь не нужен.
+         */
+        const note = await api<Note>(free ? "/notes/free" : `/clients/${target.id}/notes`, {
           method: "POST",
           body: {
             body: text,
@@ -382,11 +446,13 @@ export default function NotesPage() {
           ),
         );
         pollNote(note.id);
-        try {
-          const items = await fetchPicker("");
-          setPicker(items);
-        } catch {
-          /* список клиентов не критичен */
+        if (!free) {
+          try {
+            const items = await fetchPicker("");
+            setPicker(items);
+          } catch {
+            /* список клиентов не критичен */
+          }
         }
         return note.id;
       } catch (err) {
@@ -395,7 +461,7 @@ export default function NotesPage() {
         throw err instanceof Error ? err : new Error("Заметка не сохранена");
       }
     },
-    [clientFilter, correcting, fetchPicker, pollNote],
+    [clientFilter, correcting, fetchPicker, free, pollNote],
   );
 
   /* ------------------------------------------------- повторный разбор */
@@ -421,15 +487,19 @@ export default function NotesPage() {
     (note: FeedNote) => {
       setCorrecting(note.id);
       setCorrectingText(note.body);
-      if (note.client_id) chooseClient({ id: note.client_id, name: note.client_name || "Клиент" });
+      // В личном плане клиент не переключается — правим прямо здесь.
+      if (!free && note.client_id) {
+        chooseClient({ id: note.client_id, name: note.client_name || "Клиент" });
+      }
       setMobileStep("write");
     },
-    [chooseClient],
+    [chooseClient, free],
   );
 
   /* ------------------------------------------------------------ вложения */
   async function attach(file: File) {
-    if (!clientFilter) {
+    // Вложение живёт в карточке клиента: в личном плане прикреплять некуда.
+    if (!clientFilter || free) {
       setError("Чтобы прикрепить файл, выберите клиента.");
       return;
     }
@@ -494,16 +564,26 @@ export default function NotesPage() {
     <div className="mx-auto max-w-[1280px] lg:flex lg:h-[calc(100dvh-124px)] lg:min-h-[36rem] lg:flex-col">
       <header className="mb-4 shrink-0">
         <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.026em] text-ink sm:text-[28px]">
-          Заметки
+          {free ? "Свободная заметка" : "Заметки"}
         </h1>
         <p className="mt-1 max-w-2xl text-[14.5px] leading-relaxed text-[var(--muted)]">
-          Сохраняйте договорённости и создавайте задачи из заметок.
+          {free
+            ? "Личный план: назовите объект в той же фразе, что и действие — задачи появятся в планировщике."
+            : "Сохраняйте договорённости и создавайте задачи из заметок."}
         </p>
       </header>
 
-      <div className="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[280px_minmax(0,1fr)]">
+      <div
+        className={`grid gap-4 lg:min-h-0 lg:flex-1 ${
+          free ? "lg:grid-cols-1" : "lg:grid-cols-[280px_minmax(0,1fr)]"
+        }`}
+      >
         {/* ------------------------------------------------ поиск клиента */}
-        <aside className={`min-h-0 ${mobileStep === "write" ? "hidden lg:block" : ""}`}>
+        <aside
+          className={`min-h-0 ${
+            free ? "hidden" : mobileStep === "write" ? "hidden lg:block" : ""
+          }`}
+        >
           <Card className="lg:flex lg:h-full lg:min-h-0 lg:flex-col">
             <SectionTitle title="Клиент" subtitle="Выберите клиента для заметки" />
 
@@ -635,8 +715,12 @@ export default function NotesPage() {
           </Card>
         </aside>
 
-        <div className={`min-h-0 min-w-0 lg:flex lg:flex-col ${mobileStep === "pick" ? "hidden" : ""}`}>
-          {mobileStep === "write" && (
+        <div
+          className={`min-h-0 min-w-0 lg:flex lg:flex-col ${
+            mobileStep === "pick" && !free ? "hidden" : ""
+          }`}
+        >
+          {!free && mobileStep === "write" && (
             <button
               type="button"
               onClick={() => setMobileStep("pick")}
@@ -679,6 +763,7 @@ export default function NotesPage() {
                 setMobileStep("write");
                 pollNote(noteId);
               }}
+              onBodyChange={setComposerBody}
               label={correcting ? "Исправление заметки" : "Новая заметка"}
               submitLabel={correcting ? "Сохранить и разобрать" : "Отправить"}
               initialBody={correcting ? correctingText : ""}
@@ -695,32 +780,57 @@ export default function NotesPage() {
                       e.target.value = "";
                     }}
                   />
-                  <button
-                    type="button"
-                    onClick={() => fileRef.current?.click()}
-                    title="Прикрепить файл"
-                    aria-label="Прикрепить файл"
-                    className="focus-ring grid h-11 w-11 shrink-0 place-items-center rounded-control border border-[var(--border-strong)] text-[var(--muted)] transition-colors hover:border-primary hover:text-primary"
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-                      <path d="M21.4 11.05l-8.9 8.9a5.2 5.2 0 01-7.4-7.4l8.2-8.2a3.5 3.5 0 014.9 4.9l-8.2 8.2a1.8 1.8 0 01-2.5-2.5l7.5-7.5" />
-                    </svg>
-                  </button>
+                  {/* В личном плане вложения некуда привязать — скрепку прячем. */}
+                  {!free && (
+                    <button
+                      type="button"
+                      onClick={() => fileRef.current?.click()}
+                      title="Прикрепить файл"
+                      aria-label="Прикрепить файл"
+                      className="focus-ring grid h-11 w-11 shrink-0 place-items-center rounded-control border border-[var(--border-strong)] text-[var(--muted)] transition-colors hover:border-primary hover:text-primary"
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+                        <path d="M21.4 11.05l-8.9 8.9a5.2 5.2 0 01-7.4-7.4l8.2-8.2a3.5 3.5 0 014.9 4.9l-8.2 8.2a1.8 1.8 0 01-2.5-2.5l7.5-7.5" />
+                      </svg>
+                    </button>
+                  )}
                 </>
               }
               rightSlot={
-                correcting ? (
-                  <Button
-                    variant="ghost"
-                    size="md"
-                    onClick={() => {
-                      setCorrecting(null);
-                      setCorrectingText("");
-                    }}
-                  >
-                    Отменить
-                  </Button>
-                ) : undefined
+                <>
+                  {/*
+                    Набранный текст можно сразу превратить в письмо: Форти
+                    получит его как инструкцию в /mail.
+                  */}
+                  {user && composerBody.trim() && !correcting && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        sessionStorage.setItem(
+                          `forteon.forti.instruction.${user.id}`,
+                          composerBody.trim().slice(0, 4000),
+                        );
+                        router.push("/mail");
+                      }}
+                    >
+                      Письмо с Форти
+                    </Button>
+                  )}
+                  {correcting && (
+                    <Button
+                      variant="ghost"
+                      size="md"
+                      onClick={() => {
+                        setCorrecting(null);
+                        setCorrectingText("");
+                      }}
+                    >
+                      Отменить
+                    </Button>
+                  )}
+                </>
               }
             />
 
@@ -1154,6 +1264,11 @@ function NoteCard({
                       }`}
                     >
                       {task.title}
+                      {task.project_name && (
+                        <span className="mt-0.5 block text-xs font-normal text-[var(--muted)]">
+                          Объект: {task.project_name}
+                        </span>
+                      )}
                     </span>
                     <button
                       type="button"

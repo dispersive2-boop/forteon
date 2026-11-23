@@ -2,18 +2,20 @@
 from __future__ import annotations
 
 import json
+from uuid import NAMESPACE_URL, uuid5
 
 import httpx
 from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import SessionLocal, get_db
 from ..deps import audit, get_client_or_404, get_current_user
-from ..models import AIRun, Commitment, Note, Task, User, utcnow
+from ..models import PERSONAL_PLAN_TYPE, AIRun, Client, Commitment, Note, Project, Task, User, utcnow
 from ..schemas import (
     AIStatusOut,
     NoteCreate,
@@ -43,7 +45,9 @@ def _note_for_user(db: Session, user: User, note_id: str) -> Note:
     note = db.get(Note, note_id)
     if note is None or note.deleted_at is not None:
         raise HTTPException(status_code=404, detail={"code": "not_found", "message": "Заметка не найдена"})
-    get_client_or_404(db, user, note.client_id)
+    client = get_client_or_404(db, user, note.client_id)
+    if client.type == PERSONAL_PLAN_TYPE and note.author_id != user.id:
+        raise HTTPException(status_code=404, detail={"code": "not_found", "message": "Заметка не найдена"})
     return note
 
 
@@ -72,6 +76,7 @@ def notes_feed(
     limit: int = Query(default=30, ge=1, le=200),
     before: datetime | None = None,
     client_id: str | None = None,
+    free: bool = False,
     q: str | None = Query(default=None, description="Поиск по тексту заметки"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -86,16 +91,18 @@ def notes_feed(
     `author_name` отдаётся вместе с заметкой (п.4.2) — раньше автор был только
     в БД и в интерфейс не попадал.
     """
-    from ..models import Client
-
     query = (
         select(Note, Client.name, User.full_name)
         .join(Client, Client.id == Note.client_id)
         .outerjoin(User, User.id == Note.author_id)
         .where(Note.deleted_at.is_(None), Client.deleted_at.is_(None))
     )
-    if user.role != "admin":
-        query = query.where(Client.owner_id == user.id)
+    if free:
+        query = query.where(Client.type == PERSONAL_PLAN_TYPE, Note.author_id == user.id)
+    else:
+        query = query.where(Client.type != PERSONAL_PLAN_TYPE)
+        if user.role != "admin":
+            query = query.where(Client.owner_id == user.id)
     if client_id:
         get_client_or_404(db, user, client_id)
         query = query.where(Note.client_id == client_id)
@@ -129,7 +136,11 @@ def notes_feed(
             Task.event_kind,
             Task.actor,
             Task.review_question,
+            Project.name,
+            Client.name,
         )
+        .join(Client, Client.id == Task.client_id)
+        .outerjoin(Project, Project.id == Task.project_id)
         .where(Task.source_note_id.in_(note_ids), Task.deleted_at.is_(None))
         .order_by(Task.created_at.asc())
     ).all()
@@ -149,6 +160,8 @@ def notes_feed(
         event_kind,
         actor,
         review_question,
+        project_name,
+        client_name,
     ) in task_rows:
         tasks_by_note.setdefault(source_note_id, []).append(
             {
@@ -164,6 +177,8 @@ def notes_feed(
                 "event_kind": event_kind,
                 "actor": actor,
                 "review_question": review_question,
+                "project_name": project_name,
+                "client_name": client_name,
             }
         )
 
@@ -194,7 +209,10 @@ def notes_feed(
             Commitment.due_date,
             Commitment.source_quote,
             Commitment.related_task_id,
-        ).where(Commitment.client_id.in_({note.client_id for note, _, _ in rows}))
+        ).where(or_(
+            Commitment.client_id.in_({note.client_id for note, _, _ in rows}),
+            Commitment.related_task_id.in_({row.id for row in task_rows}),
+        ))
     ).all()
     task_to_note = {row_id: nid for nid, tasks in tasks_by_note.items() for row_id in [t["id"] for t in tasks]}
     commitments_by_note: dict[str, list[dict]] = {}
@@ -346,6 +364,26 @@ def create_note(
     return NoteOut.model_validate(note)
 
 
+@router.post("/notes/free", response_model=NoteOut, status_code=status.HTTP_201_CREATED)
+def create_free_note(
+    payload: NoteCreate, background: BackgroundTasks,
+    db: Session = Depends(get_db), user: User = Depends(get_current_user),
+):
+    if not payload.body.strip() or payload.project_id:
+        raise HTTPException(status_code=422, detail={
+            "code": "invalid_free_note", "message": "Введите текст свободной заметки.",
+        })
+    client_id = str(uuid5(NAMESPACE_URL, f"forteon:personal-plan:{user.id}"))
+    if db.get(Client, client_id) is None:
+        try:
+            with db.begin_nested():
+                db.add(Client(id=client_id, owner_id=user.id, name="Личный план", type=PERSONAL_PLAN_TYPE))
+        except IntegrityError:
+            if db.get(Client, client_id) is None:
+                raise
+    return create_note(client_id, payload, background, db, user)
+
+
 @router.patch("/notes/{note_id}", response_model=NoteOut)
 def update_note(note_id: str, payload: NoteUpdate, db: Session = Depends(get_db),
                 user: User = Depends(get_current_user)):
@@ -379,7 +417,10 @@ def ai_status(note_id: str, db: Session = Depends(get_db), user: User = Depends(
     tasks = list(
         db.scalars(select(Task).where(Task.source_note_id == note.id, Task.deleted_at.is_(None)))
     )
-    commitments = list(db.scalars(select(Commitment).where(Commitment.client_id == note.client_id)))
+    commitments = list(db.scalars(select(Commitment).where(or_(
+        Commitment.client_id == note.client_id,
+        Commitment.related_task_id.in_({task.id for task in tasks}),
+    ))))
 
     needs_review: list[dict] = []
     completed: list[dict] = []

@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..deps import audit
-from ..models import Client, Note, Project, Task, User, utcnow
+from ..models import PERSONAL_PLAN_TYPE, Client, Note, Project, Task, User, utcnow
 from .ai import make_dedupe_key, normalize_title
 from .dates import extract_due, to_date
 
@@ -182,6 +182,7 @@ def import_xlsx(db: Session, path: str | Path, owner: User) -> ImportStats:
                 Client.owner_id == owner.id,
                 Client.name == name,
                 Client.deleted_at.is_(None),
+                Client.type != PERSONAL_PLAN_TYPE,
             )
         )
         if client is None:

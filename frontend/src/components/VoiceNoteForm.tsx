@@ -114,6 +114,11 @@ export type VoiceNoteFormProps = {
   leftSlot?: React.ReactNode;
   /** Дополнительные действия справа, перед кнопкой отправки. */
   rightSlot?: React.ReactNode;
+  /**
+   * Текущий текст наружу. Нужен странице, чтобы предложить действие над
+   * набранным («Письмо с Форти»), не дублируя состояние внутри формы.
+   */
+  onBodyChange?: (body: string) => void;
 };
 
 export function VoiceNoteForm({
@@ -127,6 +132,7 @@ export function VoiceNoteForm({
   submitLabel = "Отправить",
   leftSlot,
   rightSlot,
+  onBodyChange,
 }: VoiceNoteFormProps) {
   const [body, setBody] = useState(() => initialBody || readDraft(client?.id ?? null));
   const [sending, setSending] = useState(false);
@@ -158,9 +164,14 @@ export function VoiceNoteForm({
    * переносится между клиентами, потому что он лежит под разными ключами.
    */
   useEffect(() => {
-    setBody(readDraft(client?.id ?? null));
+    const stored = readDraft(client?.id ?? null);
+    setBody(stored);
     setAttemptKey(null);
     setError(null);
+    onBodyChange?.(stored);
+    // onBodyChange намеренно не в зависимостях: это «сообщить наружу», а не
+    // источник значения — иначе перерисовка страницы сбрасывала бы текст.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client?.id]);
 
   /* Черновик пишем с задержкой: не на каждую букву, но и не теряя текст. */
@@ -182,15 +193,19 @@ export function VoiceNoteForm({
     };
   }, [audioUrl]);
 
-  const changeBody = useCallback((next: string) => {
-    setBody(next);
-    /*
-     * Текст изменили — значит это уже другая заметка. Старый ключ
-     * идемпотентности больше не подходит: с ним сервер счёл бы новую
-     * версию повтором старой и молча проигнорировал.
-     */
-    setAttemptKey(null);
-  }, []);
+  const changeBody = useCallback(
+    (next: string) => {
+      setBody(next);
+      onBodyChange?.(next);
+      /*
+       * Текст изменили — значит это уже другая заметка. Старый ключ
+       * идемпотентности больше не подходит: с ним сервер счёл бы новую
+       * версию повтором старой и молча проигнорировал.
+       */
+      setAttemptKey(null);
+    },
+    [onBodyChange],
+  );
 
   /* ----------------------------------------------------------- отправка */
   async function submit() {
@@ -218,6 +233,7 @@ export function VoiceNoteForm({
        */
       clearDraft(client.id);
       setBody("");
+      onBodyChange?.("");
       setAttemptKey(null);
       setVoiceUsed(false);
       setDraftSaved(false);

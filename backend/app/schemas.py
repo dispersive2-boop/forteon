@@ -67,6 +67,7 @@ class UserUpdate(BaseModel):
 
 class SessionOut(ORMModel):
     id: str
+    is_current: bool = False
     created_at: datetime
     expires_at: datetime
     revoked_at: datetime | None
@@ -176,6 +177,7 @@ class PagedClients(BaseModel):
 
 # ---------------------------------------------------------------- projects
 class ProjectCreate(BaseModel):
+    email: EmailStr | None = None
     name: str = Field(min_length=1, max_length=255)
     location: str | None = None
     status: str = "new"
@@ -194,6 +196,7 @@ class ProjectCreate(BaseModel):
 
 
 class ProjectUpdate(BaseModel):
+    email: EmailStr | None = None
     name: str | None = None
     location: str | None = None
     status: str | None = None
@@ -213,6 +216,7 @@ class ProjectUpdate(BaseModel):
 
 
 class ProjectOut(ORMModel):
+    email: str | None = None
     id: str
     client_id: str
     name: str

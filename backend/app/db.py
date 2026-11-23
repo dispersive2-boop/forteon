@@ -76,6 +76,7 @@ def init_db() -> None:
 # create_all() не меняет существующие таблицы, поэтому колонки добавляем сами:
 # для SQLite это безопасно (ADD COLUMN с NOT NULL требует DEFAULT).
 _ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
+    "projects": [("email", "VARCHAR(254)")],
     "tasks": [
         ("review_question", "TEXT"),
         ("event_kind", "VARCHAR(16) DEFAULT 'todo' NOT NULL"),
@@ -101,7 +102,11 @@ def _add_missing_columns() -> None:
     добавь». Если таблицы нет вовсе, create_all() её уже создал с полным
     набором полей, и цикл ничего не найдёт.
     """
-    if not settings.database_url.startswith("sqlite"):
+    if engine.dialect.name == "postgresql":
+        with engine.begin() as conn:
+            conn.exec_driver_sql("ALTER TABLE projects ADD COLUMN IF NOT EXISTS email VARCHAR(254)")
+        return
+    if engine.dialect.name != "sqlite":
         return
 
     with engine.begin() as conn:

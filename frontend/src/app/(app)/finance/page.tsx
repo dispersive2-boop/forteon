@@ -71,6 +71,42 @@ type Overview = {
 
 type Tab = "invoices" | "payments";
 
+function InvoiceBreakdown({ data }: { data: Overview | null }) {
+  const allocated = data?.allocated ?? 0;
+  const overdue = data?.overdue_amount ?? 0;
+  const debt = data?.debt ?? 0;
+  const pending = Math.max(0, debt - overdue);
+  const total = allocated + debt;
+  const showChart = total > 0 && allocated >= 0 && debt >= overdue && overdue >= 0;
+  const segments = [
+    { label: "Зачтено по счетам", amount: allocated, color: "bg-primary" },
+    { label: "Остаток без просрочки", amount: pending, color: "bg-[var(--border-strong)]" },
+    { label: "Просрочено", amount: overdue, color: "bg-[var(--danger)]" },
+  ];
+
+  return (
+    <Card>
+      <SectionTitle title="Состояние счетов" />
+      <div aria-hidden className="flex h-3 overflow-hidden rounded-full bg-canvas">
+        {showChart && segments.map(({ label, amount, color }) =>
+          amount > 0 && <div key={label} className={color} style={{ width: `${amount / total * 100}%` }} />,
+        )}
+      </div>
+      <dl className="mt-3 grid gap-x-5 gap-y-2 sm:grid-cols-3">
+        {segments.map(({ label, amount, color }) => (
+          <div key={label} className="flex min-w-0 items-start justify-between gap-2 sm:block">
+            <dt className="flex items-center gap-2 text-[13px] text-[var(--muted)]">
+              <span aria-hidden className={`h-2 w-2 shrink-0 rounded-sm ${color}`} />
+              {label}
+            </dt>
+            <dd className="tabular text-right text-[14px] font-semibold text-ink sm:mt-0.5 sm:pl-4 sm:text-left">{money(data ? amount : null)}</dd>
+          </div>
+        ))}
+      </dl>
+    </Card>
+  );
+}
+
 export default function FinancePage() {
   const [data, setData] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -158,6 +194,8 @@ export default function FinancePage() {
         </p>
       )}
 
+      <InvoiceBreakdown data={data} />
+
       {error && data && (
         <div className="flex flex-wrap items-center gap-3 rounded-control border border-[#f3c7cb] bg-[var(--danger-soft)] px-3.5 py-2.5 text-[13px] text-[var(--danger)]">
           <span className="min-w-0 flex-1">{error}</span>
@@ -217,7 +255,7 @@ export default function FinancePage() {
           </div>
         ) : tab === "invoices" ? (
           filteredRows.length ? (
-            <div className="overflow-x-auto">
+            <div key="invoices" className="forteon-tab-panel overflow-x-auto">
               <table className="w-full min-w-[680px] text-[13px]">
                 <thead>
                   <tr className="border-b border-[var(--border)] text-left text-[11.5px] uppercase tracking-[0.05em] text-[var(--muted)]">
@@ -265,6 +303,8 @@ export default function FinancePage() {
           ) : (
             /* Пункт 90: при отсутствии данных — предупреждение, а не пустой PDF/таблица */
             <EmptyState
+              key="invoices-empty"
+              className="forteon-tab-panel"
               title={onlyOverdue ? "Просроченных счетов нет" : "Счетов пока нет"}
               description={
                 onlyOverdue
@@ -288,7 +328,7 @@ export default function FinancePage() {
             />
           )
         ) : filteredPayments.length ? (
-          <div className="overflow-x-auto">
+          <div key="payments" className="forteon-tab-panel overflow-x-auto">
             <table className="w-full min-w-[520px] text-[13px]">
               <thead>
                 <tr className="border-b border-[var(--border)] text-left text-[11.5px] uppercase tracking-[0.05em] text-[var(--muted)]">
@@ -320,7 +360,7 @@ export default function FinancePage() {
             </table>
           </div>
         ) : (
-          <EmptyState title="Платежей пока нет" description="Платежи вносятся в карточке клиента." />
+          <EmptyState key="payments-empty" className="forteon-tab-panel" title="Платежей пока нет" description="Платежи вносятся в карточке клиента." />
         )}
       </Card>
 

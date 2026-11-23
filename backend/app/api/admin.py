@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..db import get_db
 from ..deps import audit, get_client_or_404, get_current_user, require_admin
-from ..models import AuditLog, Client, ClientTransfer, Task, User, utcnow
+from ..models import PERSONAL_PLAN_TYPE, AuditLog, Client, ClientTransfer, Task, User, utcnow
 from ..schemas import (
     AISettingsIn,
     ImportDuplicate,
@@ -300,7 +300,7 @@ async def import_grishanov(
 def admin_stats(db: Session = Depends(get_db), _: User = Depends(require_admin)):
     return {
         "users": db.scalar(select(func.count()).select_from(User)) or 0,
-        "clients": db.scalar(select(func.count()).select_from(Client).where(Client.deleted_at.is_(None))) or 0,
+        "clients": db.scalar(select(func.count()).select_from(Client).where(Client.deleted_at.is_(None), Client.type != PERSONAL_PLAN_TYPE)) or 0,
         "tasks_open": db.scalar(
             select(func.count()).select_from(Task).where(Task.status == "open", Task.deleted_at.is_(None))
         ) or 0,

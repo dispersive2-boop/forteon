@@ -275,3 +275,205 @@ def test_import_preview_does_not_save_records(api: TestClient, db: Session) -> N
     imported = api.post("/api/v1/admin/import/grishanov", files=files)
     assert imported.status_code == 200, imported.text
     assert db.scalar(select(func.count()).select_from(Client)) == 2
+
+
+def test_revoke_other_sessions_keeps_current_device_and_cleans_active_list(db: Session) -> None:
+    from app.security import create_token
+
+    def bearer(token: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {token}"}
+
+    with TestClient(app) as client:
+        first = client.post("/api/v1/auth/login", json={
+            "email": "bulk@forteon.local", "password": "Bulk-pass-123", "device_label": "Первый",
+        }).json()
+        second = client.post("/api/v1/auth/login", json={
+            "email": "bulk@forteon.local", "password": "Bulk-pass-123", "device_label": "Второй",
+        }).json()
+        unrelated = client.post("/api/v1/auth/login", json={
+            "email": "other@forteon.local", "password": "Other-pass-123",
+        }).json()
+        old_access = create_token({"sub": USER_ID}, _settings.secret_key, 3600)
+        first_headers = bearer(first["access_token"])
+        initial = client.get("/api/v1/auth/sessions", headers=first_headers).json()
+        assert len(initial) == 2
+        current_id = next(row["id"] for row in initial if row["is_current"])
+        assert initial[0]["id"] != initial[1]["id"]
+
+        rotated = client.post("/api/v1/auth/refresh", json={"refresh_token": first["refresh_token"]})
+        assert rotated.status_code == 200, rotated.text
+        assert client.post("/api/v1/auth/refresh", json={"refresh_token": first["refresh_token"]}).status_code == 401
+        first = rotated.json()
+        first_headers = bearer(first["access_token"])
+        after_refresh = client.get("/api/v1/auth/sessions", headers=first_headers).json()
+        assert len(after_refresh) == 2
+        assert next(row["id"] for row in after_refresh if row["is_current"]) == current_id
+
+        incorrect = client.post("/api/v1/auth/sessions/revoke-others", headers=bearer(old_access), json={
+            "refresh_token": unrelated["refresh_token"],
+        })
+        assert incorrect.status_code == 409
+        result = client.post("/api/v1/auth/sessions/revoke-others", headers=first_headers, json={})
+        assert result.status_code == 200, result.text
+        assert [row["id"] for row in result.json()] == [current_id]
+        assert result.json()[0]["is_current"] is True
+        assert client.get("/api/v1/auth/sessions", headers=first_headers).json() == result.json()
+        assert client.get("/api/v1/auth/me", headers=first_headers).status_code == 200
+        assert client.get("/api/v1/auth/me", headers=bearer(second["access_token"])).status_code == 401
+        assert client.get("/api/v1/auth/me", headers=bearer(old_access)).status_code == 401
+        assert client.post("/api/v1/auth/refresh", json={"refresh_token": second["refresh_token"]}).status_code == 401
+        assert client.get("/api/v1/auth/me", headers=bearer(unrelated["access_token"])).status_code == 200
+        assert client.post("/api/v1/auth/refresh", json={"refresh_token": first["refresh_token"]}).status_code == 200
+
+
+def test_free_note_creates_personal_and_object_tasks(api: TestClient, db: Session) -> None:
+    own = Project(client_id=CLIENT_ID, name="Северный терминал")
+    duplicate = [
+        Project(client_id=CLIENT_ID, name="Восточный объект"),
+        Project(client_id=CLIENT_ID, name="Восточный объект"),
+    ]
+    other_client = Client(name="Чужой клиент", owner_id=OTHER_ID)
+    db.add(other_client)
+    db.flush()
+    db.add_all([own, *duplicate, Project(client_id=other_client.id, name="Чужой терминал")])
+    db.commit()
+
+    body = {
+        "body": (
+            "Завтра отправить КП: Северный терминал. "
+            "Напомнить про Восточный объект в пятницу. "
+            "Завтра позвонить: Чужой терминал. "
+            "В понедельник проверить почту."
+        ),
+        "source_type": "voice",
+        "idempotency_key": "free-qa",
+    }
+    response = api.post("/api/v1/notes/free", json=body)
+    assert response.status_code == 201, response.text
+    note = response.json()
+    tasks = api.get(f"/api/v1/notes/{note['id']}/tasks").json()
+    assert len(tasks) == 4
+    matched = next(task for task in tasks if task["project_id"])
+    assert matched["project_id"] == own.id
+    assert matched["client_id"] == CLIENT_ID
+    assert all(task["client_id"] == note["client_id"] for task in tasks if not task["project_id"])
+    assert note["client_id"] != CLIENT_ID
+
+    repeated = api.post("/api/v1/notes/free", json=body)
+    assert repeated.json()["id"] == note["id"]
+    assert len(api.get(f"/api/v1/notes/{note['id']}/tasks").json()) == 4
+    assert api.get("/api/v1/clients").json()["total"] == 1
+    assert api.get("/api/v1/notes/feed").json()["items"] == []
+    free_feed = api.get("/api/v1/notes/feed", params={"free": "true"}).json()["items"]
+    assert len(free_feed) == 1
+    assert any(task["project_name"] == own.name for task in free_feed[0]["tasks"])
+    assert api.get("/api/v1/tasks", params={"status": "open"}).json()["total"] == 4
+
+
+def test_mail_connection_project_recipient_and_reviewed_send(api: TestClient, db: Session, monkeypatch) -> None:
+    from contextlib import contextmanager
+    from uuid import uuid4
+
+    from cryptography.fernet import Fernet
+
+    from app.api import mail
+    from app.models import MailAccount
+
+    fake_origin = "https://mail.example.com"
+    monkeypatch.setattr(_settings, "zimbra_origins", (fake_origin,))
+    monkeypatch.setattr(_settings, "mail_secret", Fernet.generate_key().decode())
+    sent = []
+    uploads = []
+
+    class Mailbox:
+        def contacts(self, query):
+            return [{"name": "Чернильцев", "email": "contact@example.com", "source": "zimbra"}]
+
+        def send(self, *args):
+            sent.append(args)
+            uploads.extend((name, path.read_bytes(), mime) for name, path, mime in args[4])
+
+    @contextmanager
+    def connect(origin, username, password):
+        assert (origin, username, password) == (fake_origin, "qa@example.com", "test-mail-password")
+        yield Mailbox()
+
+    monkeypatch.setattr(mail, "_connection", connect)
+    account = api.put("/api/v1/mail/connection", json={
+        "url": fake_origin + "/#1", "username": "qa@example.com", "password": "test-mail-password",
+    })
+    assert account.status_code == 200, account.text
+    assert account.json() == {"url": fake_origin, "username": "qa@example.com", "connected": True}
+    db.expire_all()
+    assert b"test-mail-password" not in db.get(MailAccount, USER_ID).sealed_password
+    assert api.put("/api/v1/mail/connection", json={
+        "url": "https://127.0.0.1", "username": "qa@example.com", "password": "test-mail-password",
+    }).status_code == 422
+
+    project = api.post(f"/api/v1/clients/{CLIENT_ID}/projects", json={
+        "name": "Терминал", "email": "project@example.com",
+    }).json()
+    assert project["email"] == "project@example.com"
+    assert api.get("/api/v1/mail/recipients", params={"source": "project"}).json()["items"] == [
+        {"name": "Терминал", "email": "project@example.com", "source": "project"},
+    ]
+    draft = api.post("/api/v1/mail/draft", json={"text": "Отправь документы Чернильцеву"}).json()
+    assert draft["recipient_query"] == "Чернильцев"
+    assert draft["subject"] == "Документы"
+    assert sent == []
+    assert api.get("/api/v1/mail/recipients", params={"q": "Чернильцев"}).json()["items"][0]["email"] == "contact@example.com"
+
+    message = {"to": "contact@example.com", "recipient_name": "Чернильцев Илья",
+               "subject": "Документы", "body": "Письмо проверено.", "request_id": str(uuid4())}
+    import json
+    response = api.post("/api/v1/mail/send-files", data={"message": json.dumps(message)}, files=[
+        ("attachments", ("смета.txt", b"test content", "text/plain")),
+    ])
+    assert response.status_code == 200, response.text
+    assert uploads == [("смета.txt", b"test content", "text/plain")]
+    assert sent[0][5] == "Чернильцев Илья"
+    assert api.post("/api/v1/mail/send", json=message).status_code == 200
+    assert len(sent) == 1
+    assert api.patch(f"/api/v1/projects/{project['id']}", json={"email": None}).json()["email"] is None
+
+
+def test_zimbra_sends_encoded_recipient_and_utf8_attachment(tmp_path) -> None:
+    from email import policy
+    from email.parser import BytesParser
+
+    import httpx
+
+    from app.services.zimbra import ACCOUNT, MAIL, SOAP, Zimbra
+
+    path = tmp_path / "payload"
+    path.write_bytes(b"file content")
+    requests = []
+
+    def response(request):
+        requests.append(request.url.path)
+        if request.url.path == "/service/upload":
+            content_type = request.headers["content-type"]
+            payload = BytesParser(policy=policy.default).parsebytes(
+                b"Content-Type: " + content_type.encode() + b"\r\n\r\n" + request.read()
+            )
+            message = payload.get_payload()[0].get_payload()[0]
+            assert message["To"].addresses[0].display_name == "Чернильцев Илья"
+            assert message["Subject"] == "Документы"
+            attached = next(message.iter_attachments())
+            assert attached.get_filename() == "смета.txt"
+            assert attached.get_payload(decode=True) == b"file content"
+            return httpx.Response(200, text='200,\'null\',[{"aid":"uploaded"}]')
+        if b"AuthRequest" in request.content:
+            inner = f'<AuthResponse xmlns="{ACCOUNT}"><authToken>test-token</authToken></AuthResponse>'
+        else:
+            assert b'aid="uploaded"' in request.content
+            inner = f'<SendMsgResponse xmlns="{MAIL}"><m id="1"/></SendMsgResponse>'
+        return httpx.Response(200, text=f'<s:Envelope xmlns:s="{SOAP}"><s:Body>{inner}</s:Body></s:Envelope>')
+
+    with httpx.Client(transport=httpx.MockTransport(response)) as http:
+        service = Zimbra(http, "https://mail.example.com")
+        service.sign_in("qa@example.com", "qa-password")
+        assert service.send("contact@example.com", "Документы", "Здравствуйте!", "request", [
+            ("смета.txt", path, "text/plain"),
+        ], "Чернильцев Илья") == "1"
+    assert requests == ["/service/soap", "/service/upload", "/service/soap"]

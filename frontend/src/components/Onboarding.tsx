@@ -53,7 +53,7 @@ export default function Onboarding() {
   const current = STEPS[step];
 
   return (
-    <div className="fixed inset-x-3 bottom-24 z-50 mx-auto max-w-md rounded-card border border-[var(--border)] bg-surface p-4 shadow-lift md:bottom-6 md:right-6 md:left-auto md:mx-0">
+    <div className="forteon-floating forteon-popover fixed inset-x-3 bottom-24 z-50 mx-auto max-w-md p-4 md:bottom-6 md:right-6 md:left-auto md:mx-0">
       <div className="mb-2 flex items-center justify-between">
         <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-primary">
           Шаг {step + 1} из {STEPS.length}

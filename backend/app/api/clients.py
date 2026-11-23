@@ -19,6 +19,7 @@ from ..config import settings
 from ..db import get_db
 from ..deps import audit, bump_version, ensure_version, get_client_or_404, get_current_user
 from ..models import (
+    PERSONAL_PLAN_TYPE,
     AuditLog,
     Client,
     ClientContact,
@@ -78,7 +79,7 @@ def search_workspace(
     if len(needle) < 2:
         return {"items": []}
     phone_needle = re.sub(r"\D", "", needle) if re.fullmatch(r"[+()0-9. -]+", needle) else ""
-    owned = [Client.deleted_at.is_(None)]
+    owned = [Client.deleted_at.is_(None), Client.type != PERSONAL_PLAN_TYPE]
     if user.role != "admin":
         owned.append(Client.owner_id == user.id)
     sources = (
@@ -163,7 +164,7 @@ def list_clients(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    query = select(Client).where(Client.deleted_at.is_(None))
+    query = select(Client).where(Client.deleted_at.is_(None), Client.type != PERSONAL_PLAN_TYPE)
     if user.role != "admin":
         query = query.where(Client.owner_id == user.id)
     if status_filter:
@@ -250,7 +251,7 @@ def clients_picker(
     from datetime import datetime, timedelta
     from ..models import Note
 
-    query = select(Client).where(Client.deleted_at.is_(None))
+    query = select(Client).where(Client.deleted_at.is_(None), Client.type != PERSONAL_PLAN_TYPE)
     if user.role != "admin":
         query = query.where(Client.owner_id == user.id)
 
@@ -360,7 +361,7 @@ def create_client(payload: ClientCreate, request: Request, db: Session = Depends
                   user: User = Depends(get_current_user)):
     exists = db.scalar(
         select(Client).where(Client.owner_id == user.id, func.lower(Client.name) == payload.name.strip().lower(),
-                             Client.deleted_at.is_(None))
+                             Client.deleted_at.is_(None), Client.type != PERSONAL_PLAN_TYPE)
     )
     if exists:
         raise HTTPException(status_code=409, detail={"code": "duplicate", "message": "Клиент с таким названием уже есть"})
@@ -661,7 +662,7 @@ def update_project(project_id: str, payload: ProjectUpdate, db: Session = Depend
         if key in changes and changes[key] != getattr(project, key)
     }
     for key, value in changes.items():
-        if value is not None or key in ("planned_revenue", "estimated_cost"):
+        if value is not None or key in ("planned_revenue", "estimated_cost", "email"):
             setattr(project, key, value)
     project.version = (project.version or 1) + 1
     audit(db, user, "project", project.id, "updated", {

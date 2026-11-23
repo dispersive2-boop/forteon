@@ -2,15 +2,18 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { MailSettings } from "@/components/MailSettings";
 import { useAuth } from "@/components/AuthProvider";
 import { Badge, Button, Card, Field, SectionTitle, Skeleton, inputClass } from "@/components/ui";
-import { api, Session } from "@/lib/api";
+import { api, getRefreshToken, refreshSession, Session } from "@/lib/api";
 import { dateTimeRu } from "@/lib/format";
 import {
   applyDensity,
   applyTheme,
+  getAnimationsEnabled,
   getDensity,
   getTheme,
+  setAnimationsEnabled,
   setDensity,
   setTheme,
   type Density,
@@ -42,6 +45,9 @@ export default function SettingsPage() {
     }
   }
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessionBusy, setSessionBusy] = useState<string | null>(null);
+  const [sessionMessage, setSessionMessage] = useState<{ error: boolean; text: string } | null>(null);
+  const [animations, setAnimations] = useState(true);
   const [loading, setLoading] = useState(true);
   const [passwords, setPasswords] = useState({ current: "", next: "", repeat: "" });
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
@@ -50,6 +56,7 @@ export default function SettingsPage() {
   const [density, setDensityState] = useState<Density>("cozy");
 
   useEffect(() => {
+    setAnimations(getAnimationsEnabled());
     setThemeState(getTheme());
     setDensityState(getDensity());
   }, []);
@@ -85,7 +92,12 @@ export default function SettingsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setSessions(await api<Session[]>("/auth/sessions"));
+      const active = await api<Session[]>("/auth/sessions");
+      if (!active.some((session) => session.is_current) && getRefreshToken() && await refreshSession()) {
+        setSessions(await api<Session[]>("/auth/sessions"));
+      } else setSessions(active);
+    } catch (error) {
+      setSessionMessage({ error: true, text: error instanceof Error ? error.message : "Не удалось загрузить сессии." });
     } finally {
       setLoading(false);
     }
@@ -95,9 +107,27 @@ export default function SettingsPage() {
     void load();
   }, [load]);
 
-  async function revoke(sessionId: string) {
-    await api(`/auth/sessions/${sessionId}`, { method: "DELETE" });
-    await load();
+  async function revoke(sessionId?: string) {
+    setSessionBusy(sessionId ?? "others");
+    setSessionMessage(null);
+    try {
+      if (sessionId) {
+        await api(`/auth/sessions/${sessionId}`, { method: "DELETE" });
+        setSessions((current) => current.filter((session) => session.id !== sessionId));
+        setSessionMessage({ error: false, text: "Сессия завершена." });
+      } else {
+        const active = await api<Session[]>("/auth/sessions/revoke-others", {
+          method: "POST",
+          body: { refresh_token: getRefreshToken() },
+        });
+        setSessions(active);
+        setSessionMessage({ error: false, text: "Остальные сессии завершены." });
+      }
+    } catch (error) {
+      setSessionMessage({ error: true, text: error instanceof Error ? error.message : "Не удалось завершить сессии." });
+    } finally {
+      setSessionBusy(null);
+    }
   }
 
   async function changePassword(event: React.FormEvent) {
@@ -334,6 +364,17 @@ export default function SettingsPage() {
                 Компактно — меньше отступы в задачах и клиентах: больше строк на экране.
               </p>
             </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
+              <span id="motion-preference-label" className="text-sm font-medium text-ink">Анимации интерфейса</span>
+              <Button type="button" variant="outline" size="sm" role="switch" aria-checked={animations}
+                aria-labelledby="motion-preference-label" onClick={() => {
+                  setAnimationsEnabled(!animations);
+                  setAnimations(!animations);
+                }}>
+                {animations ? "Включены" : "Выключены"}
+              </Button>
+            </div>
           </div>
         </Card>
 
@@ -360,11 +401,25 @@ export default function SettingsPage() {
         </Card>
       </div>
 
+      <MailSettings />
+
       <Card>
         <SectionTitle
           title="Устройства и сессии"
-          subtitle="Каждая сессия — отдельное устройство. Отзыв действует немедленно."
+          subtitle="Активные входы в аккаунт"
+          action={sessions.length > 1 && (
+            <Button size="sm" variant="outline" disabled={Boolean(sessionBusy)}
+              loading={sessionBusy === "others"} onClick={() => void revoke()}>
+              Завершить остальные сеансы
+            </Button>
+          )}
         />
+        {sessionMessage && (
+          <p role={sessionMessage.error ? "alert" : "status"}
+            className={`mb-2 text-sm ${sessionMessage.error ? "text-[var(--danger)]" : "text-[var(--success)]"}`}>
+            {sessionMessage.text}
+          </p>
+        )}
         {loading ? (
           <div className="space-y-2">
             {Array.from({ length: 3 }).map((_, i) => (
@@ -389,11 +444,12 @@ export default function SettingsPage() {
                     {session.user_agent || "—"} · создана {dateTimeRu(session.created_at)}
                   </p>
                 </div>
-                {session.revoked_at ? (
-                  <Badge tone="neutral">отозвана</Badge>
+                {session.is_current ? (
+                  <Badge tone="success">Текущая сессия</Badge>
                 ) : (
-                  <Button size="sm" variant="outline" onClick={() => void revoke(session.id)}>
-                    Отозвать
+                  <Button size="sm" variant="outline" disabled={Boolean(sessionBusy)}
+                    loading={sessionBusy === session.id} onClick={() => void revoke(session.id)}>
+                    Завершить
                   </Button>
                 )}
               </div>

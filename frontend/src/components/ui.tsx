@@ -57,7 +57,7 @@ export function Button({
       {...rest}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={`focus-ring relative inline-flex max-w-full items-center justify-center gap-2 whitespace-nowrap font-medium leading-none transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${BUTTON_VARIANTS[variant]} ${BUTTON_SIZES[size]} ${className}`}
+      className={`forteon-action focus-ring relative inline-flex max-w-full items-center justify-center gap-2 whitespace-nowrap font-medium leading-none transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${BUTTON_VARIANTS[variant]} ${BUTTON_SIZES[size]} ${className}`}
     >
       {loading && (
         <span className="pointer-events-none absolute h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
@@ -286,13 +286,15 @@ export function EmptyState({
   title,
   description,
   action,
+  className = "",
 }: {
   title: string;
   description?: string;
   action?: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-card border border-dashed border-[var(--border-strong)] bg-[#fbfcfe] px-6 py-12 text-center">
+    <div className={`flex flex-col items-center justify-center rounded-card border border-dashed border-[var(--border-strong)] bg-[#fbfcfe] px-6 py-12 text-center ${className}`}>
       <div className="mb-3 grid h-12 w-12 place-items-center rounded-full bg-[var(--primary-soft)] text-primary">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
           <path d="M12 5v14M5 12h14" />
@@ -359,13 +361,31 @@ export function Modal({
   useLayoutEffect(() => {
     if (!open) return;
     const previousFocus = document.activeElement;
+    const dialog = dialogRef.current;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeRef.current();
+      if (!dialog || event.defaultPrevented || !["Escape", "Tab"].includes(event.key)) return;
+      const activeDialog = document.activeElement?.closest('[aria-modal="true"]') ??
+        Array.from(document.querySelectorAll('[aria-modal="true"]')).at(-1);
+      if (activeDialog !== dialog) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeRef.current();
+      }
+      if (event.key !== "Tab") return;
+      const controls = Array.from(dialog.querySelectorAll<HTMLElement>(
+        'a[href], button, input, select, textarea, [tabindex]',
+      )).filter((element) => element.tabIndex >= 0 && !element.matches(":disabled") && element.getClientRects().length);
+      const current = document.activeElement;
+      const first = controls[0];
+      const last = controls.at(-1);
+      if (!dialog.contains(current) || (!event.shiftKey && current === last) || (event.shiftKey && current === first)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first)?.focus();
+      }
     };
     document.addEventListener("keydown", onKeyDown);
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const dialog = dialogRef.current;
     const firstControl = dialog?.querySelector<HTMLElement>(
       "input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled])",
     ) ?? dialog?.querySelector<HTMLElement>("button:not([disabled])");
@@ -382,7 +402,7 @@ export function Modal({
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-end justify-center bg-[#0b1220]/45 p-0 sm:items-center sm:p-6"
+      className="forteon-overlay fixed inset-0 z-[70] flex items-end justify-center bg-[#0b1220]/45 p-0 sm:items-center sm:p-6"
       role="presentation"
       onMouseDown={(event) => {
         // Закрываем только по клику в сам фон, не во вложенный блок.
@@ -394,7 +414,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="flex max-h-[calc(100dvh-1rem)] w-full max-w-lg flex-col rounded-t-2xl border border-[var(--border)] bg-surface shadow-lift sm:rounded-card"
+        className="forteon-floating forteon-sheet flex max-h-[calc(100dvh-1rem)] w-full max-w-lg flex-col bg-surface"
       >
         <header className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3">
           <h3 id={titleId} className="text-[14.5px] font-semibold text-ink">{title}</h3>

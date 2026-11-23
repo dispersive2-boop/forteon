@@ -388,7 +388,7 @@ export default function TodayPage() {
             <Tabs items={FILTERS.map((f) => ({ ...f, count: counts[f.key] }))} value={filter} onChange={setFilter} />
           </div>
 
-          <div className="min-h-[280px] px-2 py-2">
+          <div key={filter} className={`min-h-[280px] px-2 py-2 ${loading ? "" : "forteon-tab-panel"}`}>
             {loading ? (
               <div className="space-y-1.5 px-2 py-1">
                 {Array.from({ length: 5 }).map((_, i) => (
@@ -510,14 +510,15 @@ export default function TodayPage() {
 
       {/* ------------------------------------------------- мобильный drawer (п.8) */}
       {sheetOpen && selected && (
-        <div className="fixed inset-0 z-40 xl:hidden">
+        <div className="fixed inset-0 z-[55] xl:hidden">
           <button
-            className="absolute inset-0 bg-[#0b1220]/45"
+            type="button"
+            className="forteon-overlay absolute inset-0 bg-[#0b1220]/45"
             onClick={() => setSheetOpen(false)}
             aria-label="Закрыть подробности"
           />
-          <div className="absolute inset-x-0 bottom-0 max-h-[82vh] overflow-y-auto rounded-t-2xl bg-surface p-4 shadow-lift">
-            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[#dde5ef]" />
+          <div className="forteon-floating forteon-sheet forteon-task-sheet absolute inset-x-0 bottom-0 max-h-[82dvh] overflow-y-auto overscroll-contain bg-surface p-4">
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[var(--border-strong)]" />
             <TaskContextContent
               task={selected}
               onReschedule={reschedule}
@@ -572,7 +573,7 @@ export default function TodayPage() {
 
       {/* Пункт 25: отмена закрытия (undo) */}
       {undo && (
-        <div className="fixed bottom-20 left-1/2 z-50 flex w-[min(94vw,420px)] -translate-x-1/2 items-center gap-3 rounded-control bg-[#111827] px-4 py-3 text-white shadow-lift lg:bottom-6">
+        <div className="forteon-floating forteon-glass-inverse fixed bottom-20 left-1/2 z-50 flex w-[min(94vw,420px)] -translate-x-1/2 items-center gap-3 px-4 py-3 text-white lg:bottom-6">
           <span className="min-w-0 flex-1 truncate text-[13.5px]">
             Задача закрыта: {undo.task.title}
           </span>

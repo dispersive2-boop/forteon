@@ -2,6 +2,7 @@
 
 import { AuthProvider } from "@/components/AuthProvider";
 
+import "@fontsource-variable/golos-text";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -47,7 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     Тема и плотность применяются до первого кадра: иначе на тёмной теме
     экран мигает белым, а на компактной — прыгает после гидрации.
   */
-  const bootstrap = `(function(){try{var t=localStorage.getItem("forteon.theme")||"system";var dark=t==="dark"||(t==="system"&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(dark)document.documentElement.dataset.theme="dark";var d=localStorage.getItem("forteon.density");if(d==="compact")document.documentElement.dataset.density="compact";var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content",dark?"#0B1220":"#151B29");}catch(e){}})();`;
+  const bootstrap = `(function(){try{var t=localStorage.getItem("forteon.theme")||"system";var dark=t==="dark"||(t==="system"&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(dark)document.documentElement.dataset.theme="dark";var d=localStorage.getItem("forteon.density");if(d==="compact")document.documentElement.dataset.density="compact";if(localStorage.getItem("forteon.motion")==="off")document.documentElement.dataset.motion="off";var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content",dark?"#0B1220":"#151B29");}catch(e){}})();`;
   return (
     <html lang="ru" suppressHydrationWarning>
       <head>

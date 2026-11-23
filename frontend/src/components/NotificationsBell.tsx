@@ -151,7 +151,7 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
             onClick={() => setOpen(false)}
             aria-label="Закрыть уведомления"
           />
-          <div className="fixed inset-x-3 top-[64px] z-50 sm:absolute sm:inset-x-auto sm:right-0 sm:top-[52px] sm:w-[360px] overflow-hidden rounded-card border border-[var(--border)] bg-surface shadow-lift">
+          <div className="forteon-floating forteon-popover fixed inset-x-3 top-[64px] z-50 sm:absolute sm:inset-x-auto sm:right-0 sm:top-[52px] sm:w-[360px] overflow-hidden bg-surface">
             <div className="flex items-center justify-between border-b border-[var(--border)] px-3.5 py-2.5">
               <p className="text-[14px] font-semibold text-ink">Уведомления</p>
               {unread > 0 && (

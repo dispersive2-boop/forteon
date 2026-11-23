@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { CreateTaskModal } from "@/components/CreateTaskModal";
 import { useParams, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { ClientFinanceEntry } from "@/components/ClientFinanceEntry";
 import { ContractModal } from "@/components/ContractModal";
@@ -211,7 +211,12 @@ export default function ClientPage() {
 function ClientWorkspace() {
   const { id: clientId } = useParams<{ id: string }>();
   const selectedTab = useSearchParams().get("tab") as Tab | null;
-  const tab = selectedTab && TAB_KEYS.includes(selectedTab) ? selectedTab : "overview";
+  const urlTab = selectedTab && TAB_KEYS.includes(selectedTab) ? selectedTab : "overview";
+  const [tab, setActiveTab] = useState<Tab>(urlTab);
+
+  useLayoutEffect(() => {
+    setActiveTab(urlTab);
+  }, [clientId, urlTab]);
 
   const [client, setClient] = useState<ClientDetail | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -233,6 +238,7 @@ function ClientWorkspace() {
   const [historyFilter, setHistoryFilter] = useState("all");
 
   const setTab = useCallback((next: Tab) => {
+    setActiveTab(next);
     const url = new URL(window.location.href);
     url.searchParams.set("tab", next);
     url.hash = "";
@@ -484,7 +490,7 @@ function ClientWorkspace() {
       <div
         role="tablist"
         aria-label="Разделы карточки клиента"
-        className="sticky top-0 z-20 -mx-4 flex gap-1 overflow-x-auto border-b border-[var(--border)] bg-[var(--canvas)]/95 px-4 backdrop-blur md:mx-0 md:px-0"
+        className="sticky top-[68px] z-10 -mx-4 flex gap-1 overflow-x-auto border-b border-[var(--border)] bg-[var(--canvas)]/95 px-4 backdrop-blur md:mx-0 md:px-0"
       >
         {TABS.map((item) => (
           <button
@@ -505,7 +511,7 @@ function ClientWorkspace() {
       </div>
 
       {tab === "overview" && (
-        <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+        <div className="forteon-tab-panel grid gap-4 lg:grid-cols-[1.4fr_1fr]">
           <div className="space-y-4">
             <Card>
               <SectionTitle title="Следующий шаг" />
@@ -644,7 +650,7 @@ function ClientWorkspace() {
       )}
 
       {tab === "notes" && (
-        <Card>
+        <Card className="forteon-tab-panel">
           <SectionTitle
             title="История заметок"
             subtitle={
@@ -734,7 +740,7 @@ function ClientWorkspace() {
       )}
 
       {tab === "tasks" && (
-        <Card>
+        <Card className="forteon-tab-panel">
           <SectionTitle title="Задачи клиента" subtitle={`${tasks.length} всего, ${openTasks.length} открыто`} />
           {tasks.length ? (
             <div className="-mx-1">
@@ -754,7 +760,7 @@ function ClientWorkspace() {
       )}
 
       {tab === "finance" && (
-        <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
+        <div className="forteon-tab-panel grid gap-4 lg:grid-cols-[1fr_1.2fr]">
           <Card>
             <SectionTitle title="Сводка" subtitle="По действующим счетам" />
             <dl className="space-y-2 text-[13px]">
@@ -781,7 +787,7 @@ function ClientWorkspace() {
       )}
 
       {tab === "projects" && (
-        <div className="space-y-3">
+        <div className="forteon-tab-panel space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-lg font-semibold text-ink">Проекты клиента</h2>
             <Button type="button" onClick={() => setBudgetProject(null)}>Добавить проект</Button>
@@ -802,10 +808,14 @@ function ClientWorkspace() {
                         ? `Из отчёта, строка ${project.source_row}`
                         : "Заведён в системе"}
                     </p>
+                    {project.email && (
+                      <Link href={`/mail?to=${encodeURIComponent(project.email)}`}
+                        className="text-sm text-primary hover:underline">{project.email}</Link>
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusBadge status={project.status} />
-                    <Button type="button" size="sm" variant="outline" onClick={() => setBudgetProject(project)}>Изменить суммы</Button>
+                    <Button type="button" size="sm" variant="outline" onClick={() => setBudgetProject(project)}>Изменить</Button>
                   </div>
                 </div>
                 <dl className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -941,7 +951,7 @@ function ClientWorkspace() {
 
       {/* ------------------------------------------------ Документы (п.39) */}
       {tab === "documents" && (
-        <Card padded={false}>
+        <Card padded={false} className="forteon-tab-panel">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3">
             <div>
               <h2 className="text-[16.5px] font-semibold tracking-[-0.015em] text-ink">Документы</h2>
@@ -996,7 +1006,7 @@ function ClientWorkspace() {
 
       {/* ------------------------------------------------ История (п.40) */}
       {tab === "history" && (
-        <Card>
+        <Card className="forteon-tab-panel">
           <SectionTitle
             title="История"
             subtitle="Журнал действий по клиенту: счета и оплаты, задачи, изменения карточки"

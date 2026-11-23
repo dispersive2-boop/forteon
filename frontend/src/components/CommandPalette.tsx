@@ -34,10 +34,12 @@ type WorkspaceHit = {
 };
 
 const NAV: { label: string; href: string }[] = [
+  { label: "Свободная заметка", href: "/free-note" },
   { label: "Сегодня", href: "/today" },
   { label: "Планировщик", href: "/planner" },
   { label: "Клиенты", href: "/clients" },
   { label: "Заметки", href: "/notes" },
+  { label: "Форти и почта", href: "/mail" },
   { label: "Финансы", href: "/finance" },
   { label: "Отчёты", href: "/reports" },
   { label: "Настройки", href: "/settings" },
@@ -158,7 +160,7 @@ export default function CommandPalette() {
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-start justify-center bg-[#0b1220]/55 p-4 pt-[12vh]"
+      className="forteon-overlay fixed inset-0 z-[60] flex items-start justify-center bg-[#0b1220]/55 p-4 pt-[12vh]"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) setOpen(false);
@@ -168,7 +170,7 @@ export default function CommandPalette() {
         role="dialog"
         aria-modal="true"
         aria-label="Командная палитра"
-        className="w-full max-w-xl overflow-hidden rounded-card border border-[var(--border)] bg-surface shadow-lift"
+        className="forteon-floating forteon-popover w-full max-w-xl overflow-hidden bg-surface"
       >
         <div className="flex items-center gap-2 border-b border-[var(--border)] px-3.5 py-3">
           <svg
