@@ -757,10 +757,12 @@ function ClientWorkspace() {
                       {project.location || "—"} · получен {dateRu(project.start_date)}
                       {project.stage_group ? ` · ${project.stage_group}` : ""}
                     </p>
+                    {project.email && <Link href={`/mail?to=${encodeURIComponent(project.email)}`}
+                      className="text-sm text-primary hover:underline">{project.email}</Link>}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusBadge status={project.status} />
-                    <Button type="button" size="sm" variant="outline" onClick={() => setBudgetProject(project)}>Изменить суммы</Button>
+                    <Button type="button" size="sm" variant="outline" onClick={() => setBudgetProject(project)}>Изменить</Button>
                   </div>
                 </div>
                 <dl className="mt-3 grid gap-2 sm:grid-cols-2">

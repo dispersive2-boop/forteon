@@ -51,6 +51,7 @@ const NAV_ITEMS = [
   { href: "/planner", label: "Планировщик", Icon: IconPlanner, badge: "overdue" as const },
   { href: "/clients", label: "Клиенты", Icon: IconClients },
   { href: "/notes", label: "Заметки", Icon: IconNotes },
+  { href: "/mail", label: "Форти и почта", Icon: IconNotes },
   { href: "/finance", label: "Финансы", Icon: IconFinance },
   { href: "/reports", label: "Отчёты", Icon: IconReports },
   { href: "/settings", label: "Настройки", Icon: IconSettings },
@@ -59,6 +60,7 @@ const NAV_ITEMS = [
 ];
 
 const PAGE_TITLES: Record<string, string> = {
+  "/mail": "Форти и почта",
   "/free-note": "Свободная заметка",
   "/today": "Сегодня",
   "/planner": "Планировщик",

@@ -61,6 +61,7 @@ export function MobileNav({ overdue = 0 }: { overdue?: number }) {
         {[
           { href: "/free-note", label: "Свободная заметка" },
           { href: "/notes", label: "Заметки" },
+          { href: "/mail", label: "Форти и почта" },
           { href: "/finance", label: "Финансы" },
           { href: "/reports", label: "Отчёты" },
           { href: "/settings", label: "Настройки" },

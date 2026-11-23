@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { MailSettings } from "@/components/MailSettings";
 import { useAuth } from "@/components/AuthProvider";
 import { Badge, Button, Card, Field, SectionTitle, Skeleton, inputClass } from "@/components/ui";
 import { api, getRefreshToken, refreshSession, Session } from "@/lib/api";
@@ -332,6 +333,8 @@ export default function SettingsPage() {
           </ul>
         </Card>
       </div>
+
+      <MailSettings />
 
       <Card>
         <SectionTitle

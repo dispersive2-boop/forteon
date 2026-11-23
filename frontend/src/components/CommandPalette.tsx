@@ -39,6 +39,7 @@ const NAV: { label: string; href: string }[] = [
   { label: "Планировщик", href: "/planner" },
   { label: "Клиенты", href: "/clients" },
   { label: "Заметки", href: "/notes" },
+  { label: "Форти и почта", href: "/mail" },
   { label: "Финансы", href: "/finance" },
   { label: "Отчёты", href: "/reports" },
   { label: "Настройки", href: "/settings" },

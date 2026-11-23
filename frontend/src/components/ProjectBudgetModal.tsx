@@ -15,6 +15,7 @@ export function ProjectBudgetModal({ clientId, project, onClose, onSaved }: {
   const formId = useId();
   const pending = useRef(false);
   const [name, setName] = useState(project?.name ?? "");
+  const [email, setEmail] = useState(project?.email ?? "");
   const [revenue, setRevenue] = useState(String(project?.planned_revenue ?? ""));
   const [cost, setCost] = useState(String(project?.estimated_cost ?? ""));
   const [saving, setSaving] = useState(false);
@@ -30,7 +31,7 @@ export function ProjectBudgetModal({ clientId, project, onClose, onSaved }: {
       const amounts = { planned_revenue: readAmount(revenue), estimated_cost: readAmount(cost) };
       const saved = await api<Project>(project ? `/projects/${project.id}` : `/clients/${clientId}/projects`, {
         method: project ? "PATCH" : "POST",
-        body: project ? { ...amounts, version: project.version } : { ...amounts, name: name.trim() },
+        body: project ? { ...amounts, email: email.trim() || null, version: project.version } : { ...amounts, email: email.trim() || null, name: name.trim() },
       });
       onSaved(saved);
     } catch (err) {
@@ -55,7 +56,7 @@ export function ProjectBudgetModal({ clientId, project, onClose, onSaved }: {
   }
 
   return (
-    <Modal open title={project ? "Суммы проекта" : "Новый проект"} onClose={close} footer={
+    <Modal open title={project ? "Настройки проекта" : "Новый проект"} onClose={close} footer={
       <>
         <Button type="button" variant="ghost" disabled={saving} onClick={close}>Отмена</Button>
         <Button type="submit" form={formId} disabled={!name.trim()} loading={saving}>Сохранить</Button>
@@ -68,6 +69,10 @@ export function ProjectBudgetModal({ clientId, project, onClose, onSaved }: {
               <input required maxLength={255} className={inputClass} value={name} onChange={(e) => setName(e.target.value)} />
             </Field>
           )}
+          <Field label="Почта объекта">
+            <input type="email" autoComplete="off" maxLength={254} className={inputClass}
+              value={email} onChange={(event) => setEmail(event.target.value)} />
+          </Field>
           <Field label="Плановый доход, ₽">
             <input inputMode="decimal" className={inputClass} value={revenue} onChange={(e) => setRevenue(e.target.value)} />
           </Field>

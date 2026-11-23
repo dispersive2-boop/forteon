@@ -21,7 +21,7 @@
  */
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AudioDraft } from "@/components/AudioDraft";
 import { useAuth } from "@/components/AuthProvider";
@@ -179,6 +179,7 @@ export default function NotesPage() {
 
 function NotesWorkspace() {
   const params = useSearchParams();
+  const router = useRouter();
   const free = usePathname() === "/free-note";
   const requestedId = params.get("client_id");
   const voiceRequested = params.get("voice") === "1";
@@ -945,6 +946,12 @@ function NotesWorkspace() {
                 </svg>
               </button>
 
+              {user && body.trim() && !correcting && (
+                <Button type="button" size="sm" variant="ghost" disabled={recording || sending} onClick={() => {
+                  sessionStorage.setItem(`forteon.forti.instruction.${user.id}`, body.trim().slice(0, 4000));
+                  router.push("/mail");
+                }}>Письмо с Форти</Button>
+              )}
               <div className="flex-1" />
 
               {correcting && (

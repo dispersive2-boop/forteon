@@ -280,6 +280,7 @@ export type ClientContract = {
 };
 
 export type Project = {
+  email: string | null;
   id: string;
   client_id: string;
   name: string;
