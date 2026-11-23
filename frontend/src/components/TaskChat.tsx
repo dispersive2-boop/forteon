@@ -12,7 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
 import { Badge, Button, EmptyState, ErrorState, Field, Skeleton, textareaClass } from "@/components/ui";
-import { api, TaskChat } from "@/lib/api";
+import { api, MessageSuggestion, TaskChat } from "@/lib/api";
 import { PRIORITY_LABELS, TASK_TYPE_LABELS, dateRu, dateTimeRu } from "@/lib/format";
 
 export function useTaskChat() {
@@ -236,6 +236,15 @@ export function TaskChatBody({
         className="inline-flex min-h-10 items-center font-medium text-primary hover:underline">
         Надиктовать заметку
       </Link>
+
+      {/*
+        п.25 «30 идей»: готовый текст следующего сообщения клиенту.
+        Форму берём с сервера — она собрана из фактов задачи, а не выдумана
+        здесь, поэтому менеджеру видно основание (source_label и цитата).
+        Нажатие подставляет текст в поле: можно сразу поправить.
+      */}
+      <SuggestionBlock taskId={chat.task.id} onUse={(text) => onDraft(text)} />
+
       <Field label="Новая заметка по этой задаче">
         <textarea
           value={draft}
@@ -249,6 +258,75 @@ export function TaskChatBody({
       <Button onClick={onSend} loading={sending} disabled={!draft.trim()}>
         Добавить заметку
       </Button>
+    </div>
+  );
+}
+
+/**
+ * п.25 «30 идей»: предлагаемый текст следующего сообщения клиенту.
+ *
+ * Почему отдельным компонентом, а не строкой в чате:
+ *  - текст должен подставляться в поле заметки одним нажатием, поэтому
+ *    живёт рядом с ним и переиспользует внешний `onDraft`;
+ *  - источник показываем всегда: без него «готовое сообщение» выглядит
+ *    выдумкой, и менеджер не станет им пользоваться;
+ *  - если серверу нечего предложить (`source_kind === "none"`), блок
+ *    молчит — заглушка «нет идей» только мешает.
+ */
+function SuggestionBlock({ taskId, onUse }: { taskId: string; onUse: (text: string) => void }) {
+  const [suggestion, setSuggestion] = useState<MessageSuggestion | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [used, setUsed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSuggestion(null);
+    setFailed(false);
+    setUsed(false);
+    api<MessageSuggestion>(`/tasks/${taskId}/suggest`)
+      .then((data) => {
+        if (!cancelled) setSuggestion(data);
+      })
+      .catch(() => {
+        // Молча: подсказка не критична, задача и так работает.
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [taskId]);
+
+  if (failed || !suggestion || suggestion.source_kind === "none" || !suggestion.text.trim()) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-control border border-[var(--border)] bg-[#f8fafd] px-2.5 py-2">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-1.5">
+        <span className="text-[11.5px] font-semibold uppercase tracking-[0.05em] text-[var(--muted)]">
+          Что написать клиенту
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            onUse(suggestion.text);
+            setUsed(true);
+          }}
+          className="focus-ring rounded-md px-1.5 py-0.5 text-[12px] font-medium text-primary underline decoration-dotted"
+        >
+          {used ? "Подставлено — можно править" : "Подставить в заметку"}
+        </button>
+      </div>
+
+      <p className="whitespace-pre-wrap break-words text-[13.5px] leading-relaxed text-ink">
+        {suggestion.text}
+      </p>
+
+      {/* Источник обязателен: менеджер видит, из какой фразы взялся текст. */}
+      <p className="mt-1.5 border-l-2 border-[var(--border-strong)] pl-2 text-[12px] italic leading-snug text-[var(--muted)]">
+        Основание: {suggestion.source_label}
+        {suggestion.source_quote ? ` — «${suggestion.source_quote}»` : ""}
+      </p>
     </div>
   );
 }

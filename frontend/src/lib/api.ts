@@ -430,6 +430,20 @@ export type TaskChat = {
   next_before: string | null;
 };
 
+/**
+ * п.25 «30 идей»: готовый текст следующего сообщения клиенту.
+ *
+ * Источник обязателен — менеджер должен видеть, из чего взялась фраза
+ * (`source_quote`), иначе предложение выглядит придуманным.
+ */
+export type MessageSuggestion = {
+  text: string;
+  source_kind: "task" | "commitment" | "note" | "none";
+  source_id: string | null;
+  source_quote: string | null;
+  source_label: string;
+};
+
 export type Planner = {
   date_from: string;
   date_to: string;
