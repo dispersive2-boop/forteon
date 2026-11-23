@@ -35,7 +35,14 @@ import {
 } from "@/components/ui";
 import { VoiceNoteForm } from "@/components/VoiceNoteForm";
 import { api, API_ROOT, ExtractionSummary, getToken, Note } from "@/lib/api";
-import { PRIORITY_LABELS, dateTimeRu, formatBytes, isOverdue, relativeDay } from "@/lib/format";
+import {
+  PRIORITY_LABELS,
+  TASK_TYPE_LABELS,
+  dateTimeRu,
+  formatBytes,
+  isOverdue,
+  relativeDay,
+} from "@/lib/format";
 
 type PickerClient = {
   id: string;
@@ -833,24 +840,57 @@ function NoteCard({
   */
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
+  const [draftType, setDraftType] = useState("");
+  const [draftPriority, setDraftPriority] = useState("");
+  const [draftDueDate, setDraftDueDate] = useState("");
+  /** Исходные поля задачи — чтобы отправить только реально изменённое. */
+  const [taskBefore, setTaskBefore] = useState<{
+    type: string;
+    priority: string;
+    due_date: string | null;
+  } | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   /** п.23: решение по предложенной задаче — id задачи, которую сейчас решаем. */
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
 
-  async function saveTaskTitle(taskId: string) {
+  /**
+   * п.6 «30 идей»: правим не только формулировку, но и тип, приоритет, срок.
+   *
+   * Раньше единственным доступным полем был заголовок, поэтому «звонок»
+   * от AI оставался звонком, даже если это оплата, а срок приходилось
+   * менять в другом месте. Один PATCH закрывает всё.
+   *
+   * Отправляем только изменённые поля: сервер трактует absent как «не
+   * трогать», и лишние null сбросили бы срок, который менеджер не менял.
+   */
+  async function saveTaskEdits(taskId: string) {
     const title = draftTitle.trim();
     if (!title) {
       setEditingId(null);
       return;
     }
+    const body: Record<string, unknown> = { title };
+    if (draftType && draftType !== taskBefore?.type) body.type = draftType;
+    if (draftPriority && draftPriority !== taskBefore?.priority) body.priority = draftPriority;
+    if (draftDueDate !== (taskBefore?.due_date ?? "")) {
+      // Пустая строка — осознанное «без срока», а не «не менять».
+      body.due_date = draftDueDate || null;
+    }
+
     setSavingEdit(true);
     try {
-      await api(`/tasks/${taskId}`, { method: "PATCH", body: { title } });
-      if (taskId) {
-        // Обновляем локально, чтобы не ждать перезагрузку всей ленты.
-        const target = tasks.find((t) => t.id === taskId);
-        if (target) target.title = title;
+      const updated = await api<{ title: string; type: string; priority: string; due_date: string | null }>(
+        `/tasks/${taskId}`,
+        { method: "PATCH", body },
+      );
+      // Обновляем локально, чтобы не ждать перезагрузку всей ленты.
+      const target = tasks.find((t) => t.id === taskId);
+      if (target) {
+        target.title = updated.title;
+        target.type = updated.type;
+        target.priority = updated.priority;
+        target.due_date = updated.due_date;
       }
       setEditingId(null);
     } finally {
@@ -1033,30 +1073,79 @@ function NoteCard({
                   }`}
                 />
                 {editingId === task.id ? (
-                  <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                  /*
+                    п.6: правим все поля сразу — формулировку, тип, приоритет,
+                    срок. Иначе «звонок» от AI остаётся звонком, даже если это
+                    оплата, и менеджер идёт исправлять это в другом экране.
+                  */
+                  <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                     <input
                       autoFocus
                       value={draftTitle}
                       onChange={(e) => setDraftTitle(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") void saveTaskTitle(task.id);
+                        if (e.key === "Enter") void saveTaskEdits(task.id);
                         if (e.key === "Escape") setEditingId(null);
                       }}
-                      className="focus-ring min-w-0 flex-1 rounded-md border border-[var(--border-strong)] px-2 py-1 text-[13.5px]"
+                      className="focus-ring min-w-0 w-full rounded-md border border-[var(--border-strong)] px-2 py-1 text-[13.5px]"
                       aria-label="Исправить формулировку задачи"
                     />
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      loading={savingEdit}
-                      onClick={() => void saveTaskTitle(task.id)}
-                    >
-                      Сохранить
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
-                      Отмена
-                    </Button>
-                  </span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <select
+                        value={draftType}
+                        onChange={(e) => setDraftType(e.target.value)}
+                        aria-label="Тип задачи"
+                        className="focus-ring h-8 rounded-md border border-[var(--border-strong)] bg-surface px-1.5 text-[12.5px] text-ink"
+                      >
+                        {Object.entries(TASK_TYPE_LABELS).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={draftPriority}
+                        onChange={(e) => setDraftPriority(e.target.value)}
+                        aria-label="Приоритет задачи"
+                        className="focus-ring h-8 rounded-md border border-[var(--border-strong)] bg-surface px-1.5 text-[12.5px] text-ink"
+                      >
+                        {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="date"
+                        value={draftDueDate}
+                        onChange={(e) => setDraftDueDate(e.target.value)}
+                        aria-label="Срок задачи"
+                        className="focus-ring h-8 rounded-md border border-[var(--border-strong)] px-1.5 text-[12.5px] text-ink"
+                      />
+                      {draftDueDate && (
+                        <button
+                          type="button"
+                          onClick={() => setDraftDueDate("")}
+                          className="focus-ring h-8 rounded-md px-1.5 text-[11.5px] font-medium text-[var(--muted)] underline decoration-dotted"
+                        >
+                          без срока
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        loading={savingEdit}
+                        onClick={() => void saveTaskEdits(task.id)}
+                      >
+                        Сохранить
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
+                        Отмена
+                      </Button>
+                    </div>
+                  </div>
                 ) : (
                   <>
                     <span
@@ -1071,8 +1160,16 @@ function NoteCard({
                       onClick={() => {
                         setEditingId(task.id);
                         setDraftTitle(task.title);
+                        setDraftType(task.type);
+                        setDraftPriority(task.priority);
+                        setDraftDueDate(task.due_date ?? "");
+                        setTaskBefore({
+                          type: task.type,
+                          priority: task.priority,
+                          due_date: task.due_date ?? null,
+                        });
                       }}
-                      title="Исправить формулировку задачи"
+                      title="Исправить задачу: формулировка, тип, приоритет, срок"
                       aria-label="Исправить формулировку задачи"
                       className="focus-ring shrink-0 rounded px-1.5 py-1 text-[11.5px] font-medium text-primary hover:bg-[var(--primary-soft)]"
                     >
