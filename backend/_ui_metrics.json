@@ -1,0 +1,106 @@
+{
+  "pages": [
+    {
+      "label": "Список клиентов",
+      "path": "/clients",
+      "first_paint_ms": 40,
+      "cls": 0,
+      "cli_supported": true,
+      "shifts": [],
+      "scroll_height": 7124,
+      "scrolled_to": 600
+    },
+    {
+      "label": "Сегодня",
+      "path": "/today",
+      "first_paint_ms": 60,
+      "cls": 0.0024,
+      "cli_supported": true,
+      "shifts": [
+        {
+          "value": 0.0012125855999228395,
+          "at": 434
+        },
+        {
+          "value": 0.0012125855999228395,
+          "at": 434
+        }
+      ],
+      "scroll_height": 901,
+      "scrolled_to": 1
+    },
+    {
+      "label": "Планировщик",
+      "path": "/planner",
+      "first_paint_ms": 51,
+      "cls": 0,
+      "cli_supported": true,
+      "shifts": [],
+      "scroll_height": 919,
+      "scrolled_to": 19
+    },
+    {
+      "label": "Заметки",
+      "path": "/notes",
+      "first_paint_ms": 60,
+      "cls": 0.0635,
+      "cli_supported": true,
+      "shifts": [
+        {
+          "value": 0.015884353365590707,
+          "at": 466
+        },
+        {
+          "value": 0.015884353365590707,
+          "at": 466
+        },
+        {
+          "value": 0.015884353365590707,
+          "at": 466
+        },
+        {
+          "value": 0.015884353365590707,
+          "at": 466
+        }
+      ],
+      "scroll_height": 900,
+      "scrolled_to": 0
+    }
+  ],
+  "scroll": [
+    {
+      "label": "Список клиентов",
+      "path": "/clients",
+      "scroll_before": 700,
+      "scroll_after": 700,
+      "kept": true
+    }
+  ],
+  "focus": [
+    {
+      "label": "Поиск клиентов",
+      "path": "/clients",
+      "selector": "input#client-search",
+      "found": true,
+      "focus_before": "INPUT",
+      "focus_after": "INPUT",
+      "focus_kept": true,
+      "value_kept": true
+    }
+  ],
+  "thresholds": {
+    "cls_good": 0.1
+  },
+  "actions": [
+    {
+      "label": "Поиск клиента (ввод → строки)",
+      "ms": 177,
+      "note": "строк: 100"
+    },
+    {
+      "label": "Открытие карточки клиента",
+      "ms": 28,
+      "note": "данные на экране"
+    }
+  ]
+}
