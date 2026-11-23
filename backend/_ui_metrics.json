@@ -3,7 +3,7 @@
     {
       "label": "Список клиентов",
       "path": "/clients",
-      "first_paint_ms": 40,
+      "first_paint_ms": 65,
       "cls": 0,
       "cli_supported": true,
       "shifts": [],
@@ -13,17 +13,17 @@
     {
       "label": "Сегодня",
       "path": "/today",
-      "first_paint_ms": 60,
+      "first_paint_ms": 95,
       "cls": 0.0024,
       "cli_supported": true,
       "shifts": [
         {
           "value": 0.0012125855999228395,
-          "at": 434
+          "at": 672
         },
         {
           "value": 0.0012125855999228395,
-          "at": 434
+          "at": 672
         }
       ],
       "scroll_height": 901,
@@ -32,39 +32,39 @@
     {
       "label": "Планировщик",
       "path": "/planner",
-      "first_paint_ms": 51,
+      "first_paint_ms": 103,
       "cls": 0,
       "cli_supported": true,
       "shifts": [],
-      "scroll_height": 919,
-      "scrolled_to": 19
+      "scroll_height": 900,
+      "scrolled_to": 0
     },
     {
       "label": "Заметки",
       "path": "/notes",
-      "first_paint_ms": 60,
-      "cls": 0.0635,
+      "first_paint_ms": 103,
+      "cls": 0.0639,
       "cli_supported": true,
       "shifts": [
         {
-          "value": 0.015884353365590707,
-          "at": 466
+          "value": 0.015969638484332135,
+          "at": 681
         },
         {
-          "value": 0.015884353365590707,
-          "at": 466
+          "value": 0.015969638484332135,
+          "at": 681
         },
         {
-          "value": 0.015884353365590707,
-          "at": 466
+          "value": 0.015969638484332135,
+          "at": 681
         },
         {
-          "value": 0.015884353365590707,
-          "at": 466
+          "value": 0.015969638484332135,
+          "at": 681
         }
       ],
-      "scroll_height": 900,
-      "scrolled_to": 0
+      "scroll_height": 3090,
+      "scrolled_to": 600
     }
   ],
   "scroll": [
@@ -94,12 +94,12 @@
   "actions": [
     {
       "label": "Поиск клиента (ввод → строки)",
-      "ms": 177,
+      "ms": 127,
       "note": "строк: 100"
     },
     {
       "label": "Открытие карточки клиента",
-      "ms": 28,
+      "ms": 37,
       "note": "данные на экране"
     }
   ]
