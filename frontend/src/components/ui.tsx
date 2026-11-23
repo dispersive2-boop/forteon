@@ -136,26 +136,65 @@ export function SectionTitle({
   );
 }
 
+/*
+ * п.28 «30 идей»: состояние передаётся тремя каналами, а не только цветом.
+ *
+ * Почему так: цвет — единственный носитель смысла ломается сразу в двух
+ * случаях — при дальтонизме и при печати в ч/б. Поэтому у каждого тона есть
+ *   • форма значка (круг / ромб / квадрат / треугольник / шестиугольник),
+ *   • собственный глиф,
+ *   • текстовый ярлык внутри,
+ * и только потом цвет. Плюс `title` и `aria-label` — слово для скринридера.
+ *
+ * Контраст: тона используют те же токены, что и весь интерфейс, поэтому
+ * одинаково читаются в обеих темах — свет и тёмная подложка сайдбара.
+ */
+const BADGE_SHAPES: Record<string, { shape: string; glyph: string }> = {
+  neutral: { shape: "rounded-full", glyph: "" },
+  primary: { shape: "rounded-full", glyph: "●" },
+  success: { shape: "rounded-[5px]", glyph: "✓" },
+  warning: { shape: "[clip-path:polygon(50%_0,100%_100%,0_100%)] rounded-none pt-[3px]", glyph: "!" },
+  danger: { shape: "[clip-path:polygon(50%_0,100%_50%,50%_100%,0_50%)] rounded-none", glyph: "✕" },
+};
+
 export function Badge({
   children,
   tone = "neutral",
   className = "",
+  label,
 }: {
   children: React.ReactNode;
   tone?: "neutral" | "primary" | "danger" | "success" | "warning";
   className?: string;
+  /** Слово для скринридера, если внутри значка только глиф. */
+  label?: string;
 }) {
+  /*
+   * Цвета берём из `--badge-*`, а не из --muted/--danger: значок лежит на
+   * своей мягкой подложке, и для неё нужен другой оттенок. Тёмная тема
+   * переопределяет те же переменные, поэтому код здесь один.
+   */
   const tones: Record<string, string> = {
-    neutral: "bg-[#eef2f8] text-[var(--muted)]",
-    primary: "bg-[var(--primary-soft)] text-primary",
-    danger: "bg-[var(--danger-soft)] text-[var(--danger)]",
-    success: "bg-[var(--success-soft)] text-[var(--success)]",
-    warning: "bg-[var(--warning-soft)] text-[var(--warning)]",
+    neutral: "bg-[#eef2f8] text-[var(--badge-neutral)]",
+    primary: "bg-[var(--primary-soft)] text-[var(--badge-primary)]",
+    danger: "bg-[var(--danger-soft)] text-[var(--badge-danger)]",
+    success: "bg-[var(--success-soft)] text-[var(--badge-success)]",
+    warning: "bg-[var(--warning-soft)] text-[var(--badge-warning)]",
   };
+  const { shape, glyph } = BADGE_SHAPES[tone] ?? BADGE_SHAPES.neutral;
+  const text = typeof children === "string" ? children : label ?? tone;
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium leading-none ${tones[tone]} ${className}`}
+      role="status"
+      aria-label={label ?? text}
+      title={label ?? text}
+      className={`inline-flex items-center gap-1 px-2.5 py-1 text-[12px] font-medium leading-none ${shape} ${tones[tone]} ${className}`}
     >
+      {glyph && (
+        <span aria-hidden className="text-[10px] leading-none">
+          {glyph}
+        </span>
+      )}
       {children}
     </span>
   );

@@ -1,0 +1,3711 @@
+{
+  "themes": {
+    "light": [
+      {
+        "path": "/today",
+        "badges": [
+          {
+            "text": "онлайн",
+            "label": "",
+            "title": "Соединение есть",
+            "radius": "8px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 4.55
+          }
+        ]
+      },
+      {
+        "path": "/clients",
+        "badges": [
+          {
+            "text": "онлайн",
+            "label": "",
+            "title": "Соединение есть",
+            "radius": "8px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 4.55
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 5.5
+          }
+        ]
+      },
+      {
+        "path": "/planner",
+        "badges": [
+          {
+            "text": "онлайн",
+            "label": "",
+            "title": "Соединение есть",
+            "radius": "8px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 4.55
+          },
+          {
+            "text": "✕5",
+            "label": "danger",
+            "title": "danger",
+            "radius": "0px",
+            "clip": true,
+            "glyph": "✕",
+            "ratio": 5.91
+          }
+        ]
+      }
+    ],
+    "dark": [
+      {
+        "path": "/today",
+        "badges": [
+          {
+            "text": "онлайн",
+            "label": "",
+            "title": "Соединение есть",
+            "radius": "8px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 7.3
+          }
+        ]
+      },
+      {
+        "path": "/clients",
+        "badges": [
+          {
+            "text": "онлайн",
+            "label": "",
+            "title": "Соединение есть",
+            "radius": "8px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 7.3
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "Активен",
+            "label": "Активен",
+            "title": "Активен",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          },
+          {
+            "text": "обновлён 19.11.2026",
+            "label": "neutral",
+            "title": "neutral",
+            "radius": "9999px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 11.95
+          }
+        ]
+      },
+      {
+        "path": "/planner",
+        "badges": [
+          {
+            "text": "онлайн",
+            "label": "",
+            "title": "Соединение есть",
+            "radius": "8px",
+            "clip": false,
+            "glyph": "",
+            "ratio": 7.3
+          },
+          {
+            "text": "✕5",
+            "label": "danger",
+            "title": "danger",
+            "radius": "0px",
+            "clip": true,
+            "glyph": "✕",
+            "ratio": 8.04
+          }
+        ]
+      }
+    ]
+  },
+  "problems": []
+}
