@@ -65,6 +65,8 @@ type Overview = {
   clients: number;
   rows: InvoiceRow[];
   payments?: PaymentRow[];
+  /** п.17: долг словами — «выставлено …, зачтено …, остаток …». */
+  debt_explanation?: string;
 };
 
 type Tab = "invoices" | "payments";
@@ -148,6 +150,13 @@ export default function FinancePage() {
         <Stat label="Долг" value={money(data?.debt)} tone={(data?.debt ?? 0) > 0 ? "danger" : "neutral"} />
         <Stat label="Просрочено" value={money(data?.overdue_amount)} tone={(data?.overdue_amount ?? 0) > 0 ? "danger" : "neutral"} />
       </div>
+
+      {/* п.17: не только «долг 300 000», но и откуда он взялся */}
+      {data?.debt_explanation && (
+        <p className="rounded-control border border-[var(--border)] bg-canvas px-3.5 py-2.5 text-[12.5px] leading-snug text-[var(--muted)]">
+          {data.debt_explanation}
+        </p>
+      )}
 
       {error && data && (
         <div className="flex flex-wrap items-center gap-3 rounded-control border border-[#f3c7cb] bg-[var(--danger-soft)] px-3.5 py-2.5 text-[13px] text-[var(--danger)]">

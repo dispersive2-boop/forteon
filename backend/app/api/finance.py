@@ -64,22 +64,92 @@ def _summary(db: Session, client_id: str) -> FinancialSummary:
     billed = sum(float(i.amount or 0) for i in invoices if i.status != "void")
     paid = sum(float(p.amount or 0) for p in payments)
     allocated = sum(allocations.values())
+    currency = _overview_currency(invoices)
     today = date.today()
     overdue_amount = sum(
         _remaining(i, allocations) for i in invoices
         if i.status == "issued" and i.due_date and i.due_date < today
     )
     unpaid = [i for i in invoices if i.status == "issued"]
+    debt = round(billed - allocated, 2)
+    unallocated = round(max(paid - allocated, 0.0), 2)
 
     return FinancialSummary(
         billed=round(billed, 2),
         paid=round(paid, 2),
         allocated=round(allocated, 2),
-        debt=round(billed - allocated, 2),
+        debt=debt,
         overdue_amount=round(overdue_amount, 2),
         invoices=len(invoices),
         unpaid_invoices=len(unpaid),
+        debt_explanation=_explain_debt(billed, paid, allocated, debt, unallocated, currency),
+        unallocated_paid=unallocated,
     )
+
+
+# Знак валюты для текста. У счёта есть поле currency, поэтому рубль не
+# вшиваем: иначе для счёта в долларах объяснение соврёт.
+_CURRENCY_SIGNS = {"RUB": "₽", "USD": "$", "EUR": "€", "KZT": "₸", "BYN": "Br"}
+
+
+def _money(value: float, currency: str = "RUB") -> str:
+    """Сумма для текста: «300 000 ₽», без копеек при нуле."""
+    sign = _CURRENCY_SIGNS.get((currency or "RUB").upper(), (currency or "RUB").upper())
+    rounded = round(float(value or 0), 2)
+    if abs(rounded - round(rounded)) < 0.005:
+        number = f"{round(rounded):,}".replace(",", " ")
+    else:
+        number = f"{rounded:,.2f}".replace(",", " ").replace(".", ",")
+    return f"{number} {sign}"
+
+
+def _overview_currency(invoices) -> str:
+    """Валюта сводки: если все счета в одной валюте — она, иначе рубль.
+
+    Мешать валюты в одном числе нельзя, но и молча ставить рубль для
+    долларовых счетов — врать. Для смешанного набора оставляем рубль
+    как базу и не притворяемся, что посчитали точно.
+    """
+    currencies = {invoice.currency for invoice in invoices if invoice.currency}
+    if len(currencies) == 1:
+        return currencies.pop()
+    return "RUB"
+
+
+def _explain_debt(
+    billed: float,
+    paid: float,
+    allocated: float,
+    debt: float,
+    unallocated: float,
+    currency: str = "RUB",
+) -> str:
+    """Объяснение долга одной фразой (п.17 «30 идей»).
+
+    Менеджеру нужен не только остаток, но и откуда он: выставлено, пришло,
+    зачтено. А если оплата пришла, но не разнесена по счетам — это тоже
+    повод позвонить, поэтому говорим об этом отдельно.
+    """
+    if billed <= 0 and paid <= 0:
+        return "Счетов нет — долга нет."
+    if debt <= 0.01:
+        if unallocated > 0.01:
+            return (
+                f"Выставлено {_money(billed, currency)}, зачтено {_money(allocated, currency)}. "
+                f"Долга нет, но {_money(unallocated, currency)} оплаты ещё не разнесены по счетам."
+            )
+        return (
+            f"Выставлено {_money(billed, currency)}, "
+            f"зачтено {_money(allocated, currency)} — долга нет."
+        )
+    text = (
+        f"Выставлено {_money(billed, currency)}, "
+        f"зачтено {_money(allocated, currency)} — "
+        f"остаток {_money(debt, currency)}."
+    )
+    if unallocated > 0.01:
+        text += f" Из оплат {_money(unallocated, currency)} ждут разнесения по счетам."
+    return text
 
 
 @router.get("/clients/{client_id}/invoices", response_model=list[InvoiceOut])
@@ -445,15 +515,24 @@ def finance_overview(db: Session = Depends(get_db), user: User = Depends(get_cur
             "overdue": bool(invoice.status == "issued" and invoice.due_date and invoice.due_date < today),
         })
 
+    debt = round(billed - allocated, 2)
+    unallocated = round(max(paid - allocated, 0.0), 2)
+
     return {
         "billed": round(billed, 2),
         "paid": round(paid, 2),
         "allocated": round(allocated, 2),
-        "debt": round(billed - allocated, 2),
+        "debt": debt,
         "overdue_amount": round(overdue_amount, 2),
         "invoices": len(invoices),
         "unpaid_invoices": sum(1 for i in invoices if i.status == "issued"),
         "clients": len(clients),
+        # п.17: то же объяснение, что и в карточке клиента, — список и
+        # деталь не должны расходиться словами.
+        "debt_explanation": _explain_debt(
+            billed, paid, allocated, debt, unallocated, _overview_currency(invoices)
+        ),
+        "unallocated_paid": unallocated,
         "rows": rows,
         "payments": [
             {
