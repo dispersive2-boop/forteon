@@ -111,3 +111,12 @@ export const ORIGIN_LABELS: Record<string, string> = {
   import: "Импорт",
   manual: "Вручную",
 };
+
+export function readAmount(text: string): number | null {
+  const normalized = text.replace(/\s/g, "").replace(",", ".");
+  if (!normalized) return null;
+  if (!/^\d{1,13}(\.\d{1,2})?$/.test(normalized)) {
+    throw new Error("Введите сумму в рублях, например 125 000,50.");
+  }
+  return Number(normalized);
+}

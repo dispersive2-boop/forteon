@@ -24,7 +24,7 @@ from .dates import extract_due, is_conditional, is_negative, localize, utc_naive
 
 log = logging.getLogger("forteon.ai")
 
-PROMPT_VERSION = "v2"
+PROMPT_VERSION = "v3"
 
 SYSTEM_PROMPT = """Ты — экстрактор задач для CRM сопровождения клиентов.
 
@@ -38,8 +38,16 @@ SYSTEM_PROMPT = """Ты — экстрактор задач для CRM сопр�
 3) WAITING — ждём от клиента или третьей стороны: «ждём», «обещали»,
    «попросили», «должны со стороны клиента», «нет ответа».
 
-Отсутствие даты НЕ повод отправлять задачу на уточнение. Действие без срока
-всё равно задача — просто due_date=null.
+Отсутствие даты не повод отправлять задачу на уточнение: ставь due_date=null.
+Сначала реши, требуется ли действие, потом извлеки срок. Срок указывай в
+часовом поясе менеджера. Если в заметке указано время, передай его как HH:MM;
+если время не указано, передай due_time=null.
+Примеры:
+- «КП отправил, смету переделать завтра к 09:45» — факт отправки и одна задача
+  на переделку со сроком завтра, 09:45.
+- «Клиент обещал оплатить к пятнице» — задача контроля и обязательство клиента.
+- «Проверить документы» — задача без срока.
+
 
 Верни СТРОГО JSON без markdown:
 {"tasks":[{"title":"","event_kind":"todo|waiting|unclear","actor":"us|client",
@@ -332,16 +340,18 @@ def _normalize_payload(payload: dict[str, Any], note_moment: datetime, tz_name: 
         if not title:
             continue
         due_raw = raw.get("due_date")
-        due_time = raw.get("due_time") or "10:00"
+        due_time = str(raw.get("due_time") or "10:00")
         due_at: datetime | None = None
-        parsed = _parse_iso(due_raw if isinstance(due_raw, str) and len(str(due_raw)) == 10
-                            else (f"{due_raw}T{due_time}" if due_raw else None))
+        date_value = str(due_raw or "")
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_value):
+            parsed = _parse_iso(f"{date_value}T{due_time}") or _parse_iso(f"{date_value}T10:00")
+        else:
+            parsed = _parse_iso(date_value)
         if parsed is not None:
             if parsed.tzinfo is None:
                 parsed = parsed.replace(tzinfo=now_local.tzinfo)
             due_at = utc_naive(parsed)
         else:
-            # AI не дал дату — пробуем локальные правила по цитате
             due_at, _ = extract_due(str(raw.get("source_quote") or title), now_local, tz_name)
 
         priority = str(raw.get("priority") or "normal").lower()

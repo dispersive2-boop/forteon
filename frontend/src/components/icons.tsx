@@ -120,8 +120,8 @@ export const IconAttach = (p: IconProps) => (
 
 export const IconFinance = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M12 2.8v18.4" />
-    <path d="M16.4 6.4H9.8a2.8 2.8 0 0 0 0 5.6h4.4a2.8 2.8 0 0 1 0 5.6H7.2" />
+    <path d="M8 20V4.5h5.2a4 4 0 0 1 0 8H5.5M5.5 16h10" />
+    <path d="m18 18 1.5 1.5L22 17" opacity=".65" />
   </Svg>
 );
 

@@ -69,7 +69,7 @@ const SHIFTS = [
 function isoDate(offsetDays = 0): string {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export default function TodayPage() {
@@ -290,6 +290,19 @@ export default function TodayPage() {
           </>
         )}
       </div>
+
+      {!loading && items.length > 0 && (data?.counters.overdue ?? 0) > 0 && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-card border border-[var(--border)] bg-surface px-3 py-2">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-ink">Начните с просроченной задачи</p>
+            <p className="break-words text-sm text-[var(--muted)]">{items[0].title}</p>
+          </div>
+          <Button type="button" size="sm" variant="outline" onClick={() => {
+            setSelectedId(items[0].id);
+            setSheetOpen(true);
+          }}>Открыть задачу</Button>
+        </div>
+      )}
 
       {error && data && (
         <div className="mb-3 flex flex-wrap items-center gap-3 rounded-control border border-[#f3c7cb] bg-[var(--danger-soft)] px-3.5 py-2.5 text-[13px] text-[var(--danger)]">

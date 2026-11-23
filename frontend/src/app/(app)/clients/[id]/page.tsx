@@ -17,6 +17,8 @@ function readTabFromUrl(): Tab | null {
   return TAB_KEYS.includes(value as Tab) ? (value as Tab) : null;
 }
 
+import { ClientFinanceEntry } from "@/components/ClientFinanceEntry";
+import { ProjectBudgetModal } from "@/components/ProjectBudgetModal";
 import { TaskChatBody, useTaskChat } from "@/components/TaskChat";
 import {
   Badge,
@@ -199,9 +201,11 @@ export default function ClientPage() {
 
   const [client, setClient] = useState<ClientDetail | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [budgetProject, setBudgetProject] = useState<Project | null>();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [finance, setFinance] = useState<FinancialSummary | null>(null);
+  const [financeEntry, setFinanceEntry] = useState<"invoice" | "payment" | null>(null);
   const [documents, setDocuments] = useState<ClientDocument[]>([]);
   const [contracts, setContracts] = useState<ClientContract[]>([]);
   const [history, setHistory] = useState<ClientHistoryEvent[]>([]);
@@ -319,7 +323,7 @@ export default function ClientPage() {
     await load();
   }
 
-  if (loading) {
+  if (loading && client?.id !== clientId) {
     return (
       <div className="mx-auto max-w-[1240px] space-y-4">
         <Skeleton className="h-24 rounded-card" />
@@ -333,16 +337,14 @@ export default function ClientPage() {
     );
   }
 
-  if (error || !client) {
+  if (!client || client.id !== clientId) {
     return (
       <Card>
         <EmptyState
           title="Клиент недоступен"
           description={error ?? "Клиент не найден или принадлежит другому менеджеру."}
           action={
-            <Link href="/clients">
-              <Button variant="subtle" size="sm">К списку клиентов</Button>
-            </Link>
+            <Link href="/clients" className="font-medium text-primary hover:underline">К списку клиентов</Link>
           }
         />
       </Card>
@@ -362,6 +364,7 @@ export default function ClientPage() {
         <span className="truncate text-ink">{client.name}</span>
       </nav>
 
+      {error && <p role="alert" className="rounded-control bg-[var(--danger-soft)] p-3 text-sm text-[var(--danger)]">{error}</p>}
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
@@ -383,10 +386,11 @@ export default function ClientPage() {
               <Badge tone="neutral">версия {client.version}</Badge>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setNoteOpen(true)}>
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/notes?client_id=${encodeURIComponent(clientId)}&voice=1`}
+              className="focus-ring inline-flex h-11 items-center rounded-control border border-[var(--border-strong)] px-4 text-sm font-medium text-ink hover:text-primary">
               Записать голосом
-            </Button>
+            </Link>
             <Button onClick={() => setNoteOpen(true)}>Добавить заметку</Button>
           </div>
         </div>
@@ -667,19 +671,25 @@ export default function ClientPage() {
             </dl>
           </Card>
           <Card>
-            <SectionTitle title="Позиция по смыслу" subtitle="Разделение счёта и поступления" />
-            <ul className="space-y-2 text-[12.5px] leading-relaxed text-[var(--muted)]">
-              <li>• Плановый доход проекта не равен прибыли.</li>
-              <li>• Счёт и поступление — разные сущности; частичные платежи распределяются явно.</li>
-              <li>• Суммы подтверждаются ручным вводом, ИИ не делает выводов из предположений.</li>
-              <li>• Все корректировки финансов попадают в журнал аудита.</li>
-            </ul>
+            <SectionTitle title="Счета и поступления" />
+            <p className="mb-3 text-sm leading-relaxed text-[var(--muted)]">
+              {finance && finance.invoices === 0 ? "У клиента пока нет счетов. " : ""}
+              Чтобы оплата уменьшила долг, при записи выберите счёт.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" onClick={() => setFinanceEntry("invoice")}>Добавить счёт</Button>
+              <Button type="button" variant="outline" onClick={() => setFinanceEntry("payment")}>Записать оплату</Button>
+            </div>
           </Card>
         </div>
       )}
 
       {tab === "projects" && (
         <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold text-ink">Проекты клиента</h2>
+            <Button type="button" onClick={() => setBudgetProject(null)}>Добавить проект</Button>
+          </div>
           {projects.length ? (
             projects.map((project) => (
               <Card key={project.id}>
@@ -691,16 +701,19 @@ export default function ClientPage() {
                       {project.stage_group ? ` · ${project.stage_group}` : ""}
                     </p>
                   </div>
-                  <StatusBadge status={project.status} />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={project.status} />
+                    <Button type="button" size="sm" variant="outline" onClick={() => setBudgetProject(project)}>Изменить суммы</Button>
+                  </div>
                 </div>
                 <dl className="mt-3 grid gap-2 sm:grid-cols-2">
                   <div className="min-w-0 rounded-control border border-[var(--border)] bg-canvas px-3 py-2.5">
                     <dt className="text-[13px] text-[var(--muted)]">Плановый доход</dt>
-                    <dd className="tabular mt-0.5 text-[15px] font-semibold text-ink">{money(project.planned_revenue)}</dd>
+                    <dd className="tabular mt-0.5 text-[15px] font-semibold text-ink">{project.planned_revenue == null ? "Не указан" : money(project.planned_revenue)}</dd>
                   </div>
                   <div className="min-w-0 rounded-control border border-[var(--border)] bg-canvas px-3 py-2.5">
                     <dt className="text-[13px] text-[var(--muted)]">Ожидаемая прибыль</dt>
-                    <dd className="tabular mt-0.5 text-[15px] font-semibold text-ink">{money(project.expected_profit)}</dd>
+                    <dd className="tabular mt-0.5 text-[15px] font-semibold text-ink">{project.expected_profit == null ? "Нужны доход и оценка затрат" : money(project.expected_profit)}</dd>
                   </div>
                 </dl>
                 <div className="mt-3 grid gap-3 md:grid-cols-3">
@@ -725,7 +738,7 @@ export default function ClientPage() {
             ))
           ) : (
             <Card>
-              <EmptyState title="Проектов нет" description="Добавьте проект клиента через API или импорт." />
+              <EmptyState title="Проектов нет" description="Добавьте проект и укажите доход и затраты, когда они известны." />
             </Card>
           )}
 
@@ -854,6 +867,22 @@ export default function ClientPage() {
         </Card>
       )}
 
+      {financeEntry && (
+        <ClientFinanceEntry clientId={clientId} kind={financeEntry} onClose={() => setFinanceEntry(null)}
+          onSaved={() => { setFinanceEntry(null); void load(); }}
+        />
+      )}
+      {budgetProject !== undefined && (
+        <ProjectBudgetModal clientId={clientId} project={budgetProject} onClose={() => setBudgetProject(undefined)}
+          onSaved={(project) => {
+            setProjects((current) => current.some((item) => item.id === project.id)
+              ? current.map((item) => item.id === project.id ? project : item)
+              : [...current, project]);
+            setBudgetProject(undefined);
+            void load();
+          }}
+        />
+      )}
       <Modal
         open={Boolean(chat.taskId)}
         title={chat.chat?.task.title ?? "Задача"}

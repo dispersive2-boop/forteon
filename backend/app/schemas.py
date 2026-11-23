@@ -494,11 +494,13 @@ class InvoiceOut(ORMModel):
     amount: float
     currency: str
     status: str
+    remaining: float | None = None
 
 
 class PaymentCreate(BaseModel):
+    invoice_id: str | None = None
     paid_at: date | None = None
-    amount: float
+    amount: float = Field(gt=0, allow_inf_nan=False)
     currency: str = "RUB"
     reference: str | None = None
 

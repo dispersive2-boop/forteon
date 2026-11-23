@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   Badge,
@@ -18,6 +18,8 @@ import {
 import { api, Client, Paged } from "@/lib/api";
 import { dateRu } from "@/lib/format";
 
+const PAGE_SIZE = 100;
+
 const STATUS_OPTIONS = [
   { value: "", label: "Все статусы" },
   { value: "active", label: "Активные" },
@@ -30,35 +32,49 @@ export default function ClientsPage() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [revision, setRevision] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({ name: "", legal_name: "", address: "", status: "active", notes_public: "" });
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    const controller = new AbortController();
     setLoading(true);
     setError(null);
-    try {
-      const params = new URLSearchParams({ limit: "200" });
-      if (query.trim()) params.set("q", query.trim());
-      if (status) params.set("status", status);
-      const data = await api<Paged<Client>>(`/clients?${params.toString()}`);
-      setClients(data.items);
-      setTotal(data.total);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось загрузить клиентов");
-    } finally {
-      setLoading(false);
-    }
-  }, [query, status]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => void load(), query ? 320 : 0);
-    return () => clearTimeout(timer);
-  }, [load, query]);
+    const timer = window.setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
+        if (query.trim()) params.set("q", query.trim());
+        if (status) params.set("status", status);
+        const data = await api<Paged<Client>>(`/clients?${params}`, { signal: controller.signal });
+        if (controller.signal.aborted) return;
+        setClients((current) => {
+          if (!offset) return data.items;
+          const seen = new Set(current.map((client) => client.id));
+          return [...current, ...data.items.filter((client) => !seen.has(client.id))];
+        });
+        setTotal(data.total);
+      } catch (err) {
+        if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Не удалось загрузить клиентов");
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoaded(true);
+          setLoading(false);
+        }
+      }
+    }, query.trim() && offset === 0 ? 250 : 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query, status, offset, revision]);
 
   async function createClient(event: React.FormEvent) {
     event.preventDefault();
+    if (saving || !form.name.trim()) return;
     setSaving(true);
     try {
       await api<Client>("/clients", {
@@ -75,7 +91,8 @@ export default function ClientsPage() {
       });
       setCreateOpen(false);
       setForm({ name: "", legal_name: "", address: "", status: "active", notes_public: "" });
-      await load();
+      setOffset(0);
+      setRevision((value) => value + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось создать клиента");
     } finally {
@@ -89,7 +106,7 @@ export default function ClientsPage() {
         <div>
           <h1 className="text-[23px] font-semibold tracking-[-0.025em] text-ink">Клиенты</h1>
           <p className="mt-1 text-[13px] text-[var(--muted)]">
-            {total} клиентов в вашей зоне ответственности
+            {loaded ? `Показано ${clients.length} из ${total}` : "Загружаем список"}
           </p>
         </div>
         <Button onClick={() => setCreateOpen(true)}>Добавить клиента</Button>
@@ -97,7 +114,7 @@ export default function ClientsPage() {
 
       <Card padded={false}>
         <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] px-3 py-2.5">
-          <div className="relative min-w-[220px] flex-1">
+          <div className="relative min-w-0 flex-[1_1_12rem]">
             <svg
               className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6B7280]"
               width="15"
@@ -114,14 +131,16 @@ export default function ClientsPage() {
               id="client-search"
               aria-label="Поиск клиента"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Поиск по названию или юрлицу"
-              className="focus-ring h-9 w-full scroll-mt-24 rounded-control border border-[var(--border-strong)] bg-surface pl-8.5 pr-3 text-[13px] text-ink placeholder:text-[#6B7280]"
+              onChange={(e) => { setQuery(e.target.value); setOffset(0); }}
+              type="search"
+              placeholder="Название, ИНН или контакт"
+              className="focus-ring h-9 w-full scroll-mt-24 rounded-control border border-[var(--border-strong)] bg-surface pl-9 pr-3 text-[13px] text-ink placeholder:text-[var(--muted)] focus:placeholder:text-transparent"
             />
           </div>
           <select
             value={status}
-            onChange={(e) => setStatus(e.target.value)}
+            aria-label="Статус клиента"
+            onChange={(e) => { setStatus(e.target.value); setOffset(0); }}
             className="focus-ring h-9 rounded-control border border-[var(--border-strong)] bg-surface px-2.5 text-[12.5px] text-ink"
           >
             {STATUS_OPTIONS.map((option) => (
@@ -133,12 +152,13 @@ export default function ClientsPage() {
         </div>
 
         {error && (
-          <div className="border-b border-[#f3c7cb] bg-[var(--danger-soft)] px-3.5 py-2.5 text-[13px] text-[var(--danger)]">
-            {error}
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f3c7cb] bg-[var(--danger-soft)] px-3.5 py-2.5 text-[13px] text-[var(--danger)]">
+            <span>{error}</span>
+            <Button type="button" size="sm" variant="outline" onClick={() => setRevision((value) => value + 1)}>Повторить загрузку</Button>
           </div>
         )}
 
-        {loading ? (
+        {!loaded ? (
           <div className="space-y-2 p-3">
             {Array.from({ length: 8 }).map((_, i) => (
               <Skeleton key={i} className="h-14" />
@@ -172,13 +192,20 @@ export default function ClientsPage() {
               </Link>
             ))}
           </div>
-        ) : (
+        ) : !loading && !error ? (
           <div className="p-4">
             <EmptyState
               title="Клиенты не найдены"
               description="Измените условия поиска или добавьте нового клиента."
               action={<Button variant="subtle" size="sm" onClick={() => setCreateOpen(true)}>Добавить клиента</Button>}
             />
+          </div>
+        ) : null}
+        {loaded && !error && clients.length > 0 && offset + PAGE_SIZE < total && (
+          <div className="flex justify-center border-t border-[var(--border)] p-3">
+            <Button variant="outline" loading={loading} onClick={() => setOffset(offset + PAGE_SIZE)}>
+              Показать ещё
+            </Button>
           </div>
         )}
       </Card>

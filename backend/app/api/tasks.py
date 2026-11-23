@@ -66,6 +66,7 @@ def list_tasks(
     date_from: date | None = None,
     date_to: date | None = None,
     limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -87,7 +88,11 @@ def list_tasks(
         query = query.where(Task.due_date.is_not(None), Task.due_date <= date_to)
 
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
-    tasks = list(db.scalars(query.order_by(Task.due_date.is_(None), Task.due_date, Task.created_at).limit(limit)))
+    tasks = list(db.scalars(
+        query.order_by(Task.due_date.is_(None), Task.due_date, Task.created_at, Task.id)
+        .offset(offset)
+        .limit(limit)
+    ))
     names = _client_names(db, {t.client_id for t in tasks})
     return TaskListOut(items=[_task_out(t, names.get(t.client_id)) for t in tasks], total=total)
 

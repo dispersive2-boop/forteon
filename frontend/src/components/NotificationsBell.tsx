@@ -43,13 +43,13 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
     try {
       const data = await api<NotificationItem[]>("/notifications?limit=20");
       setItems(data);
-      setUnread(data.filter((n) => !n.read_at).length);
+      void refreshCount();
     } catch {
       /* тихо: колокольчик не должен ронять шапку */
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshCount]);
 
   useEffect(() => {
     void refreshCount();
@@ -58,7 +58,11 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
       if (document.visibilityState === "visible") void refreshCount();
     };
     document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
+    window.addEventListener("forteon:notifications", refreshCount);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("forteon:notifications", refreshCount);
+    };
   }, [refreshCount]);
 
   useEffect(() => {
@@ -123,7 +127,7 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
             onClick={() => setOpen(false)}
             aria-label="Закрыть уведомления"
           />
-          <div className="absolute right-0 top-[52px] z-50 w-[min(92vw,360px)] overflow-hidden rounded-card border border-[var(--border)] bg-surface shadow-lift">
+          <div className="fixed inset-x-3 top-[64px] z-50 sm:absolute sm:inset-x-auto sm:right-0 sm:top-[52px] sm:w-[360px] overflow-hidden rounded-card border border-[var(--border)] bg-surface shadow-lift">
             <div className="flex items-center justify-between border-b border-[var(--border)] px-3.5 py-2.5">
               <p className="text-[14px] font-semibold text-ink">Уведомления</p>
               {unread > 0 && (
@@ -137,14 +141,20 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
               )}
             </div>
 
-            <div className="max-h-[360px] overflow-y-auto">
+            {Boolean(overdue) && (
+              <Link href="/today" onClick={() => setOpen(false)}
+                className="block border-b border-[var(--border)] bg-[var(--danger-soft)] px-3.5 py-2.5 text-sm font-medium text-[var(--danger)] hover:underline">
+                Просроченные задачи: {overdue}
+              </Link>
+            )}
+            <div className="max-h-[min(360px,55dvh)] overflow-y-auto overscroll-contain">
               {loading && items.length === 0 ? (
                 <p className="px-3.5 py-6 text-center text-[13px] text-[var(--muted)]">
                   Загружаю…
                 </p>
               ) : items.length === 0 ? (
                 <p className="px-3.5 py-6 text-center text-[13px] text-[var(--muted)]">
-                  Пока тихо. Просрочки и напоминания появятся здесь.
+                  Новых уведомлений нет.
                 </p>
               ) : (
                 items.map((n) => (
@@ -188,7 +198,7 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
             </div>
 
             <Link
-              href="/today#notifications"
+              href="/today"
               onClick={() => setOpen(false)}
               className="focus-ring block border-t border-[var(--border)] px-3.5 py-2.5 text-center text-[13px] font-medium text-primary hover:bg-[var(--primary-soft)]"
             >

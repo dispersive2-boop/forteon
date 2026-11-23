@@ -106,8 +106,6 @@ type SpeechRecognitionLike = {
 };
 
 /** Держим ссылку на движок, чтобы можно было остановить диктовку. */
-const recognitionEngine: { current: SpeechRecognitionLike | null } = { current: null };
-
 type UploadedFile = { name: string; size: number };
 
 const PAGE_SIZE = 20;
@@ -156,6 +154,8 @@ export default function NotesPage() {
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [dictated, setDictated] = useState(false);
+  const [autoSaveVoice, setAutoSaveVoice] = useState(false);
   const [uploads, setUploads] = useState<UploadedFile[]>([]);
   /** Если правим текст уже сохранённой заметки — держим её id (п.62). */
   const [correcting, setCorrecting] = useState<string | null>(null);
@@ -163,7 +163,9 @@ export default function NotesPage() {
 
   const areaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const recognitionRef = useRef<{ stop: () => void } | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const sendLock = useRef(false);
+  const pendingNote = useRef<{ clientId: string; body: string; key: string } | null>(null);
   const pollRef = useRef<number | null>(null);
 
   /* ------------------------------------------------------------ запросы */
@@ -228,15 +230,24 @@ export default function NotesPage() {
     (async () => {
       setLoading(true);
       try {
-        const items = await fetchPicker("");
+        const url = new URLSearchParams(window.location.search);
+        const requestedId = url.get("client_id");
+        setAutoSaveVoice(url.get("voice") === "1");
+        const [items, requestedClient] = await Promise.all([
+          fetchPicker(""),
+          requestedId
+            ? api<{ id: string; name: string }>(`/clients/${encodeURIComponent(requestedId)}`).catch(() => null)
+            : Promise.resolve(null),
+        ]);
         if (cancelled) return;
         setPicker(items);
-        // Восстанавливаем клиента, с которым работали в прошлый раз (п.60)
-        const storedId =
-          typeof window !== "undefined" ? window.localStorage.getItem(STORE_CLIENT) : null;
-        const restored = storedId ? items.find((c) => c.id === storedId) : undefined;
+        const storedId = window.localStorage.getItem(STORE_CLIENT);
+        const restored = requestedClient ?? (storedId ? items.find((client) => client.id === storedId) : undefined);
+        if (requestedId && !requestedClient) setError("Не удалось открыть клиента для заметки.");
         if (restored) {
           setClientFilter({ id: restored.id, name: restored.name });
+          setMobileStep("write");
+        } else if (requestedId) {
           setMobileStep("write");
         }
       } catch {
@@ -284,7 +295,9 @@ export default function NotesPage() {
   useEffect(() => {
     return () => {
       if (pollRef.current) window.clearTimeout(pollRef.current);
-      recognitionRef.current?.stop();
+      const recognition = recognitionRef.current;
+      recognitionRef.current = null;
+      recognition?.stop();
     };
   }, []);
 
@@ -311,6 +324,7 @@ export default function NotesPage() {
           const status = await api<{ ai_status: string }>(`/notes/${noteId}/ai-status`);
           if (status.ai_status !== "pending" && status.ai_status !== "queued") {
             await loadFirstPage();
+            window.dispatchEvent(new Event("forteon:notifications"));
             return;
           }
         } catch {
@@ -326,15 +340,16 @@ export default function NotesPage() {
   );
 
   /* ----------------------------------------------------------- отправка */
-  async function send() {
-    if (!body.trim()) return;
+  async function send(value = body, source: "text" | "voice" = dictated ? "voice" : "text") {
+    if (sendLock.current || !value.trim()) return;
     if (!clientFilter) {
       setError("Сначала выберите клиента слева.");
       return;
     }
 
-    const text = body.trim();
+    const text = value.trim();
     const target = clientFilter;
+    sendLock.current = true;
 
     // Исправление уже сохранённой заметки: PATCH, затем повторный разбор (п.62)
     if (correcting) {
@@ -354,6 +369,7 @@ export default function NotesPage() {
         // Текст остаётся в поле — менеджер не теряет работу (п.61)
         setError(err instanceof Error ? err.message : "Не удалось сохранить исправление");
       } finally {
+        sendLock.current = false;
         setSending(false);
       }
       return;
@@ -362,13 +378,17 @@ export default function NotesPage() {
     setSending(true);
     setError(null);
 
-    const tempId = `temp-${Date.now()}`;
+    if (pendingNote.current?.clientId !== target.id || pendingNote.current.body !== text) {
+      pendingNote.current = { clientId: target.id, body: text, key: window.crypto?.randomUUID?.() ?? `note-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+    }
+    const noteKey = pendingNote.current.key;
+    const tempId = `temp-${noteKey}`;
     const optimistic: FeedNote = {
       id: tempId,
       client_id: target.id,
       project_id: null,
       body: text,
-      source_type: "text",
+      source_type: source,
       ai_status: "pending",
       ai_error: null,
       created_at: new Date().toISOString(),
@@ -381,13 +401,15 @@ export default function NotesPage() {
     // Заметка видна сразу, ещё до ответа сервера (п.56)
     setNotes((prev) => [optimistic, ...prev]);
     setBody("");
+    setDictated(false);
     setUploads([]);
 
     try {
       const note = await api<Note>(`/clients/${target.id}/notes`, {
         method: "POST",
-        body: { body: text, run_ai: true, source_type: "text" },
+        body: { body: text, run_ai: true, source_type: source, idempotency_key: noteKey },
       });
+      pendingNote.current = null;
       setNotes((prev) =>
         prev.map((n) =>
           n.id === tempId
@@ -396,6 +418,7 @@ export default function NotesPage() {
         ),
       );
       pollNote(note.id);
+      window.dispatchEvent(new Event("forteon:notifications"));
       try {
         const items = await fetchPicker("");
         setPicker(items);
@@ -406,12 +429,14 @@ export default function NotesPage() {
       // Убираем пустышку и возвращаем текст, чтобы не потерять работу
       setNotes((prev) => prev.filter((n) => n.id !== tempId));
       setBody(text);
+      setDictated(source === "voice");
       setError(
         err instanceof Error
           ? `Заметка не сохранена: ${err.message}. Текст остался в редакторе — попробуйте отправить ещё раз.`
           : "Заметка не сохранена. Текст остался в редакторе — попробуйте ещё раз.",
       );
     } finally {
+      sendLock.current = false;
       setSending(false);
     }
   }
@@ -490,27 +515,45 @@ export default function NotesPage() {
       recognitionRef.current?.stop();
       return;
     }
+    setError(null);
     const rec = new Ctor();
+    const draft = body.trim();
+    let spoken = "";
+    let failed = false;
     rec.lang = "ru-RU";
     rec.interimResults = false;
-    rec.continuous = false;
+    rec.continuous = true;
     rec.onresult = (event) => {
-      let spoken = "";
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
-        if (event.results[i].isFinal) spoken += ` ${event.results[i][0].transcript}`;
+      if (recognitionRef.current !== rec) return;
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        if (event.results[index].isFinal) spoken += ` ${event.results[index][0].transcript}`;
       }
-      const text = spoken.trim();
-      if (text) setBody((prev) => (prev ? `${prev} ${text}` : text));
+      if (spoken.trim()) {
+        setDictated(true);
+        setBody([draft, spoken.trim()].filter(Boolean).join(" "));
+      }
     };
-    rec.onend = () => setRecording(false);
+    rec.onend = () => {
+      if (recognitionRef.current !== rec) return;
+      recognitionRef.current = null;
+      setRecording(false);
+      if (!failed && autoSaveVoice && clientFilter && !correcting && spoken.trim()) {
+        void send([draft, spoken.trim()].filter(Boolean).join(" "), "voice");
+      }
+    };
     rec.onerror = () => {
+      if (recognitionRef.current !== rec) return;
+      failed = true;
       setRecording(false);
       setError("Не удалось распознать речь. Проверьте микрофон и попробуйте снова.");
     };
-    recognitionEngine.current = rec;
     recognitionRef.current = rec;
-    rec.start();
-    setRecording(true);
+    try {
+      rec.start();
+      setRecording(true);
+    } catch {
+      setError("Не удалось открыть микрофон. Проверьте разрешение браузера.");
+    }
   }
 
   /* -------------------------------------------------------- производные */
@@ -554,7 +597,7 @@ export default function NotesPage() {
           Заметки
         </h1>
         <p className="mt-1 max-w-2xl text-[14.5px] leading-relaxed text-[var(--muted)]">
-          Сохраняйте договорённости и создавайте задачи из заметок.
+          Опишите, что уже сделано, что нужно сделать и чего ждёте от клиента.
         </p>
       </header>
 
@@ -581,7 +624,7 @@ export default function NotesPage() {
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Название, ИНН, телефон, контакт"
                 aria-label="Найти клиента"
-                className="focus-ring h-11 w-full min-w-0 rounded-control border border-[var(--border-strong)] bg-surface pl-9 pr-9 text-[14.5px] text-ink"
+                className="focus-ring h-11 w-full min-w-0 rounded-control border border-[var(--border-strong)] bg-surface pl-9 pr-9 text-[14.5px] text-ink focus:placeholder:text-transparent"
               />
               {query && (
                 <button
@@ -600,6 +643,7 @@ export default function NotesPage() {
             <div className="mb-2 flex flex-wrap gap-1.5">
               <button
                 type="button"
+                disabled={recording}
                 onClick={() => chooseClient(null)}
                 className={`focus-ring h-11 min-h-[44px] rounded-lg px-2.5 text-[12.5px] font-medium transition-colors sm:h-8 sm:min-h-8 ${
                   clientFilter
@@ -647,6 +691,7 @@ export default function NotesPage() {
                   <button
                     key={client.id}
                     type="button"
+                    disabled={recording}
                     onClick={() => chooseClient({ id: client.id, name: client.name })}
                     aria-pressed={active}
                     className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2.5 text-left transition-colors ${
@@ -696,6 +741,7 @@ export default function NotesPage() {
           {mobileStep === "write" && (
             <button
               type="button"
+              disabled={recording}
               onClick={() => setMobileStep("pick")}
               className="focus-ring mb-3 inline-flex h-10 items-center gap-1.5 rounded-control border border-[var(--border-strong)] px-3 text-[13.5px] font-medium text-ink lg:hidden"
             >
@@ -737,6 +783,7 @@ export default function NotesPage() {
             <textarea
               ref={areaRef}
               value={body}
+              readOnly={recording}
               onChange={(e) => setBody(e.target.value)}
               onKeyDown={(e) => {
                 if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
@@ -824,13 +871,20 @@ export default function NotesPage() {
               <Button
                 onClick={() => void send()}
                 loading={sending}
-                disabled={!body.trim() || !clientFilter}
+                disabled={!body.trim() || !clientFilter || recording}
                 size="md"
               >
-                {correcting ? "Сохранить и разобрать" : "Отправить"}
+                {correcting ? "Сохранить и разобрать" : "Разобрать заметку"}
               </Button>
             </div>
 
+            {clientFilter && !correcting && (
+              <label className="mt-2 flex items-center gap-2 text-sm text-[var(--muted)]">
+                <input type="checkbox" className="accent-primary" checked={autoSaveVoice} disabled={recording}
+                  onChange={(e) => setAutoSaveVoice(e.target.checked)} />
+                Сохранить и разобрать после диктовки
+              </label>
+            )}
             {!body && !correcting && (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {EXAMPLES.slice(0, 2).map((example) => (

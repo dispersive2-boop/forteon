@@ -56,12 +56,13 @@ export function Button({
     <button
       {...rest}
       disabled={disabled || loading}
-      className={`focus-ring inline-flex max-w-full items-center justify-center gap-2 whitespace-nowrap font-medium leading-none transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${BUTTON_VARIANTS[variant]} ${BUTTON_SIZES[size]} ${className}`}
+      aria-busy={loading || undefined}
+      className={`focus-ring relative inline-flex max-w-full items-center justify-center gap-2 whitespace-nowrap font-medium leading-none transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${BUTTON_VARIANTS[variant]} ${BUTTON_SIZES[size]} ${className}`}
     >
       {loading && (
-        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        <span className="pointer-events-none absolute h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
       )}
-      {children}
+      <span className={loading ? "inline-flex items-center gap-2 opacity-0" : "inline-flex items-center gap-2"}>{children}</span>
     </button>
   );
 }
@@ -376,7 +377,7 @@ export function Modal({
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-[#0b1220]/45 p-0 sm:items-center sm:p-6"
+      className="fixed inset-0 z-[70] flex items-end justify-center bg-[#0b1220]/45 p-0 sm:items-center sm:p-6"
       role="presentation"
       onMouseDown={(event) => {
         // Закрываем только по клику в сам фон, не во вложенный блок.
@@ -388,7 +389,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="animate-fade-in flex max-h-[calc(100dvh-1rem)] w-full max-w-lg flex-col rounded-t-2xl border border-[var(--border)] bg-surface shadow-lift sm:rounded-card"
+        className="flex max-h-[calc(100dvh-1rem)] w-full max-w-lg flex-col rounded-t-2xl border border-[var(--border)] bg-surface shadow-lift sm:rounded-card"
       >
         <header className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3">
           <h3 id={titleId} className="text-[14.5px] font-semibold text-ink">{title}</h3>

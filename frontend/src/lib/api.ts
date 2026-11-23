@@ -130,10 +130,11 @@ type RequestOptions = {
   body?: unknown;
   raw?: boolean;
   retry?: boolean;
+  signal?: AbortSignal;
 };
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = "GET", body, raw = false, retry = true } = options;
+  const { method = "GET", body, raw = false, retry = true, signal } = options;
   const headers: Record<string, string> = { Accept: "application/json" };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -151,6 +152,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
     headers,
     body: payload,
     credentials: "include",
+    signal,
   });
 
   if (response.status === 401 && retry && (await tryRefresh())) {
@@ -277,6 +279,8 @@ export type Project = {
   start_date: string | null;
   end_date: string | null;
   planned_revenue: number | null;
+  estimated_cost?: number | null;
+  version?: number;
   expected_profit?: number | null;
   volume: number | null;
   service_flag: string | null;

@@ -77,7 +77,6 @@ export default function FinancePage() {
   const [onlyOverdue, setOnlyOverdue] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
       const payload = await api<Overview>("/finance/overview");
@@ -189,8 +188,10 @@ export default function FinancePage() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Клиент или номер счёта"
-              className="focus-ring h-9 w-[220px] rounded-lg border border-[var(--border-strong)] px-3 text-[13px] text-ink placeholder:text-[#6B7280]"
+              placeholder={tab === "invoices" ? "Клиент или номер счёта" : "Поиск по клиенту"}
+              aria-label={tab === "invoices" ? "Поиск по счетам" : "Поиск по оплатам"}
+              type="search"
+              className="focus-ring h-9 w-[220px] rounded-lg border border-[var(--border-strong)] px-3 text-[13px] text-ink placeholder:text-[var(--muted)] focus:placeholder:text-transparent"
             />
             {tab === "invoices" && (
               <button

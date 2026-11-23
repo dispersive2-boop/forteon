@@ -37,6 +37,19 @@ from ..services.changes import ACTION_DELETE, ACTION_UPSERT, record_change
 router = APIRouter(tags=["finance"])
 
 
+def _allocation_totals(db: Session, invoice_ids: list[str]) -> dict[str, float]:
+    if not invoice_ids:
+        return {}
+    rows = db.execute(select(PaymentAllocation.invoice_id, func.sum(PaymentAllocation.amount))
+                      .where(PaymentAllocation.invoice_id.in_(invoice_ids))
+                      .group_by(PaymentAllocation.invoice_id))
+    return {invoice_id: round(float(amount), 2) for invoice_id, amount in rows}
+
+
+def _remaining(invoice: Invoice, allocations: dict[str, float]) -> float:
+    return max(round(float(invoice.amount or 0) - allocations.get(invoice.id, 0.0), 2), 0.0)
+
+
 def _summary(db: Session, client_id: str) -> FinancialSummary:
     # Удалённые счета и оплаты в сумму долга не входят — иначе после удаления
     # счёта «долг» оставался прежним.
@@ -47,17 +60,14 @@ def _summary(db: Session, client_id: str) -> FinancialSummary:
         select(Payment).where(Payment.client_id == client_id, Payment.deleted_at.is_(None))
     ))
     invoice_ids = [i.id for i in invoices]
-    allocations = list(
-        db.scalars(select(PaymentAllocation).where(PaymentAllocation.invoice_id.in_(invoice_ids or ["-"])))
-    )
-
+    allocations = _allocation_totals(db, invoice_ids)
     billed = sum(float(i.amount or 0) for i in invoices if i.status != "void")
     paid = sum(float(p.amount or 0) for p in payments)
-    allocated = sum(float(a.amount or 0) for a in allocations)
+    allocated = sum(allocations.values())
     today = date.today()
     overdue_amount = sum(
-        float(i.amount or 0) for i in invoices
-        if i.status in ("issued",) and i.due_date and i.due_date < today
+        _remaining(i, allocations) for i in invoices
+        if i.status == "issued" and i.due_date and i.due_date < today
     )
     unpaid = [i for i in invoices if i.status == "issued"]
 
@@ -75,11 +85,13 @@ def _summary(db: Session, client_id: str) -> FinancialSummary:
 @router.get("/clients/{client_id}/invoices", response_model=list[InvoiceOut])
 def list_invoices(client_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     client = get_client_or_404(db, user, client_id)
-    rows = db.scalars(
+    rows = list(db.scalars(
         select(Invoice).where(Invoice.client_id == client.id, Invoice.deleted_at.is_(None))
         .order_by(Invoice.due_date.desc())
-    )
-    return [InvoiceOut.model_validate(i) for i in rows]
+    ))
+    allocations = _allocation_totals(db, [invoice.id for invoice in rows])
+    return [InvoiceOut.model_validate(invoice).model_copy(update={"remaining": _remaining(invoice, allocations)})
+            for invoice in rows]
 
 
 def _invoice_snapshot(invoice: Invoice) -> dict[str, Any]:
@@ -183,13 +195,32 @@ def _payment_snapshot(payment: Payment) -> dict[str, Any]:
 def create_payment(client_id: str, payload: PaymentCreate, db: Session = Depends(get_db),
                    user: User = Depends(get_current_user)):
     client = get_client_or_404(db, user, client_id)
-    payment = Payment(client_id=client.id, **payload.model_dump())
+    payment = Payment(client_id=client.id, **payload.model_dump(exclude={"invoice_id"}))
     db.add(payment)
     db.flush()
+
+    invoice = None
+    if payload.invoice_id is not None:
+        # INSERT открывает транзакцию записи в SQLite. В PostgreSQL
+        # дополнительно блокируем строку счёта перед проверкой остатка.
+        invoice = db.scalar(select(Invoice).where(
+            Invoice.id == payload.invoice_id, Invoice.client_id == client.id,
+            Invoice.deleted_at.is_(None),
+        ).with_for_update())
+        if invoice is None or invoice.status != "issued" or invoice.currency != payload.currency:
+            db.rollback()
+            raise HTTPException(status_code=422, detail={"message": "Выберите открытый счёт в валюте оплаты"})
+        remaining = round(float(invoice.amount or 0) - _allocated_by_invoice(db, invoice.id), 2)
+        if payload.amount > remaining:
+            db.rollback()
+            raise HTTPException(status_code=422, detail={"message": "Сумма оплаты превышает остаток по счёту"})
+
     snapshot = _payment_snapshot(payment)
     audit(db, user, "payment", payment.id, "created", {"client_id": client.id, **snapshot})
     record_change(db, entity="payment", entity_id=payment.id, action=ACTION_UPSERT,
                   owner_id=client.owner_id, payload={"client_id": client.id, **snapshot})
+    if invoice is not None:
+        _record_allocation(db, user, client.owner_id, payment, invoice, payload.amount)
     db.commit()
     db.refresh(payment)
     return PaymentOut.model_validate(payment)
@@ -225,7 +256,7 @@ def _sync_invoice_status(db: Session, invoice: Invoice) -> str:
         return invoice.status
     covered = _allocated_by_invoice(db, invoice.id)
     amount = round(float(invoice.amount or 0), 2)
-    new_status = "paid" if amount > 0 and covered >= amount - 0.01 else "issued"
+    new_status = "paid" if amount > 0 and covered >= amount else "issued"
     if new_status != invoice.status:
         invoice.status = new_status
         invoice.version = (invoice.version or 1) + 1
@@ -267,36 +298,43 @@ def create_allocation(payment_id: str, payload: AllocationIn, db: Session = Depe
             },
         )
 
-    allocation = PaymentAllocation(payment_id=payment.id, invoice_id=invoice.id, amount=payload.amount)
-    db.add(allocation)
-    db.flush()
-
-    status_after = _sync_invoice_status(db, invoice)
-    audit(db, user, "allocation", allocation.id, "created",
-          {"payment_id": payment.id, "invoice_id": invoice.id, "amount": payload.amount,
-           "invoice_status": status_after})
-    # Событие на самом счёте: распределения удаляются физически, поэтому
-    # в истории клиента их id уже не найти — а «оплата зачтена» должна
-    # оставаться видимой.
-    audit(db, user, "invoice", invoice.id, "allocation_added",
-          {"payment_id": payment.id, "amount": payload.amount,
-           "allocated": _allocated_by_invoice(db, invoice.id),
-           "status": status_after})
-    record_change(db, entity="allocation", entity_id=allocation.id, action=ACTION_UPSERT,
-                  owner_id=client.owner_id,
-                  payload={"payment_id": payment.id, "invoice_id": invoice.id, "amount": payload.amount})
-    record_change(db, entity="invoice", entity_id=invoice.id, action=ACTION_UPSERT,
-                  owner_id=client.owner_id,
-                  payload={"status": status_after,
-                           "allocated": _allocated_by_invoice(db, invoice.id)})
+    allocation = _record_allocation(db, user, client.owner_id, payment, invoice, payload.amount)
     db.commit()
     return {
         "id": allocation.id,
         "payment_id": allocation.payment_id,
         "invoice_id": allocation.invoice_id,
         "amount": float(allocation.amount),
-        "invoice_status": status_after,
+        "invoice_status": invoice.status,
     }
+
+
+def _record_allocation(
+    db: Session, user: User, owner_id: str, payment: Payment, invoice: Invoice, amount: float,
+) -> PaymentAllocation:
+    allocation = PaymentAllocation(payment_id=payment.id, invoice_id=invoice.id, amount=amount)
+    db.add(allocation)
+    db.flush()
+
+    status_after = _sync_invoice_status(db, invoice)
+    audit(db, user, "allocation", allocation.id, "created",
+          {"payment_id": payment.id, "invoice_id": invoice.id, "amount": amount,
+           "invoice_status": status_after})
+    # Событие на самом счёте: распределения удаляются физически, поэтому
+    # в истории клиента их id уже не найти — а «оплата зачтена» должна
+    # оставаться видимой.
+    audit(db, user, "invoice", invoice.id, "allocation_added",
+          {"payment_id": payment.id, "amount": amount,
+           "allocated": _allocated_by_invoice(db, invoice.id),
+           "status": status_after})
+    record_change(db, entity="allocation", entity_id=allocation.id, action=ACTION_UPSERT,
+                  owner_id=owner_id,
+                  payload={"payment_id": payment.id, "invoice_id": invoice.id, "amount": amount})
+    record_change(db, entity="invoice", entity_id=invoice.id, action=ACTION_UPSERT,
+                  owner_id=owner_id,
+                  payload={"status": status_after,
+                           "allocated": _allocated_by_invoice(db, invoice.id)})
+    return allocation
 
 
 @router.delete("/payment-allocations/{allocation_id}")
@@ -376,24 +414,16 @@ def finance_overview(db: Session = Depends(get_db), user: User = Depends(get_cur
         .order_by(Payment.paid_at.desc())
     ))
     invoice_ids = [i.id for i in invoices]
-    allocations = list(db.scalars(
-        select(PaymentAllocation).where(PaymentAllocation.invoice_id.in_(invoice_ids or ["-"]))
-    )) if invoice_ids else []
-
+    alloc_by_invoice = _allocation_totals(db, invoice_ids)
     today = date.today()
     active_invoices = [i for i in invoices if i.status != "void"]
     billed = sum(float(i.amount or 0) for i in active_invoices)
     paid = sum(float(p.amount or 0) for p in payments)
-    allocated = sum(float(a.amount or 0) for a in allocations)
+    allocated = sum(alloc_by_invoice.values())
     overdue_amount = sum(
-        float(i.amount or 0) for i in invoices
+        _remaining(i, alloc_by_invoice) for i in invoices
         if i.status == "issued" and i.due_date and i.due_date < today
     )
-
-    # Распределено по каждому счёту — чтобы показать остаток в строке.
-    alloc_by_invoice: dict[str, float] = {}
-    for alloc in allocations:
-        alloc_by_invoice[alloc.invoice_id] = alloc_by_invoice.get(alloc.invoice_id, 0.0) + float(alloc.amount or 0)
 
     rows = []
     for invoice in invoices[:200]:
@@ -410,7 +440,7 @@ def finance_overview(db: Session = Depends(get_db), user: User = Depends(get_cur
             "due_date": invoice.due_date,
             "amount": round(amount, 2),
             "allocated": round(covered, 2),
-            "remaining": round(max(amount - covered, 0.0), 2),
+            "remaining": _remaining(invoice, alloc_by_invoice),
             "status": invoice.status,
             "overdue": bool(invoice.status == "issued" and invoice.due_date and invoice.due_date < today),
         })

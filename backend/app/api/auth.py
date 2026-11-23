@@ -6,15 +6,17 @@
 from __future__ import annotations
 
 import logging
+from io import BytesIO
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
+from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import get_db
 from ..deps import audit, find_session, get_current_user, session_expiry
-from ..models import Session as SessionModel, User, utcnow
+from ..models import Session as SessionModel, User, UserAvatar, utcnow
 from ..services.ratelimit import limiter
 from ..schemas import (
     LoginRequest,
@@ -230,3 +232,43 @@ def revoke_session(session_id: str, db: Session = Depends(get_db), user: User = 
     audit(db, user, "session", session_id, "revoked")
     db.commit()
     return {"status": "ok"}
+
+
+@router.get("/avatar")
+def get_avatar(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    avatar = db.get(UserAvatar, user.id)
+    headers = {"Cache-Control": "private, no-store"}
+    if avatar is None:
+        return Response(status_code=204, headers=headers)
+    return Response(content=avatar.image, media_type="image/jpeg", headers=headers)
+
+
+@router.post("/avatar", status_code=204)
+def update_avatar(
+    file: UploadFile = File(...), db: Session = Depends(get_db), user: User = Depends(get_current_user),
+):
+    limit = 5 * 1024 * 1024
+    contents = file.file.read(limit + 1)
+    if len(contents) > limit:
+        raise HTTPException(status_code=413, detail={"message": "Фото должно быть не больше 5 МБ."})
+    try:
+        with Image.open(BytesIO(contents)) as original:
+            if original.format not in {"JPEG", "PNG", "WEBP"} or original.width * original.height > 20_000_000:
+                raise ValueError
+            image = ImageOps.fit(ImageOps.exif_transpose(original).convert("RGB"), (384, 384))
+            output = BytesIO()
+            image.save(output, format="JPEG", quality=88, optimize=True)
+    except (OSError, ValueError, UnidentifiedImageError, Image.DecompressionBombError):
+        raise HTTPException(status_code=422, detail={"message": "Не удалось прочитать фото JPG, PNG или WebP."})
+    db.merge(UserAvatar(user_id=user.id, image=output.getvalue()))
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.delete("/avatar", status_code=204)
+def delete_avatar(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    avatar = db.get(UserAvatar, user.id)
+    if avatar is not None:
+        db.delete(avatar)
+        db.commit()
+    return Response(status_code=204)

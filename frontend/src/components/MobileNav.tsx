@@ -83,7 +83,7 @@ export function MobileNav({ overdue = 0 }: { overdue?: number }) {
               onClick={() => router.push("/notes?voice=1")}
               aria-label="Голосовая заметка"
               title="Голосовая заметка"
-              className="focus-ring absolute -top-5 grid h-14 w-14 place-items-center rounded-full bg-primary text-white shadow-[0_10px_24px_-8px_rgba(37,99,235,0.85)] transition-transform active:scale-95"
+              className="focus-ring absolute -top-5 grid h-14 w-14 place-items-center rounded-full bg-primary text-white shadow-[0_10px_24px_-8px_rgba(37,99,235,0.85)] transition-colors"
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
                 <rect x="9" y="2.6" width="6" height="11.2" rx="3" />

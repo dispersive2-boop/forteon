@@ -14,7 +14,7 @@
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import httpx
 import pytest
@@ -34,7 +34,7 @@ from sqlalchemy import delete, select  # noqa: E402
 from app.db import Base, SessionLocal, engine  # noqa: E402
 from app.models import Client, Note, Task, User  # noqa: E402
 from app.security import hash_password  # noqa: E402
-from app.services.ai import local_extract, make_dedupe_key, ping  # noqa: E402
+from app.services.ai import _normalize_payload, local_extract, make_dedupe_key, ping  # noqa: E402
 from app.services.events import (  # noqa: E402
     DONE,
     FACT,
@@ -44,6 +44,7 @@ from app.services.events import (  # noqa: E402
     classify,
     review_question,
 )
+from app.services.dates import extract_due, to_date  # noqa: E402
 from app.services.extraction import run_extraction  # noqa: E402
 
 NOW = datetime(2026, 11, 20, 9, 0, tzinfo=timezone.utc)
@@ -313,3 +314,19 @@ def test_ai_ping_checks_the_configured_model(monkeypatch, status, payload, ok, f
     if fragment:
         assert fragment in result["message"]
         assert "raw provider error" not in result["message"]
+
+
+def test_model_due_time_and_calendar_day_keep_local_timezone():
+    result = _normalize_payload({"tasks": [{
+        "title": "Позвонить", "source_quote": "Позвонить завтра в 00:45",
+        "due_date": "2026-11-21", "due_time": "00:45", "event_kind": "todo",
+    }]}, NOW, TZ)
+    due_at = result.tasks[0].due_at
+    assert due_at == datetime(2026, 11, 20, 19, 45)
+    assert to_date(due_at, TZ) == date(2026, 11, 21)
+
+
+def test_local_parser_keeps_explicit_past_year_and_minutes():
+    due_at, reason = extract_due("Уточнить оплату 11.11.2026 в 09:45", NOW, TZ)
+    assert due_at == datetime(2026, 11, 11, 4, 45)
+    assert reason == "explicit"

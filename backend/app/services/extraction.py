@@ -9,12 +9,12 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import AIRun, Commitment, Note, Task, User, utcnow
+from ..models import AIRun, Commitment, Note, Notification, Task, User, utcnow
 from .ai import ExtractionResult, extract, make_dedupe_key
 from .dates import to_date
 
@@ -32,6 +32,8 @@ def run_extraction(db: Session, note: Note, author: User) -> ExtractionResult:
     note.ai_status = "queued"
     db.flush()
 
+    if note_moment.tzinfo is None:
+        note_moment = note_moment.replace(tzinfo=timezone.utc)
     result = extract(note.body, note_moment, tz_name)
 
     ai_run = AIRun(
@@ -57,6 +59,7 @@ def run_extraction(db: Session, note: Note, author: User) -> ExtractionResult:
 
     created_tasks = 0
     created_commitments = 0
+    review_tasks: list[Task] = []
 
     # Существующие ключи дедупликации по этому клиенту.
     # Ключ учитывает note.id: повторная обработка ТОЙ ЖЕ заметки не создаёт
@@ -93,7 +96,7 @@ def run_extraction(db: Session, note: Note, author: User) -> ExtractionResult:
             priority=item.priority,
             status="open",
             due_at=item.due_at,
-            due_date=to_date(item.due_at),
+            due_date=to_date(item.due_at, tz_name),
             timezone=tz_name,
             origin="ai",
             source_quote=item.source_quote,
@@ -109,6 +112,8 @@ def run_extraction(db: Session, note: Note, author: User) -> ExtractionResult:
         )
         db.add(task)
         created_tasks += 1
+        if needs_review:
+            review_tasks.append(task)
         db.flush()
 
         for commitment in result.commitments:
@@ -119,7 +124,7 @@ def run_extraction(db: Session, note: Note, author: User) -> ExtractionResult:
                         related_task_id=task.id,
                         promised_by=commitment.promised_by,
                         description=commitment.description,
-                        due_date=to_date(commitment.due_at),
+                        due_date=to_date(commitment.due_at, tz_name),
                         status="open",
                         source_quote=commitment.source_quote,
                     )
@@ -141,7 +146,7 @@ def run_extraction(db: Session, note: Note, author: User) -> ExtractionResult:
                 client_id=note.client_id,
                 promised_by=commitment.promised_by,
                 description=commitment.description,
-                due_date=to_date(commitment.due_at),
+                due_date=to_date(commitment.due_at, tz_name),
                 status="open",
                 source_quote=commitment.source_quote,
             )
@@ -164,6 +169,16 @@ def run_extraction(db: Session, note: Note, author: User) -> ExtractionResult:
     # пишет менеджеру «задачи не созданы», хотя они перед ним на экране.
     # Причина ошибки всё равно сохраняется (она видна в прогоне AIRun и в
     # provider_note), но заметка считается разобранной, если задачи созданы.
+    if review_tasks:
+        db.add(Notification(
+            user_id=author.id,
+            task_id=review_tasks[0].id,
+            title="Нужно проверить разбор заметки",
+            body=review_tasks[0].review_question or "Откройте задачи, которые требуют уточнения.",
+            delivered_at=utcnow(),
+            status="delivered",
+        ))
+
     produced_something = bool(result.tasks or result.commitments or result.completed)
     if result.error and not produced_something:
         note.ai_status = "failed"
