@@ -21,6 +21,7 @@ from ..schemas import (
 )
 from ..services.ai import provider_failure_message
 from ..services.extraction import run_extraction
+from ..services.summary import build_summary
 
 router = APIRouter(tags=["notes"])
 
@@ -384,6 +385,16 @@ def ai_status(note_id: str, db: Session = Depends(get_db), user: User = Depends(
     # иначе             — ответила модель.
     model = runs[0].model if runs else None
     used_fallback = bool(model and model.startswith("local-rules"))
+
+    # п.2 «30 идей»: сводка одной строкой. Считаем по задачам из БД
+    # (источник правды), а не только по result_json: если разбор упал
+    # на середине, задачи уже могли создаться.
+    summary = build_summary(
+        tasks=tasks,
+        completed=completed,
+        questions=needs_review,
+    )
+
     return AIStatusOut(
         note_id=note.id,
         ai_status=note.ai_status,
@@ -400,8 +411,9 @@ def ai_status(note_id: str, db: Session = Depends(get_db), user: User = Depends(
             }
             for r in runs
         ],
-        tasks_created=len(tasks),
+        tasks_created=summary.tasks,
         commitments_created=len([c for c in commitments if c.source_quote]),
+        summary=summary,
         needs_review=needs_review,
         model=model,
         used_fallback=used_fallback,

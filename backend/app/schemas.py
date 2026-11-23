@@ -254,6 +254,25 @@ class NoteOut(ORMModel):
     version: int
 
 
+class ExtractionSummaryOut(BaseModel):
+    """Итог разбора одной строкой (п.2 «30 идей»).
+
+    Менеджеру не нужен список всех сущностей сразу — нужны числа и возможность
+    раскрыть детали. Поэтому сводка считается на сервере и отдаётся готовой:
+    фронтенд не дублирует правила подсчёта.
+    """
+
+    tasks: int = 0
+    waiting: int = 0
+    completed: int = 0
+    questions: int = 0
+    # Готовая строка вида «2 задачи · 1 ожидание · 1 вопрос».
+    # Пустая строка, если разбирать было нечего.
+    headline: str = ""
+    # Есть ли что раскрывать. Пустой результат — не повод показывать «0 задач».
+    has_details: bool = False
+
+
 class AIStatusOut(BaseModel):
     note_id: str
     ai_status: str
@@ -261,6 +280,7 @@ class AIStatusOut(BaseModel):
     runs: list[dict[str, Any]] = Field(default_factory=list)
     tasks_created: int = 0
     commitments_created: int = 0
+    summary: ExtractionSummaryOut = Field(default_factory=ExtractionSummaryOut)
     needs_review: list[dict[str, Any]] = Field(default_factory=list)
     # п.18: какая модель реально обработала заметку.
     # "local-rules" — ключа нет, "local-rules-fallback" — AI упал.
