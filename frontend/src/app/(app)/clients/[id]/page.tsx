@@ -691,13 +691,18 @@ export default function ClientPage() {
                       {project.stage_group ? ` · ${project.stage_group}` : ""}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <StatusBadge status={project.status} />
-                    {project.planned_revenue !== null && (
-                      <Badge tone="primary">план {money(project.planned_revenue)}</Badge>
-                    )}
-                  </div>
+                  <StatusBadge status={project.status} />
                 </div>
+                <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <div className="min-w-0 rounded-control border border-[var(--border)] bg-canvas px-3 py-2.5">
+                    <dt className="text-[13px] text-[var(--muted)]">Плановый доход</dt>
+                    <dd className="tabular mt-0.5 text-[15px] font-semibold text-ink">{money(project.planned_revenue)}</dd>
+                  </div>
+                  <div className="min-w-0 rounded-control border border-[var(--border)] bg-canvas px-3 py-2.5">
+                    <dt className="text-[13px] text-[var(--muted)]">Ожидаемая прибыль</dt>
+                    <dd className="tabular mt-0.5 text-[15px] font-semibold text-ink">{money(project.expected_profit)}</dd>
+                  </div>
+                </dl>
                 <div className="mt-3 grid gap-3 md:grid-cols-3">
                   <ProjectBlock title="Сделано ранее" text={project.done_before} />
                   <ProjectBlock title="За последний спринт" text={project.done_last_sprint} />

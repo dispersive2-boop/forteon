@@ -1,9 +1,12 @@
 /** Форматирование значений для интерфейса ForteOn. */
 
+const moneyNumber = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 export function money(value: number | null | undefined, currency = "RUB"): string {
-  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
   const symbol = currency === "RUB" ? "₽" : currency;
-  return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value)} ${symbol}`;
+  const amount = moneyNumber.format(value === 0 ? 0 : value).replace(/,00$/, "");
+  return `${amount}\u00a0${symbol}`;
 }
 
 export function compactMoney(value: number | null | undefined): string {

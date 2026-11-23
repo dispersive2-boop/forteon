@@ -277,6 +277,7 @@ export type Project = {
   start_date: string | null;
   end_date: string | null;
   planned_revenue: number | null;
+  expected_profit?: number | null;
   volume: number | null;
   service_flag: string | null;
   done_before: string | null;

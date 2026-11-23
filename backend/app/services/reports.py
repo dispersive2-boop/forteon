@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import io
 from datetime import date, datetime
+from decimal import Decimal
+from math import isfinite
 from pathlib import Path
 
 from openpyxl import Workbook
@@ -69,10 +71,14 @@ def register_fonts() -> tuple[str | None, str | None]:
     return _font_name, _font_bold
 
 
-def _fmt_money(value: float | None) -> str:
-    if value is None:
+def _fmt_money(value: float | Decimal | None) -> str:
+    if value is None or not isfinite(value):
         return "—"
-    return f"{float(value):,.0f}".replace(",", " ") + " ₽"
+    amount = round(value, 2)
+    grouped, _, kopecks = f"{amount or 0:,.2f}".partition(".")
+    rubles = grouped.replace(",", "\u00a0")
+    fraction = f",{kopecks}" if kopecks != "00" else ""
+    return f"{rubles}{fraction}\u00a0₽"
 
 
 def _fmt_date(value: date | datetime | None) -> str:
@@ -189,15 +195,17 @@ def build_xlsx(
         ws_projects = wb.create_sheet("Проекты")
         _sheet(ws_projects, "Проекты",
                ["Клиент", "Объект", "Статус", "Расположение", "Дата в работе", "Объём",
-                "Плановый доход, ₽", "Сервис", "Следующий спринт", "Проблемы"],
-               [26, 34, 16, 20, 14, 12, 18, 12, 34, 34])
+                "Плановый доход, ₽", "Ожидаемая прибыль, ₽", "Сервис", "Следующий спринт", "Проблемы"],
+               [26, 34, 16, 20, 14, 12, 21, 23, 12, 34, 34])
         for row in rows:
             for p in row["projects"]:
                 ws_projects.append([
                     row["client"].name, p.name, p.status, p.location or "—", p.start_date, p.volume,
                     float(p.planned_revenue) if p.planned_revenue is not None else None,
-                    p.service_flag or "—", p.plan_next_sprint or "—", p.problems_text or "—",
+                    p.expected_profit, p.service_flag or "—", p.plan_next_sprint or "—", p.problems_text or "—",
                 ])
+                for column in (7, 8):
+                    ws_projects.cell(ws_projects.max_row, column).number_format = '#,##0.00" ₽"'
 
     if "tasks" in wanted:
         ws_tasks = wb.create_sheet("Задачи")
@@ -327,12 +335,12 @@ def build_pdf(
 
     if "projects" in wanted:
         story.append(Paragraph("Клиенты и проекты", h2))
-        table_rows = [["Клиент", "Объект", "Статус", "Расположение", "План, ₽",
+        table_rows = [["Клиент", "Объект", "Статус", "Расположение", "План, ₽", "Ожид. прибыль, ₽",
                        "Задачи", "Просрочено", "Долг, ₽", "Проблемы"]]
         for row in rows:
             if not row["projects"]:
                 table_rows.append([row["client"].name, "—", row["client"].status, row["client"].address or "—",
-                                   "—", str(len(row["open_tasks"])), str(len(row["overdue"])),
+                                   "—", "—", str(len(row["open_tasks"])), str(len(row["overdue"])),
                                    _fmt_money(row["debt"]), "—"])
                 continue
             for p in row["projects"]:
@@ -341,14 +349,15 @@ def build_pdf(
                     Paragraph((p.name or "—")[:44], base),
                     Paragraph((p.status or "—")[:22], base),
                     Paragraph((p.location or "—")[:24], base),
-                    _fmt_money(float(p.planned_revenue) if p.planned_revenue is not None else None),
+                    _fmt_money(p.planned_revenue),
+                    _fmt_money(p.expected_profit),
                     str(len(row["open_tasks"])),
                     str(len(row["overdue"])),
                     _fmt_money(row["debt"]),
                     Paragraph((p.problems_text or "—")[:110], base),
                 ])
 
-        widths = [34 * mm, 40 * mm, 24 * mm, 26 * mm, 22 * mm, 14 * mm, 16 * mm, 22 * mm, 62 * mm]
+        widths = [31 * mm, 33 * mm, 20 * mm, 21 * mm, 27 * mm, 30 * mm, 13 * mm, 17 * mm, 24 * mm, 44 * mm]
         table = Table(table_rows, colWidths=widths, repeatRows=1)
         table_style = [
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2455DB")),
