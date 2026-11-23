@@ -117,6 +117,23 @@ class NoteWatcher:
             finally:
                 db.close()
 
+            # п.23 «30 идей»: тот же поток раз в круг проверяет, кому пора
+            # получить утреннюю сводку. Отдельный поток ради одного сравнения
+            # времени не нужен — а сбой здесь не должен ронять разбор заметок.
+            try:
+                dbase = SessionLocal()
+                try:
+                    from .digest import send_due_digests
+
+                    sent = send_due_digests(dbase)
+                    dbase.commit()
+                    if sent:
+                        log.info("digest: отправлено сводок — %s", sent)
+                finally:
+                    dbase.close()
+            except Exception as exc:
+                log.warning("digest: цикл упал — %s: %s", type(exc).__name__, exc)
+
             self._stop.wait(5 if first else self.interval)
             first = False
 

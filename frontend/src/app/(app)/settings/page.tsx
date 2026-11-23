@@ -18,7 +18,7 @@ import {
 } from "@/lib/prefs";
 
 export default function SettingsPage() {
-  const { user, photoUrl, refreshPhoto } = useAuth();
+  const { user, photoUrl, refreshPhoto, refreshUser } = useAuth();
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoMessage, setPhotoMessage] = useState<{ error: boolean; text: string } | null>(null);
 
@@ -53,6 +53,34 @@ export default function SettingsPage() {
     setThemeState(getTheme());
     setDensityState(getDensity());
   }, []);
+
+  // п.23: время утренней сводки. Хранится на сервере, а не в localStorage —
+  // иначе рассылка шла бы по часам того браузера, где её настроили.
+  const [digestTime, setDigestTime] = useState("");
+  const [digestSaving, setDigestSaving] = useState(false);
+  const [digestMessage, setDigestMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    setDigestTime(user?.digest_time ?? "");
+  }, [user?.digest_time]);
+
+  async function saveDigestTime() {
+    if (digestSaving) return;
+    setDigestSaving(true);
+    setDigestMessage(null);
+    try {
+      await api("/auth/me/preferences", {
+        method: "PATCH",
+        body: { digest_time: digestTime.trim() || null },
+      });
+      setDigestMessage({ ok: true, text: digestTime ? `Сводка придёт в ${digestTime}.` : "Сводка отключена." });
+      await refreshUser();
+    } catch (err) {
+      setDigestMessage({ ok: false, text: err instanceof Error ? err.message : "Не удалось сохранить время" });
+    } finally {
+      setDigestSaving(false);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -147,6 +175,45 @@ export default function SettingsPage() {
           <p className="mt-3 text-[11.5px] leading-relaxed text-[var(--muted)]">
             Часовой пояс применяется к относительным датам в заметках: «завтра», «в пятницу».
           </p>
+
+          {/*
+            п.23: время утренней сводки. Выключить можно, очистив поле —
+            «не присылать» это выбор менеджера, а не сбой настройки.
+          */}
+          <div className="mt-4 border-t border-[var(--border)] pt-4">
+            <Field label="Утренняя сводка" hint="Короткое напоминание: сколько задач на сегодня, что просрочено, какие оплаты на неделе. Очистите поле, чтобы отключить.">
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="time"
+                  className={`${inputClass} max-w-[140px]`}
+                  value={digestTime}
+                  onChange={(e) => setDigestTime(e.target.value)}
+                />
+                <Button type="button" size="sm" onClick={() => void saveDigestTime()} loading={digestSaving}>
+                  Сохранить
+                </Button>
+                {digestTime && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={digestSaving}
+                    onClick={() => { setDigestTime(""); void saveDigestTime(); }}
+                  >
+                    Отключить
+                  </Button>
+                )}
+              </div>
+            </Field>
+            {digestMessage && (
+              <p
+                role={digestMessage.ok ? "status" : "alert"}
+                className={`mt-1 text-[12px] ${digestMessage.ok ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
+              >
+                {digestMessage.text}
+              </p>
+            )}
+          </div>
         </Card>
 
         <Card>

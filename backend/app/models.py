@@ -54,6 +54,10 @@ class User(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     timezone: Mapped[str] = mapped_column(String(64), default="Asia/Yekaterinburg", nullable=False)
     avatar_color: Mapped[str] = mapped_column(String(16), default="#2455DB", nullable=False)
+    # п.23 «30 идей»: когда присылать утренний дайджест. None — не присылать.
+    # Храним «ЧЧ:ММ» строкой: возиться с типом времени ради одного поля
+    # незачем, а сравнение в пределах дня всё равно строковое.
+    digest_time: Mapped[str | None] = mapped_column(String(5), nullable=True, default="09:00")
 
     clients: Mapped[list["Client"]] = relationship(back_populates="owner")
     sessions: Mapped[list["Session"]] = relationship(back_populates="user", cascade="all, delete-orphan")

@@ -42,6 +42,8 @@ class UserOut(ORMModel):
     is_active: bool
     timezone: str
     avatar_color: str
+    # п.23: время утреннего дайджеста «ЧЧ:ММ». None — не присылать.
+    digest_time: str | None = None
     created_at: datetime | None = None
 
 
@@ -59,6 +61,8 @@ class UserUpdate(BaseModel):
     is_active: bool | None = None
     timezone: str | None = None
     password: str | None = Field(default=None, min_length=8, max_length=256)
+    # п.23: «ЧЧ:ММ» или пустая строка/None — отключить рассылку.
+    digest_time: str | None = None
 
 
 class SessionOut(ORMModel):

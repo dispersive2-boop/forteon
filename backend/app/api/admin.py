@@ -66,6 +66,11 @@ def update_user(user_id: str, payload: UserUpdate, db: Session = Depends(get_db)
     data = payload.model_dump(exclude_unset=True)
     if "password" in data and data["password"]:
         user.password_hash = hash_password(data.pop("password"))
+    # digest_time — единственное поле, где явный None значит «выключить
+    # рассылку», а не «не трогать». Без этого отключить дайджест было нельзя.
+    if "digest_time" in data:
+        value = data.pop("digest_time")
+        user.digest_time = value or None
     for key, value in data.items():
         if value is not None:
             setattr(user, key, value)

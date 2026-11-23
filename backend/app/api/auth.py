@@ -21,6 +21,7 @@ from ..services.ratelimit import limiter
 from ..schemas import (
     LoginRequest,
     PasswordChange,
+    UserUpdate,
     RefreshRequest,
     SessionOut,
     TokenResponse,
@@ -200,6 +201,43 @@ def logout(request: Request, payload: RefreshRequest | None = None, db: Session 
 
 @router.get("/me", response_model=UserOut)
 def me(user: User = Depends(get_current_user)):
+    return UserOut.model_validate(user)
+
+
+@router.patch("/me/preferences", response_model=UserOut)
+def update_preferences(payload: UserUpdate, db: Session = Depends(get_db),
+                       user: User = Depends(get_current_user)):
+    """п.23 «30 идей»: менеджер сам выбирает время утренней сводки.
+
+    Отдельный эндпоинт, а не правка через админку: настройка личная, и
+    менеджер не должен просить администратора её поменять. Меняем только
+    те поля, которые действительно его; роль и активность — нет.
+    """
+    data = payload.model_dump(exclude_unset=True)
+    if "digest_time" in data:
+        value = (data.pop("digest_time") or "").strip()
+        if value:
+            parts = value.split(":")
+            try:
+                hour, minute = int(parts[0]), int(parts[1])
+            except (IndexError, ValueError):
+                raise HTTPException(status_code=422, detail={
+                    "code": "invalid_time", "message": "Время укажите как ЧЧ:ММ",
+                }) from None
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                raise HTTPException(status_code=422, detail={
+                    "code": "invalid_time", "message": "Время вне диапазона дня",
+                })
+            user.digest_time = f"{hour:02d}:{minute:02d}"
+        else:
+            # Пустая строка — «не присылать сводку». Это выбор, а не сбой.
+            user.digest_time = None
+    if "timezone" in data and data["timezone"]:
+        user.timezone = data["timezone"]
+    user.version = (user.version or 1) + 1
+    audit(db, user, "user", user.id, "preferences_updated", {"fields": list(data)})
+    db.commit()
+    db.refresh(user)
     return UserOut.model_validate(user)
 
 

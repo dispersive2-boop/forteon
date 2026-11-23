@@ -81,6 +81,8 @@ export type AuthUser = {
   is_active: boolean;
   timezone: string;
   avatar_color: string;
+  /** п.23: время утренней сводки «ЧЧ:ММ». null — не присылать. */
+  digest_time?: string | null;
 };
 
 export function getUser(): AuthUser | null {
@@ -518,6 +520,19 @@ export type TodayPayload = {
   counters: TodayCounters;
   items: Task[];
   done: Task[];
+};
+
+/** Утренняя сводка (п.23 «30 идей»). Числа, не задачи. */
+export type Digest = {
+  date: string;
+  due_today: number;
+  overdue: number;
+  needs_review: number;
+  payments_due: number;
+  invoices_overdue: number;
+  text: string;
+  digest_time: string | null;
+  empty: boolean;
 };
 
 export type Session = {

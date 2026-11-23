@@ -44,7 +44,7 @@ import {
   TaskItem,
   priorityLabel,
 } from "@/components/ui";
-import { api, TodayPayload, Task } from "@/lib/api";
+import { api, Digest, TodayPayload, Task } from "@/lib/api";
 import { dateRu, dateTimeRu, money, relativeDay, TASK_TYPE_LABELS } from "@/lib/format";
 
 type FilterKey =
@@ -86,6 +86,8 @@ function isoDate(offsetDays = 0): string {
 export default function TodayPage() {
   const { user } = useAuth();
   const [data, setData] = useState<TodayPayload | null>(null);
+  // п.23: короткая сводка «что сегодня». Ошибка здесь не ломает экран.
+  const [digest, setDigest] = useState<Digest | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -99,8 +101,12 @@ export default function TodayPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const payload = await api<TodayPayload>("/tasks/today");
+      const [payload, summary] = await Promise.all([
+        api<TodayPayload>("/tasks/today"),
+        api<Digest>("/digest").catch(() => null),
+      ]);
       setData(payload);
+      setDigest(summary);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось загрузить план на день");
     } finally {
@@ -268,6 +274,20 @@ export default function TodayPage() {
           {todayLabel}
           {firstName ? ` · ${firstName}` : ""}
         </p>
+        {/*
+          п.23: сводка одной строкой. Это то самое «стоит ли открывать
+          систему»: менеджер видит цифры до того, как начал читать задачи.
+        */}
+        {digest && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-control border border-[var(--border)] bg-canvas px-3 py-2">
+            <p className="text-[12.5px] leading-snug text-ink">{digest.text}</p>
+            <span className="text-[11.5px] text-[var(--muted)]">
+              {digest.digest_time
+                ? `Колокольчик приходит в ${digest.digest_time}`
+                : "Утренняя сводка выключена"}
+            </span>
+          </div>
+        )}
       </header>
 
       {/*

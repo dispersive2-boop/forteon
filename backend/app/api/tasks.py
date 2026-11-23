@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import audit, ensure_version, get_client_or_404, get_current_user
 from ..models import AuditLog, Client, Note, Notification, Project, Task, User, utcnow
+from ..services.digest import build_digest, send_digest
 from ..schemas import (
     PlannerOut,
     PlannerSummary,
@@ -703,3 +704,39 @@ def unread_notifications_count(db: Session = Depends(get_db), user: User = Depen
         )
     ) or 0
     return {"count": int(total)}
+
+
+# ---------------------------------------------------------------- дайджест
+@router.get("/digest")
+def get_digest(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """п.23 «30 идей»: сводка на сегодня без записи в базу.
+
+    Менеджеру нужно понимать «стоит ли открывать систему сейчас». Считаем
+    на месте: сколько на сегодня, сколько просрочено, что ждёт уточнения,
+    какие оплаты на неделе и есть ли просроченные счета.
+    """
+    digest = build_digest(db, user)
+    return {
+        "date": digest.today,
+        "due_today": digest.due_today,
+        "overdue": digest.overdue,
+        "needs_review": digest.needs_review,
+        "payments_due": digest.payments_due,
+        "invoices_overdue": digest.invoices_overdue,
+        "text": digest.text(),
+        "digest_time": user.digest_time,
+        "empty": digest.is_empty,
+    }
+
+
+@router.post("/digest/send")
+def send_digest_now(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Отправить себе сводку прямо сейчас. Тот же текст уходит в колокольчик.
+
+    Практическая польза: менеджер может проверить, что и как ему придёт
+    утром, не дожидаясь расписания. Повторное нажатие обновляет уведомление,
+    а не плодит копии (п.22).
+    """
+    text, created = send_digest(db, user)
+    db.commit()
+    return {"status": "ok", "text": text, "created": created}

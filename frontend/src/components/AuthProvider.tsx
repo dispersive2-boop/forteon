@@ -11,10 +11,19 @@ type AuthState = {
   loading: boolean;
   photoUrl: string | null;
   refreshPhoto: () => void;
+  /** Перечитать профиль — нужен после смены личных настроек (п.23). */
+  refreshUser: () => Promise<void>;
   signOut: () => Promise<void>;
 };
 
-const AuthContext = createContext<AuthState>({ user: null, loading: true, photoUrl: null, refreshPhoto: () => {}, signOut: async () => {} });
+const AuthContext = createContext<AuthState>({
+  user: null,
+  loading: true,
+  photoUrl: null,
+  refreshPhoto: () => {},
+  refreshUser: async () => {},
+  signOut: async () => {},
+});
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -74,6 +83,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (user && pathname === "/login") router.replace("/today");
   }, [loading, user, pathname, router]);
 
+  const refreshUser = useCallback(async () => {
+    try {
+      setUser(await api<AuthUser>("/auth/me"));
+    } catch {
+      // Сетевой сбой не должен выкидывать менеджера из сессии:
+      // профиль просто останется прежним.
+    }
+  }, []);
+
   const signOut = useCallback(async () => {
     await logout();
     setUser(null);
@@ -81,7 +99,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   const photoUrl = photo?.userId === userId ? photo?.url ?? null : null;
-  const value = useMemo(() => ({ user, loading, signOut, photoUrl, refreshPhoto }), [user, loading, signOut, photoUrl, refreshPhoto]);
+  const value = useMemo(
+    () => ({ user, loading, signOut, photoUrl, refreshPhoto, refreshUser }),
+    [user, loading, signOut, photoUrl, refreshPhoto, refreshUser],
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

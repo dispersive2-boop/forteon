@@ -81,6 +81,10 @@ _ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
         ("event_kind", "VARCHAR(16) DEFAULT 'todo' NOT NULL"),
         ("actor", "VARCHAR(16) DEFAULT 'us' NOT NULL"),
     ],
+    # п.23 «30 идей»: время утреннего дайджеста у пользователя.
+    "users": [
+        ("digest_time", "VARCHAR(5) DEFAULT '09:00'"),
+    ],
     # п.15 «30 идей»: договор связан со счётом.
     # ALTER TABLE ... ADD COLUMN с NULL безопасен для существующих строк.
     "contracts": [
