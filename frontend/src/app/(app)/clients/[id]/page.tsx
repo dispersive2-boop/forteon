@@ -171,6 +171,39 @@ function dayLabel(key: string): string {
   });
 }
 
+/*
+ * п.29: иконки для мобильного ряда действий. Inline-SVG вместо текстовых
+ * глифов («☎», «●»): шрифт мог подставить чужой символ или квадратик.
+ * Все рисунки наследуют цвет текста через currentColor.
+ */
+function IconPhone() {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none"
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6.5 3.5h3l1.5 4-2 1.5a12 12 0 0 0 6 6l1.5-2 4 1.5v3a2 2 0 0 1-2.2 2A17 17 0 0 1 4.5 5.7 2 2 0 0 1 6.5 3.5Z" />
+    </svg>
+  );
+}
+
+function IconMic() {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none"
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="3" width="6" height="10" rx="3" />
+      <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3" />
+    </svg>
+  );
+}
+
+function IconPlus() {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none"
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
 function groupNotesByDay(notes: Note[]): [string, Note[]][] {
   const map = new Map<string, Note[]>();
   for (const note of notes) {
@@ -418,6 +451,19 @@ function ClientWorkspace() {
     (a.due_date ?? "9999-12-31").localeCompare(b.due_date ?? "9999-12-31"),
   )[0];
 
+  /*
+   * п.29 «30 идей»: на телефоне из карточки должны быть доступны три главных
+   * действия одной рукой — позвонить, надиктовать, поставить задачу.
+   * Номер берём у основного контакта, иначе у первого, у кого он вообще есть:
+   * иначе кнопка «Позвонить» вела бы в пустоту.
+   */
+  const callContact =
+    client.contacts.find((contact) => contact.is_primary && contact.phone) ??
+    client.contacts.find((contact) => Boolean(contact.phone));
+  const callHref = callContact?.phone
+    ? `tel:${callContact.phone.replace(/[^+\d]/g, "")}`
+    : "";
+
   return (
     <div className="mx-auto max-w-[1240px] space-y-4">
       <nav className="flex items-center gap-1.5 text-[12.5px] text-[var(--muted)]">
@@ -449,8 +495,47 @@ function ClientWorkspace() {
               <Badge tone="neutral">создан {dateRu(client.created_at)}</Badge>
               <Badge tone="neutral">версия {client.version}</Badge>
             </div>
+            {/*
+              п.29: на телефоне три главных действия — сразу под заголовком,
+              тремя равными кнопками во всю ширину. На десктопе этот ряд
+              скрыт, там те же действия стоят справа в шапке.
+              Текст 12px + иконка 14px: при 390px на кнопку приходится ~103px,
+              и «Надиктовать» 13px уже вылезало за рамку.
+            */}
+            <div className="mt-3 grid grid-cols-3 gap-1.5 sm:hidden">
+              {callHref ? (
+                <a
+                  href={callHref}
+                  className="focus-ring inline-flex h-11 min-h-[44px] items-center justify-center gap-1 rounded-control border border-[var(--border-strong)] px-1 text-[12px] font-medium text-ink hover:text-primary"
+                >
+                  <IconPhone /> Позвонить
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  title="У клиента нет телефона в контактах"
+                  className="inline-flex h-11 min-h-[44px] cursor-not-allowed items-center justify-center gap-1 rounded-control border border-[var(--border)] px-1 text-[12px] font-medium text-[var(--muted)] opacity-70"
+                >
+                  <IconPhone /> Позвонить
+                </button>
+              )}
+              <Link
+                href={`/notes?client_id=${encodeURIComponent(clientId)}&voice=1`}
+                className="focus-ring inline-flex h-11 min-h-[44px] items-center justify-center gap-1 rounded-control border border-[var(--border-strong)] px-1 text-[12px] font-medium text-ink hover:text-primary"
+              >
+                <IconMic /> Голосом
+              </Link>
+              <button
+                type="button"
+                onClick={() => setCreateTask(true)}
+                className="focus-ring inline-flex h-11 min-h-[44px] items-center justify-center gap-1 rounded-control bg-primary px-1 text-[12px] font-medium text-white hover:opacity-90"
+              >
+                <IconPlus /> Задача
+              </button>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="hidden flex-wrap gap-2 sm:flex">
             <Link href={`/notes?client_id=${encodeURIComponent(clientId)}&voice=1`}
               className="focus-ring inline-flex h-11 items-center rounded-control border border-[var(--border-strong)] px-4 text-sm font-medium text-ink hover:text-primary">
               Записать голосом
