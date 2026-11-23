@@ -369,6 +369,22 @@ export type NoteTaskRef = {
   status: string;
 };
 
+/**
+ * Итог разбора одной строкой (п.2 «30 идей»).
+ *
+ * Считается на сервере — фронтенд не дублирует правила подсчёта,
+ * чтобы числа в карточке и в ленте не разъехались.
+ */
+export type ExtractionSummary = {
+  tasks: number;
+  waiting: number;
+  completed: number;
+  questions: number;
+  /** Готовая строка вида «2 задачи · 1 ожидание · 1 вопрос». */
+  headline: string;
+  has_details: boolean;
+};
+
 export type Note = {
   id: string;
   client_id: string;
@@ -384,6 +400,8 @@ export type Note = {
   task_count?: number;
   open_task_count?: number;
   tasks?: NoteTaskRef[];
+  /** Приходит из GET /notes/feed — итог разбора одной строкой (п.2). */
+  summary?: ExtractionSummary;
 };
 
 export type FinancialSummary = {

@@ -34,7 +34,7 @@ import {
   Skeleton,
   textareaClass,
 } from "@/components/ui";
-import { api, API_ROOT, getToken, Note } from "@/lib/api";
+import { api, API_ROOT, ExtractionSummary, getToken, Note } from "@/lib/api";
 import { PRIORITY_LABELS, dateTimeRu, formatBytes, isOverdue, relativeDay } from "@/lib/format";
 
 type PickerClient = {
@@ -80,6 +80,8 @@ type FeedNote = Omit<Note, "tasks"> & {
   commitments?: NoteCommitment[];
   task_count?: number;
   open_task_count?: number;
+  /** Итог разбора одной строкой — приходит из ленты (п.2 «30 идей»). */
+  summary?: ExtractionSummary;
   /** Локальная запись, которую ещё не подтвердил сервер (п.56). */
   optimistic?: boolean;
   /**
@@ -1063,7 +1065,32 @@ function NoteCard({
         </div>
       )}
 
-      <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-ink [overflow-wrap:anywhere]">
+      {/*
+        п.2 «30 идей»: итог одной строкой. Менеджеру после диктовки нужен
+        ответ «что из этого получилось», а не список сущностей. Числа
+        считает сервер — здесь только показываем.
+      */}
+      {realId && note.summary?.has_details && (
+        <p className="mt-1.5 flex flex-wrap items-center gap-x-1.5 text-[12.5px] font-medium text-primary">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+            className="shrink-0"
+          >
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+          <span className="[overflow-wrap:anywhere]">{note.summary.headline}</span>
+        </p>
+      )}
+
+      <p className="mt-1.5 whitespace-pre-wrap text-[14px] leading-relaxed text-ink [overflow-wrap:anywhere]">
         {note.body}
       </p>
 

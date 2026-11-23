@@ -218,6 +218,16 @@ def notes_feed(
         payload["open_task_count"] = sum(1 for t in linked if t["status"] == "open")
         payload["tasks"] = linked
         payload["commitments"] = commitments_by_note.get(note.id, [])
+        # п.2 «30 идей»: итог одной строкой прямо в ленте, без отдельного
+        # запроса /ai-status на каждую заметку. Выполненные отдаём отдельно,
+        # чтобы «2 задачи» не превращались в «3 задачи» из-за закрытых.
+        active_linked = [t for t in linked if t["status"] != "done"]
+        done_linked = [t for t in linked if t["status"] == "done"]
+        payload["summary"] = build_summary(
+            tasks=active_linked,
+            completed=done_linked,
+            questions=sum(1 for t in active_linked if t["needs_review"]),
+        ).model_dump()
         # п.18–19: даже в ленте видно, кто разобрал заметку и был ли fallback.
         payload.update(
             ai_by_note.get(
