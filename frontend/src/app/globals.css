@@ -401,12 +401,12 @@ html {
 
 @media (prefers-reduced-motion: no-preference) {
   .forteon-tab-panel {
-    animation: forteon-tab-in 170ms cubic-bezier(.2, .7, .3, 1);
+    animation: forteon-tab-in 230ms cubic-bezier(.2, .7, .3, 1);
   }
 }
 
 @keyframes forteon-tab-in {
-  from { opacity: .9; transform: translateY(3px); }
+  from { opacity: .82; transform: translateY(7px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -489,8 +489,8 @@ html {
   }
   .forteon-action:active:not(:disabled) { transform: scale(.98); }
   .forteon-overlay { animation: forteon-overlay-in 150ms ease-out; }
-  .forteon-popover { animation: forteon-popover-in 170ms cubic-bezier(.2, .7, .3, 1); }
-  .forteon-sheet { animation: forteon-sheet-in 190ms cubic-bezier(.2, .7, .3, 1); }
+  .forteon-popover { animation: forteon-popover-in 240ms cubic-bezier(.2, .7, .3, 1); }
+  .forteon-sheet { animation: forteon-sheet-in 260ms cubic-bezier(.2, .7, .3, 1); }
   .forteon-more-menu {
     transition: transform 180ms cubic-bezier(.2, .7, .3, 1), opacity 150ms ease-out;
   }
@@ -509,10 +509,10 @@ html {
   from { background-color: transparent; }
 }
 @keyframes forteon-popover-in {
-  from { opacity: .84; transform: translateY(-6px); }
+  from { opacity: .73; transform: translateY(-10px); }
 }
 @keyframes forteon-sheet-in {
-  from { opacity: .9; transform: translateY(12px); }
+  from { opacity: .82; transform: translateY(20px); }
 }
 
 html[data-motion="off"],
@@ -569,7 +569,7 @@ html[data-motion="off"] .forteon-action:active {
 
   @media (prefers-reduced-motion: no-preference) {
     html:not([data-motion="off"]) select:not([multiple]):not([size]):open::picker(select) {
-      animation: forteon-popover-in 140ms ease-out;
+      animation: forteon-popover-in 220ms ease-out;
     }
   }
 }

@@ -98,9 +98,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     const changed = previousPath.current !== pathname;
     previousPath.current = pathname;
     if (!changed || document.documentElement.dataset.motion === "off" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const animation = mainRef.current?.animate([{ opacity: 0.94 }, { opacity: 1 }], {
-      duration: 150,
-      easing: "ease-out",
+    const animation = mainRef.current?.animate([
+      { opacity: 0.82, transform: "translateY(7px)" },
+      { opacity: 1, transform: "translateY(0)" },
+    ], {
+      duration: 240,
+      easing: "cubic-bezier(.2, .7, .3, 1)",
     });
     return () => animation?.cancel();
   }, [pathname]);
