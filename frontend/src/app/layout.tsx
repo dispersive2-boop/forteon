@@ -2,6 +2,7 @@
 
 import { AuthProvider } from "@/components/AuthProvider";
 
+import "@fontsource-variable/golos-text";
 import "./globals.css";
 
 export const metadata: Metadata = {

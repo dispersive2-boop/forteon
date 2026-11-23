@@ -4,6 +4,7 @@
 
 /* ForteOn design tokens — утверждённая палитра из дизайн-системы */
 :root {
+  --font-ui: "Golos Text Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
   /* Поверхности */
   --sidebar: #111827;         /* Панель */
   --sidebar-hover: #1F2937;
@@ -57,7 +58,7 @@ body {
 body {
   background: var(--canvas);
   color: var(--ink);
-  font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-family: var(--font-ui);
   font-size: 15px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;

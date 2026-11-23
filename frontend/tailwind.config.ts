@@ -49,7 +49,7 @@ const config: Config = {
         lift: "0 12px 32px -16px rgba(23,32,51,0.32)",
       },
       fontFamily: {
-        sans: ["Inter", "Segoe UI", "system-ui", "-apple-system", "sans-serif"],
+        sans: ["var(--font-ui)"],
       },
       /* Читаемая типографика вместо 11-13px */
       fontSize: {
