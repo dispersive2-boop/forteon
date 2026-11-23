@@ -3,7 +3,7 @@
 /** Базовые UI-примитивы ForteOn. Маленькие, без внешних зависимостей. */
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useId, useMemo, useRef } from "react";
 
 import {
   compactMoney,
@@ -341,6 +341,11 @@ export function Modal({
   footer?: React.ReactNode;
 }) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
+  const titleId = useId();
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
   /*
     Пункты 4-5 списка интерактивности: модалку закрывают Esc и клик по фону.
     Раньше работал только крестик — на телефоне другого выхода не было,
@@ -350,20 +355,23 @@ export function Modal({
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") closeRef.current();
     };
     document.addEventListener("keydown", onKeyDown);
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const focusTimer = window.setTimeout(() => {
-      dialogRef.current?.querySelector<HTMLElement>("input, select, textarea, button")?.focus();
+      const dialog = dialogRef.current;
+      const firstControl = dialog?.querySelector<HTMLElement>("input, select, textarea") ??
+        dialog?.querySelector<HTMLElement>("button");
+      firstControl?.focus();
     }, 30);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = previousOverflow;
       window.clearTimeout(focusTimer);
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
   return (
@@ -379,12 +387,13 @@ export function Modal({
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={titleId}
         className="animate-fade-in w-full max-w-lg rounded-t-2xl border border-[var(--border)] bg-surface shadow-lift sm:rounded-card"
       >
         <header className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
-          <h3 className="text-[14.5px] font-semibold text-ink">{title}</h3>
+          <h3 id={titleId} className="text-[14.5px] font-semibold text-ink">{title}</h3>
           <button
+            type="button"
             onClick={onClose}
             className="focus-ring grid h-11 w-11 place-items-center rounded-lg text-[var(--muted)] hover:bg-[#f1f4f9] sm:h-8 sm:w-8"
             aria-label="Закрыть"

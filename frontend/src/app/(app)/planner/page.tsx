@@ -18,6 +18,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
+import { CreateTaskModal } from "@/components/CreateTaskModal";
+import { IconPlus } from "@/components/icons";
+
 import {
   Badge,
   Button,
@@ -152,6 +155,7 @@ export default function PlannerPage() {
   const [clientFilter, setClientFilter] = useState<string>("all");
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
 
+  const [createOpen, setCreateOpen] = useState(false);
   const [reschedule, setReschedule] = useState<Task | null>(null);
   const [newDate, setNewDate] = useState<string>("");
   const [savingDate, setSavingDate] = useState(false);
@@ -481,6 +485,14 @@ export default function PlannerPage() {
     setClientFilter("all");
   }
 
+  function showCreatedTask(task: Task) {
+    setTasks((previous) => [task, ...previous.filter((item) => item.id !== task.id)]);
+    resetFilters();
+    setView("day");
+    setAnchor(task.due_date ?? todayISO());
+    setCreateOpen(false);
+  }
+
   /* ------------------------------------------------------------- разметка */
   return (
     <div className="mx-auto max-w-[1240px]">
@@ -495,51 +507,56 @@ export default function PlannerPage() {
             {overdue.length > 0 ? ` · ${overdue.length} просрочено` : ""}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-control border border-[var(--border-strong)] bg-surface p-0.5">
-            {VIEWS.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => setView(item.key)}
-                aria-pressed={view === item.key}
-                className={`focus-ring h-11 min-h-[44px] rounded-[9px] px-3 text-[13px] font-medium transition-colors sm:h-9 sm:min-h-9 ${
-                  view === item.key
-                    ? "bg-primary text-white"
-                    : "text-[var(--muted)] hover:text-ink"
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setAnchor(toISO(shiftPeriod(view, anchorDate, -1)))}
-              aria-label="Предыдущий период"
-              className="focus-ring grid h-11 w-11 place-items-center rounded-control border border-[var(--border-strong)] text-[var(--muted)] transition-colors hover:border-primary hover:text-primary sm:h-10 sm:w-10"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
-            </button>
-            <Button variant="outline" size="md" onClick={() => setAnchor(todayISO())}>
-              Сегодня
-            </Button>
-            <button
-              type="button"
-              onClick={() => setAnchor(toISO(shiftPeriod(view, anchorDate, 1)))}
-              aria-label="Следующий период"
-              className="focus-ring grid h-11 w-11 place-items-center rounded-control border border-[var(--border-strong)] text-[var(--muted)] transition-colors hover:border-primary hover:text-primary sm:h-10 sm:w-10"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <path d="M9 18l6-6-6-6" />
-              </svg>
-            </button>
-          </div>
-        </div>
+        <Button type="button" onClick={() => setCreateOpen(true)} disabled={loading}>
+          <IconPlus size={18} />
+          Новая задача
+        </Button>
       </header>
+
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-card border border-[var(--border)] bg-surface p-2 sm:p-3">
+        <div role="group" aria-label="Вид планировщика" className="flex rounded-control border border-[var(--border-strong)] bg-surface p-0.5">
+          {VIEWS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setView(item.key)}
+              aria-pressed={view === item.key}
+              className={`focus-ring h-11 min-h-[44px] rounded-[9px] px-3 text-[13px] font-medium transition-colors sm:h-9 sm:min-h-9 ${
+                view === item.key
+                  ? "bg-primary text-white"
+                  : "text-[var(--muted)] hover:text-ink"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setAnchor(toISO(shiftPeriod(view, anchorDate, -1)))}
+            aria-label="Предыдущий период"
+            className="focus-ring grid h-11 w-11 place-items-center rounded-control border border-[var(--border-strong)] text-[var(--muted)] transition-colors hover:border-primary hover:text-primary sm:h-10 sm:w-10"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
+          <Button variant="outline" size="md" onClick={() => setAnchor(todayISO())}>
+            Сегодня
+          </Button>
+          <button
+            type="button"
+            onClick={() => setAnchor(toISO(shiftPeriod(view, anchorDate, 1)))}
+            aria-label="Следующий период"
+            className="focus-ring grid h-11 w-11 place-items-center rounded-control border border-[var(--border-strong)] text-[var(--muted)] transition-colors hover:border-primary hover:text-primary sm:h-10 sm:w-10"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </button>
+        </div>
+      </div>
 
       {/* Фильтры: тип, приоритет, статус, клиент (п.73) */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -775,6 +792,15 @@ export default function PlannerPage() {
       )}
 
       {/* Перенос срока — диалог, а не drag-and-drop (п.76) */}
+      {createOpen && (
+        <CreateTaskModal
+          initialClient={clients.find((client) => client.id === clientFilter)}
+          initialDate={view === "day" ? anchor : ""}
+          onClose={() => setCreateOpen(false)}
+          onCreated={showCreatedTask}
+        />
+      )}
+
       <Modal
         open={Boolean(reschedule)}
         title="Перенести задачу"
