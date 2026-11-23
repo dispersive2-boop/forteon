@@ -111,10 +111,12 @@ export default function ClientsPage() {
               <path d="M20 20l-3.6-3.6" />
             </svg>
             <input
+              id="client-search"
+              aria-label="Поиск клиента"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Поиск по названию или юрлицу"
-              className="focus-ring h-9 w-full rounded-control border border-[var(--border-strong)] bg-surface pl-8.5 pr-3 text-[13px] text-ink placeholder:text-[#6B7280]"
+              className="focus-ring h-9 w-full scroll-mt-24 rounded-control border border-[var(--border-strong)] bg-surface pl-8.5 pr-3 text-[13px] text-ink placeholder:text-[#6B7280]"
             />
           </div>
           <select
