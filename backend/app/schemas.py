@@ -313,17 +313,24 @@ class TaskCreate(BaseModel):
 
 
 class TaskUpdate(BaseModel):
+    """Частичная правка задачи (п.6 «30 идей»).
+
+    Менеджер исправляет то, что предложил AI, не пересоздавая задачу:
+    формулировку, тип, приоритет, срок, сторону действия.
+    """
+
     title: str | None = None
     description: str | None = None
     type: str | None = None
-    actor: Literal["us", "client"] | None = None
     priority: str | None = None
     due_at: datetime | None = None
     due_date: date | None = None
     version: int | None = None
     # п.23: менеджер может поправить то, что предложил AI.
     event_kind: str | None = None
-    actor: str | None = None
+    # Кто действует: мы или клиент. Раньше поле было объявлено дважды —
+    # второй `str` перекрывал Literal, и проверка значения не работала.
+    actor: Literal["us", "client"] | None = None
     # Снять или поставить пометку «нужно уточнить».
     needs_review: bool | None = None
 
