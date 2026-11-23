@@ -201,6 +201,37 @@ class ProjectOut(ORMModel):
     problems_text: str | None
     meeting_comment: str | None
     version: int
+    # п.14 «30 идей»: откуда проект. Пусто — заведён вручную.
+    source_row: int | None = None
+
+
+class ProvenanceEntry(BaseModel):
+    """Одно событие происхождения значения (п.14 «30 идей»).
+
+    Менеджер спрашивает не «кто менял», а «откуда это число». Поэтому в
+    одной строке и источник (импорт/вручную), и автор, и момент, и что
+    было до.
+    """
+
+    at: datetime
+    actor: str | None = None
+    action: str
+    detail: str
+    before: str | None = None
+    after: str | None = None
+
+
+class ProjectProvenance(BaseModel):
+    """Полная история важных полей проекта (п.14 «30 идей»)."""
+
+    project_id: str
+    # Строка файла, из которой пришёл проект. None — заведён в системе.
+    source_row: int | None = None
+    origin: str
+    created_at: datetime
+    # Кто создал и кто последним менял суммы — готовыми фразами.
+    created_by: str | None = None
+    entries: list[ProvenanceEntry] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------- contracts

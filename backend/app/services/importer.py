@@ -17,6 +17,7 @@ import openpyxl
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..deps import audit
 from ..models import Client, Note, Project, Task, User, utcnow
 from .ai import make_dedupe_key, normalize_title
 from .dates import extract_due, to_date
@@ -229,6 +230,12 @@ def import_xlsx(db: Session, path: str | Path, owner: User) -> ImportStats:
             db.add(project)
             db.flush()
             stats.projects_created += 1
+            # п.14 «30 идей»: без этой записи история проекта пуста, и на
+            # вопрос «откуда эта сумма» ответить нечем. Пишем тот же формат,
+            # что и ручное создание через API.
+            audit(db, owner, "project", project.id, "created", {
+                "client_id": client.id, "source_row": row_idx, "origin": "import",
+            })
         else:
             project.location = project.location or location
             project.status = status or project.status

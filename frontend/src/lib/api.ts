@@ -289,6 +289,28 @@ export type Project = {
   plan_next_sprint: string | null;
   problems_text: string | null;
   meeting_comment: string | null;
+  /** Строка файла импорта. null — проект заведён в системе (п.14). */
+  source_row?: number | null;
+};
+
+/** Одно событие происхождения значения (п.14 «30 идей»). */
+export type ProvenanceEntry = {
+  at: string;
+  actor: string | null;
+  action: "created" | "updated" | "money" | string;
+  detail: string;
+  before: string | null;
+  after: string | null;
+};
+
+/** Откуда взялись важные поля проекта (п.14 «30 идей»). */
+export type ProjectProvenance = {
+  project_id: string;
+  source_row: number | null;
+  origin: "import" | "manual";
+  created_at: string;
+  created_by: string | null;
+  entries: ProvenanceEntry[];
 };
 
 export type Task = {

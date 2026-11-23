@@ -8,6 +8,7 @@ import re
 import shutil
 import uuid
 from datetime import date
+from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse
@@ -45,7 +46,9 @@ from ..schemas import (
     PagedClients,
     ProjectCreate,
     ProjectOut,
+    ProjectProvenance,
     ProjectUpdate,
+    ProvenanceEntry,
 )
 
 router = APIRouter(tags=["clients"])
@@ -480,6 +483,126 @@ def create_project(client_id: str, payload: ProjectCreate, db: Session = Depends
     db.commit()
     db.refresh(project)
     return ProjectOut.model_validate(project)
+
+
+def _money_text(value: str | None) -> str | None:
+    """Сумма в одном виде для истории: две копейки, без экспоненты.
+
+    `before` приходит из базы (`Decimal` → «500000.00»), а `after` — из
+    тела запроса (`float` → «620000.0»). Без приведения менеджер видел
+    «500000.00 → 620000.0» и справедливо не понимал разницы.
+    """
+    if value is None or value == "":
+        return None
+    try:
+        return str(Decimal(str(value)).quantize(Decimal("0.01")))
+    except (InvalidOperation, ValueError):
+        return str(value)
+
+
+@router.get("/projects/{project_id}/provenance", response_model=ProjectProvenance)
+def project_provenance(project_id: str, db: Session = Depends(get_db),
+                       user: User = Depends(get_current_user)):
+    """Откуда взялись важные поля проекта (п.14 «30 идей»).
+
+    Вопрос менеджера звучит не «кто менял», а «откуда это число». Поэтому
+    отвечаем на него, а не отдаём сырой журнал:
+      * строка файла, из которой пришёл проект (или «заведён вручную»);
+      * кто создал и когда;
+      * каждое изменение сумм с прежним и новым значением.
+    """
+    project = db.get(Project, project_id)
+    if project is None or project.deleted_at is not None:
+        raise HTTPException(status_code=404, detail={"code": "not_found", "message": "Проект не найден"})
+    get_client_or_404(db, user, project.client_id)
+
+    logs = db.scalars(
+        select(AuditLog)
+        .where(AuditLog.entity == "project", AuditLog.entity_id == project.id)
+        .order_by(AuditLog.created_at)
+    ).all()
+    actors = {
+        row.id: row.full_name
+        for row in db.scalars(
+            select(User).where(User.id.in_({log.actor_id for log in logs if log.actor_id}))
+        )
+    }
+
+    entries: list[ProvenanceEntry] = []
+    created_by: str | None = None
+    for log in logs:
+        actor = actors.get(log.actor_id) if log.actor_id else None
+        try:
+            meta = json.loads(log.metadata_json) if log.metadata_json else {}
+        except ValueError:
+            meta = {}
+
+        if log.action == "created":
+            created_by = actor
+            entries.append(
+                ProvenanceEntry(
+                    at=log.created_at,
+                    actor=actor,
+                    action="created",
+                    detail=f"Проект заведён ({'импорт' if project.source_row else 'вручную'})",
+                )
+            )
+            continue
+
+        if log.action != "updated":
+            continue
+
+        money = meta.get("money_changes") or {}
+        if money:
+            for field, change in money.items():
+                label = "Плановая выручка" if field == "planned_revenue" else "Ожидаемые затраты"
+                entries.append(
+                    ProvenanceEntry(
+                        at=log.created_at,
+                        actor=actor,
+                        action="money",
+                        detail=f"{label} изменена",
+                        before=_money_text(change.get("before")),
+                        after=_money_text(change.get("after")),
+                    )
+                )
+        else:
+            fields = ", ".join(meta.get("fields") or [])
+            entries.append(
+                ProvenanceEntry(
+                    at=log.created_at,
+                    actor=actor,
+                    action="updated",
+                    detail=f"Изменены поля: {fields}" if fields else "Карточка обновлена",
+                )
+            )
+
+    origin = "import" if project.source_row else "manual"
+    if not entries:
+        # Данные могли попасть в базу до того, как импорт начал писать
+        # audit-записи. Врать «изменений не было» нельзя — синтезируем
+        # запись из того, что точно известно про сам проект.
+        entries.append(
+            ProvenanceEntry(
+                at=project.created_at,
+                actor=created_by,
+                action="created",
+                detail=(
+                    f"Проект из отчёта, строка {project.source_row}"
+                    if project.source_row
+                    else "Проект заведён в системе"
+                ),
+            )
+        )
+
+    return ProjectProvenance(
+        project_id=project.id,
+        source_row=project.source_row,
+        origin=origin,
+        created_at=project.created_at,
+        created_by=created_by,
+        entries=entries,
+    )
 
 
 @router.patch("/projects/{project_id}", response_model=ProjectOut)

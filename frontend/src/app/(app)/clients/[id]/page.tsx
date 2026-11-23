@@ -34,6 +34,7 @@ import {
   FinancialSummary,
   Note,
   Project,
+  ProjectProvenance,
   Task,
 } from "@/lib/api";
 import {
@@ -762,6 +763,12 @@ function ClientWorkspace() {
                       {project.location || "—"} · получен {dateRu(project.start_date)}
                       {project.stage_group ? ` · ${project.stage_group}` : ""}
                     </p>
+                    {/* п.14: сразу видно, откуда проект — из файла или заведён здесь */}
+                    <p className="mt-0.5 text-[11.5px] text-[var(--muted)]">
+                      {project.source_row
+                        ? `Из отчёта, строка ${project.source_row}`
+                        : "Заведён в системе"}
+                    </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusBadge status={project.status} />
@@ -796,6 +803,7 @@ function ClientWorkspace() {
                     Комментарий совещания: {project.meeting_comment}
                   </p>
                 )}
+                <ProjectProvenanceBlock projectId={project.id} />
               </Card>
             ))
           ) : (
@@ -1018,6 +1026,88 @@ function Row({ label, value, danger = false }: { label: string; value: string; d
     <div className="flex items-center justify-between border-b border-dashed border-[var(--border)] pb-1.5 last:border-0">
       <dt className="text-[var(--muted)]">{label}</dt>
       <dd className={danger ? "font-medium text-[var(--danger)]" : "font-medium text-ink"}>{value}</dd>
+    </div>
+  );
+}
+
+/**
+ * п.14 «30 идей»: откуда взялись важные поля проекта.
+ *
+ * Загружается по требованию: менеджеру в 90% случаев история не нужна,
+ * а лишний запрос на каждый проект замедляет вкладку. Поэтому сначала
+ * подпись «из отчёта, строка N», а история — по клику.
+ */
+function ProjectProvenanceBlock({ projectId }: { projectId: string }) {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<ProjectProvenance | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function toggle() {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    setOpen(true);
+    if (data || loading) return;
+    setLoading(true);
+    setError(null);
+    try {
+      setData(await api<ProjectProvenance>(`/projects/${projectId}/provenance`));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось загрузить историю");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="mt-2 border-t border-[var(--border)] pt-2">
+      <button
+        type="button"
+        onClick={() => void toggle()}
+        className="text-[11.5px] font-medium text-primary hover:underline"
+        aria-expanded={open}
+      >
+        {open ? "Скрыть историю полей" : "Откуда эти цифры"}
+      </button>
+      {open && (
+        <div className="mt-1.5 space-y-1.5">
+          {loading && <p className="text-[11.5px] text-[var(--muted)]">Загружаем историю…</p>}
+          {error && <p className="text-[11.5px] text-[var(--danger)]">{error}</p>}
+          {data && (
+            <>
+              <p className="text-[11.5px] text-[var(--muted)]">
+                {data.origin === "import"
+                  ? `Проект из отчёта, строка ${data.source_row}.`
+                  : "Проект заведён в системе."}
+                {data.created_by ? ` Завёл: ${data.created_by}.` : ""}
+              </p>
+              {data.entries.length ? (
+                <ul className="space-y-1">
+                  {data.entries.map((entry, index) => (
+                    <li key={`${entry.at}-${index}`} className="text-[11.5px] text-ink">
+                      <span className="text-[var(--muted)]">{dateTimeRu(entry.at)}</span>
+                      {" · "}
+                      {entry.detail}
+                      {entry.before || entry.after ? (
+                        <span className="tabular text-[var(--muted)]">
+                          {" "}
+                          {money(entry.before === null ? null : Number(entry.before))} →{" "}
+                          {money(entry.after === null ? null : Number(entry.after))}
+                        </span>
+                      ) : null}
+                      {entry.actor ? <span className="text-[var(--muted)]"> · {entry.actor}</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[11.5px] text-[var(--muted)]">Изменений ещё не было.</p>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
