@@ -141,14 +141,14 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
         aria-label={unread ? `Уведомления: ${unread} непрочитанных` : "Уведомления"}
         aria-expanded={open}
         title="Уведомления"
-        className="focus-ring relative grid h-11 w-11 shrink-0 place-items-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[#F1F5F9] hover:text-ink"
+        className="focus-ring relative grid h-11 w-11 shrink-0 place-items-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--primary-soft)] hover:text-ink aria-expanded:bg-[var(--primary-soft)] aria-expanded:text-ink"
       >
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
           <path d="M18 8a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6" />
           <path d="M10.3 20a2 2 0 0 0 3.4 0" />
         </svg>
         {badge > 0 && (
-          <span className="absolute right-1.5 top-1.5 grid min-w-[18px] place-items-center rounded-full bg-[#EF4444] px-1 text-[10px] font-semibold leading-[18px] text-white">
+          <span className="absolute right-0.5 top-0.5 grid min-w-[16px] place-items-center rounded-full bg-[#EF4444] px-1 text-[10px] font-semibold leading-[16px] text-white">
             {badge > 99 ? "99+" : badge}
           </span>
         )}
