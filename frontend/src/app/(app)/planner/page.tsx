@@ -390,6 +390,29 @@ export default function PlannerPage() {
     }
   }
 
+  /**
+   * п.8 «30 идей»: поставить задачу без срока на дату одним нажатием.
+   *
+   * Отдельный путь, а не openReschedule + saveReschedule: менеджер уже
+   * принял решение («это на завтра»), и лишний диалог только мешает.
+   * Ошибка не теряется — показываем её в общем баннере страницы.
+   */
+  async function quickSetDate(task: Task, iso: string) {
+    setBusy(task.id);
+    setError(null);
+    try {
+      await api(`/tasks/${task.id}/reschedule`, {
+        method: "POST",
+        body: { due_date: iso, due_at: null },
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось поставить срок");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function saveReschedule() {
     if (!reschedule || !newDate) return;
     setSavingDate(true);
@@ -735,6 +758,7 @@ export default function PlannerPage() {
               onComplete={complete}
               onReopen={reopen}
               onReschedule={openReschedule}
+              onQuickDate={quickSetDate}
               onDecide={decideReview}
               onOpenChat={openChat}
             />
@@ -998,6 +1022,7 @@ function DayView({
   onReschedule,
   onDecide,
   onOpenChat,
+  onQuickDate,
 }: {
   date: string;
   tasks: Task[];
@@ -1010,6 +1035,8 @@ function DayView({
   onReschedule: (task: Task) => void;
   onDecide: (taskId: string, decision: "accept" | "edit" | "reject") => void;
   onOpenChat: (taskId: string) => void;
+  /** п.8: поставить задачу без срока на дату одним нажатием. */
+  onQuickDate: (task: Task, iso: string) => void;
 }) {
   const withTime = tasks.filter((t) => t.due_at);
   const withoutTime = tasks.filter((t) => !t.due_at);
@@ -1070,6 +1097,7 @@ function DayView({
                   onReschedule={() => onReschedule(task)}
                   onDecide={onDecide}
                   onOpenChat={() => onOpenChat(task.id)}
+                  onQuickDate={(iso) => onQuickDate(task, iso)}
                 />
               ))}
             </div>
@@ -1104,6 +1132,7 @@ function DayView({
                 onReschedule={() => onReschedule(task)}
                 onDecide={onDecide}
                 onOpenChat={() => onOpenChat(task.id)}
+                onQuickDate={(iso) => onQuickDate(task, iso)}
               />
             ))}
           </div>
@@ -1422,6 +1451,7 @@ function TaskLine({
   onReschedule,
   onDecide,
   onOpenChat,
+  onQuickDate,
 }: {
   task: Task;
   time: string | null;
@@ -1433,9 +1463,23 @@ function TaskLine({
   onReschedule: () => void;
   onDecide: (taskId: string, decision: "accept" | "edit" | "reject") => void;
   onOpenChat: () => void;
+  /**
+   * п.8 «30 идей»: задачу без срока можно поставить на дату одним нажатием.
+   * Раньше единственным путём был диалог «Перенести» — три шага ради
+   * одного решения, которое менеджер уже принял.
+   */
+  onQuickDate?: (iso: string) => void;
 }) {
   const done = task.status === "done";
   const overdue = !done && task.due_date ? task.due_date < todayISO() : false;
+  const undated = !done && !task.due_date;
+  const quickDates = undated && onQuickDate
+    ? [
+        { label: "Сегодня", iso: todayISO() },
+        { label: "Завтра", iso: toISO(addDays(new Date(), 1)) },
+        { label: "Через неделю", iso: toISO(addDays(new Date(), 7)) },
+      ]
+    : [];
 
   return (
     <div
@@ -1536,6 +1580,28 @@ function TaskLine({
           )}
           {task.needs_review && <ReviewChip reason={task.review_question ?? task.review_reason} />}
         </div>
+
+        {/*
+          п.8 «30 идей»: одна кнопка вместо диалога. Задача без срока — это
+          решение, которое менеджер ещё не принял; заставлять его открывать
+          «Перенести» ради «сегодня» значит терять эти решения.
+        */}
+        {quickDates.length > 0 && (
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            <span className="text-[11.5px] text-[var(--muted)]">поставить на</span>
+            {quickDates.map((option) => (
+              <button
+                key={option.label}
+                type="button"
+                onClick={() => onQuickDate?.(option.iso)}
+                disabled={busy}
+                className="focus-ring inline-flex h-7 items-center rounded-md border border-[var(--border)] px-2 text-[11.5px] font-medium text-ink transition-colors hover:border-primary hover:text-primary disabled:opacity-50"
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* п.14: конкретный вопрос вместо безликого «Уточнить срок» */}
         {task.needs_review && task.review_question && (
