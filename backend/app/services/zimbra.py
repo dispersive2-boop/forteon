@@ -91,6 +91,15 @@ class Zimbra:
                 continue
             name = match.get("full") or match.get("display") or name_from_address or email
             contacts.append({"email": email, "name": " ".join(name.split()), "source": "zimbra"})
+        if not contacts:
+            lookup = ET.Element(f"{{{ACCOUNT}}}SearchGalRequest", {"type": "account", "limit": "20"})
+            child(lookup, ACCOUNT, "name", query)
+            for entry in self.call(lookup).findall(".//{*}cn"):
+                attrs = {item.get("n"): item.text or "" for item in entry.findall("{*}a")}
+                address = parseaddr(attrs.get("email") or attrs.get("mail") or "")[1]
+                if "@" in address:
+                    name = attrs.get("displayName") or attrs.get("fullName") or attrs.get("full") or address
+                    contacts.append({"email": address, "name": name, "source": "zimbra"})
         return contacts[:20]
 
     def _upload_message(self, content: bytes) -> str:

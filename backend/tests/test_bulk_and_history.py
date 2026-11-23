@@ -477,3 +477,29 @@ def test_zimbra_sends_encoded_recipient_and_utf8_attachment(tmp_path) -> None:
             ("смета.txt", path, "text/plain"),
         ], "Чернильцев Илья") == "1"
     assert requests == ["/service/soap", "/service/upload", "/service/soap"]
+
+
+def test_note_document_text(api: TestClient) -> None:
+    content = "Договор с ООО Пример".encode("utf-8")
+    response = api.post("/api/v1/notes/document-text", files={"file": ("contract.txt", content, "text/plain")})
+    assert response.status_code == 200, response.text
+    assert response.json()["text"] == "Договор с ООО Пример"
+
+
+def test_zimbra_falls_back_to_global_address_book() -> None:
+    import httpx
+
+    from app.services.zimbra import ACCOUNT, MAIL, SOAP, Zimbra
+
+    def respond(request):
+        if b"AutoCompleteRequest" in request.content:
+            reply = f'<AutoCompleteResponse xmlns="{MAIL}"/>'
+        else:
+            assert b"SearchGalRequest" in request.content
+            reply = f'<SearchGalResponse xmlns="{ACCOUNT}"><cn><a n="mail">qa@example.com</a><a n="displayName">Петров</a></cn></SearchGalResponse>'
+        return httpx.Response(200, text=f'<s:Envelope xmlns:s="{SOAP}"><s:Body>{reply}</s:Body></s:Envelope>')
+
+    with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+        assert Zimbra(client, "https://mail.example.com").contacts("Петров") == [
+            {"email": "qa@example.com", "name": "Петров", "source": "zimbra"},
+        ]

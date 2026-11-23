@@ -155,7 +155,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!user) return <div className="min-h-dvh bg-canvas" />;
 
   return (
-    <div className="flex min-h-screen w-full max-w-full overflow-x-clip bg-canvas">
+    <div className="forteon-workspace flex min-h-screen w-full max-w-full overflow-x-clip bg-canvas">
       {mobileOpen && (
         <button
           type="button"

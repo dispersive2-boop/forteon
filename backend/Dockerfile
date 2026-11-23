@@ -9,6 +9,9 @@ WORKDIR /app
 # Системные шрифты для PDF-отчётов (кириллица) и tzdata
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        poppler-utils \
+        tesseract-ocr-rus \
+        tesseract-ocr-eng \
         fonts-dejavu-core \
         libpq5 \
         curl \

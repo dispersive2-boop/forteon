@@ -8,7 +8,7 @@
  * непрочитанных, последние события, «прочитать все».
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import { api } from "@/lib/api";
@@ -25,6 +25,7 @@ type NotificationItem = {
 };
 
 export function NotificationsBell({ overdue }: { overdue?: number }) {
+  const root = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
@@ -53,6 +54,15 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
       setLoading(false);
     }
   }, [refreshCount]);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    return () => document.removeEventListener("pointerdown", closeOutside);
+  }, [open]);
 
   useEffect(() => {
     void refreshCount();
@@ -124,7 +134,7 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
   const badge = unread > 0 ? unread : overdue && overdue > 0 ? overdue : 0;
 
   return (
-    <div className="relative">
+    <div ref={root} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -146,11 +156,6 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
 
       {open && (
         <>
-          <button
-            className="fixed inset-0 z-40"
-            onClick={() => setOpen(false)}
-            aria-label="Закрыть уведомления"
-          />
           <div className="forteon-floating forteon-popover fixed inset-x-3 top-[64px] z-50 sm:absolute sm:inset-x-auto sm:right-0 sm:top-[52px] sm:w-[360px] overflow-hidden bg-surface">
             <div className="flex items-center justify-between border-b border-[var(--border)] px-3.5 py-2.5">
               <p className="text-[14px] font-semibold text-ink">Уведомления</p>

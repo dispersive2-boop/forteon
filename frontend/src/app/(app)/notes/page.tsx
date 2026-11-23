@@ -38,7 +38,7 @@ import {
   inputClass,
   textareaClass,
 } from "@/components/ui";
-import { api, API_ROOT, getToken, Note } from "@/lib/api";
+import { api, Note } from "@/lib/api";
 import { PRIORITY_LABELS, TASK_TYPE_LABELS, dateTimeRu, formatBytes, isOverdue, relativeDay } from "@/lib/format";
 
 type PickerClient = {
@@ -209,6 +209,8 @@ function NotesWorkspace() {
   const [mobileStep, setMobileStep] = useState<"pick" | "write">("pick");
 
   const areaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [showText, setShowText] = useState(false);
+  const [readingFile, setReadingFile] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const sendLock = useRef(false);
@@ -545,30 +547,19 @@ function NotesWorkspace() {
 
   /* ------------------------------------------------------------ вложения */
   async function attach(file: File) {
-    if (!clientFilter) {
-      setError("Чтобы прикрепить файл, выберите клиента.");
-      return;
-    }
+    setReadingFile(true);
     setError(null);
     const form = new FormData();
     form.append("file", file);
-    const token = getToken();
     try {
-      const res = await fetch(
-        `${API_ROOT}/api/v1/documents/uploads?client_id=${encodeURIComponent(clientFilter.id)}`,
-        {
-          method: "POST",
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-          body: form,
-        },
-      );
-      if (!res.ok) {
-        const payload = await res.json().catch(() => null);
-        throw new Error(payload?.detail?.message || payload?.detail || "Файл не загружен");
-      }
-      setUploads((prev) => [...prev, { name: file.name, size: file.size }]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось прикрепить файл");
+      const result = await api<{ text: string }>("/notes/document-text", { method: "POST", body: form });
+      setBody((current) => [current.trim(), `Документ: ${file.name}\n${result.text}`].filter(Boolean).join("\n\n"));
+      setUploads((current) => [...current, { name: file.name, size: file.size }]);
+      requestAnimationFrame(() => areaRef.current?.focus());
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Не удалось прочитать файл.");
+    } finally {
+      setReadingFile(false);
     }
   }
 
@@ -663,7 +654,7 @@ function NotesWorkspace() {
   }
 
   return (
-    <div className="mx-auto max-w-[1280px] lg:flex lg:h-[calc(100dvh-124px)] lg:min-h-[36rem] lg:flex-col">
+    <div className="mx-auto max-w-[1280px] lg:flex lg:flex-col">
       <header className="mb-4 shrink-0">
         <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.026em] text-ink sm:text-[28px]">
           {free ? "Свободная заметка" : "Заметки"}
@@ -841,7 +832,7 @@ function NotesWorkspace() {
 
           {/* На телефоне редактор перед лентой, на десктопе закреплён под ней. */}
           <Card
-            className="mb-4 shrink-0 border-[var(--border-strong)] shadow-[0_6px_24px_rgba(15,23,42,0.10)] lg:order-3 lg:mb-0 lg:mt-3"
+            className="forteon-floating mb-4 shrink-0 lg:order-first"
             padded
           >
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -870,6 +861,42 @@ function NotesWorkspace() {
                 </div>
               </div>
             )}
+            <div className="mb-3 flex flex-wrap items-center gap-1.5">
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".pdf,.docx,.txt,.jpg,.jpeg,.png,.webp,.tif,.tiff"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void attach(file);
+                  e.target.value = "";
+                }}
+              />
+              <Button type="button" variant="outline" size="lg" aria-label="Голосовая заметка"
+                aria-pressed={recording} disabled={readingFile || sending} onClick={toggleDictation}>
+                <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+                  <rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0014 0M12 18v3M8.5 21h7" />
+                </svg>
+                {recording ? "Стоп" : "Голос"}
+              </Button>
+              <Button type="button" variant="outline" size="lg" disabled={recording || sending}
+                onClick={() => {
+                  setShowText(true);
+                  requestAnimationFrame(() => areaRef.current?.focus());
+                }}>
+                <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden>
+                  <path d="M5 4h14a2 2 0 012 2v10a2 2 0 01-2 2H9l-5 3v-3a2 2 0 01-1-2V6a2 2 0 012-2zM7 9h10M7 13h6" />
+                </svg>
+                Текст
+              </Button>
+              <Button type="button" variant="outline" size="lg" aria-label="Разобрать файл"
+                loading={readingFile} disabled={recording || sending} onClick={() => fileRef.current?.click()}>
+                <span aria-hidden className="text-2xl leading-none">+</span> Файл
+              </Button>
+
+            </div>
+            {(showText || body || correcting) && (
             <textarea
               ref={areaRef}
               value={body}
@@ -886,6 +913,7 @@ function NotesWorkspace() {
               aria-label="Текст заметки"
               className={`${textareaClass} min-h-[84px] max-h-48 !text-base leading-relaxed`}
             />
+            )}
 
             {uploads.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -905,47 +933,6 @@ function NotesWorkspace() {
             )}
 
             <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-              <input
-                ref={fileRef}
-                type="file"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) void attach(file);
-                  e.target.value = "";
-                }}
-              />
-              {!free && (
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  title="Прикрепить файл"
-                  aria-label="Прикрепить файл"
-                  className="focus-ring grid h-11 w-11 shrink-0 place-items-center rounded-control border border-[var(--border-strong)] text-[var(--muted)] transition-colors hover:border-primary hover:text-primary"
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-                    <path d="M21.4 11.05l-8.9 8.9a5.2 5.2 0 01-7.4-7.4l8.2-8.2a3.5 3.5 0 014.9 4.9l-8.2 8.2a1.8 1.8 0 01-2.5-2.5l7.5-7.5" />
-                  </svg>
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={toggleDictation}
-                title={recording ? "Остановить диктовку" : "Голосовая заметка"}
-                aria-label={recording ? "Остановить диктовку" : "Голосовая заметка"}
-                aria-pressed={recording}
-                className={`focus-ring grid h-11 w-11 shrink-0 place-items-center rounded-control border transition-colors ${
-                  recording
-                    ? "border-[var(--danger)] bg-[var(--danger-soft)] text-[var(--danger)]"
-                    : "border-[var(--border-strong)] text-[var(--muted)] hover:border-primary hover:text-primary"
-                }`}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-                  <rect x="9" y="3" width="6" height="11" rx="3" />
-                  <path d="M5 11a7 7 0 0014 0M12 18v3M8.5 21h7" />
-                </svg>
-              </button>
-
               {user && body.trim() && !correcting && (
                 <Button type="button" size="sm" variant="ghost" disabled={recording || sending} onClick={() => {
                   sessionStorage.setItem(`forteon.forti.instruction.${user.id}`, body.trim().slice(0, 4000));
@@ -969,7 +956,7 @@ function NotesWorkspace() {
               <Button
                 onClick={() => void send()}
                 loading={sending}
-                disabled={!body.trim() || !clientFilter || recording}
+                disabled={!body.trim() || !clientFilter || recording || readingFile}
                 size="md"
               >
                 {correcting ? "Сохранить и разобрать" : "Разобрать заметку"}
@@ -1016,7 +1003,7 @@ function NotesWorkspace() {
             </span>
           </div>
 
-          <div aria-label="Лента заметок" className="min-h-0 lg:order-2 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:pr-2">
+          <div aria-label="Лента заметок" className="min-h-0 lg:order-2 lg:flex-1 lg:pr-2">
             {feedError ? (
               <ErrorState
                 title="Лента не загрузилась"
