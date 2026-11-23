@@ -136,29 +136,51 @@ git branch -vv
 gh run list --limit 5
 ```
 
-## 7. Защита веток на GitHub — включена
+## 7. Защита веток на GitHub
 
 Для **приватного** репозитория branch protection требует платного плана
-(`403 Upgrade to GitHub Pro`), поэтому репозиторий сделан публичным —
-и защита стала доступна бесплатно.
+(`403 Upgrade to GitHub Pro`), поэтому репозиторий сделан публичным.
 
-На `main` и `develop` сейчас:
+Текущие настройки (сознательно разные):
 
-| Правило | Значение |
+| Ветка | Состояние |
 |---|---|
-| обязательный зелёный CI | `Backend · pytest`, `Frontend · tsc`, `Hygiene · нет секретов` |
-| strict | да — ветка должна быть свежей относительно `main` |
-| force-push | запрещён |
-| удаление ветки | запрещено |
+| `main` | защищена: обязательный зелёный CI, `strict`, запрет force-push и удаления, `enforce_admins: true` |
+| `develop` | **без защиты** — принимает прямой push, чтобы работать быстро (в том числе внешним инструментам) |
+
+Почему так: `develop` — рабочая ветка, где нужна свободная запись; `main` —
+то, что считается развёрнутым, и туда попадают изменения только после зелёного CI.
 
 Проверить состояние:
 
 ```bat
 gh api repos/dispersive2-boop/forteon/branches/main/protection
+gh api repos/dispersive2-boop/forteon/branches/develop/protection
+:: для develop ответ «Branch not protected» — это ожидаемо
 ```
 
-Если репозиторий снова понадобится сделать приватным — защита веток отключится
-вместе с возвратом на бесплатный план для приватных репозиториев.
+Вернуть защиту на `develop`:
+
+```bat
+gh api -X PUT repos/dispersive2-boop/forteon/branches/develop/protection \
+  -F required_status_checks[strict]=false \
+  -f "required_status_checks[contexts][]=Backend · pytest" \
+  -f "required_status_checks[contexts][]=Frontend · tsc" \
+  -f "required_status_checks[contexts][]=Hygiene · нет секретов и данных" \
+  -F enforce_admins=false -F restrictions=null \
+  -F required_pull_request_reviews=null -F allow_force_pushes=false -F allow_deletions=false
+```
+
+Снять защиту полностью:
+
+```bat
+gh api -X DELETE repos/dispersive2-boop/forteon/branches/develop/protection
+```
+
+Важно: `gh api -X POST .../protection/allow_force_pushes` для этой ветки
+возвращает `404` — точечно менять force-push через API нельзя. Либо защита есть
+целиком (с запретом force-push), либо её нет совсем. Поэтому для свободной записи
+защита снимается полностью.
 
 ## 7а. Что проверить перед публикацией репозитория
 
