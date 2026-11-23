@@ -501,7 +501,7 @@ def update_project(project_id: str, payload: ProjectUpdate, db: Session = Depend
         if key in changes and changes[key] != getattr(project, key)
     }
     for key, value in changes.items():
-        if value is not None or key in ("planned_revenue", "estimated_cost"):
+        if value is not None or key in ("planned_revenue", "estimated_cost", "email"):
             setattr(project, key, value)
     project.version = (project.version or 1) + 1
     audit(db, user, "project", project.id, "updated", {

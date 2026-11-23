@@ -368,3 +368,112 @@ def test_free_note_creates_personal_and_object_tasks(api: TestClient, db: Sessio
     assert len(free_feed) == 1
     assert any(task["project_name"] == own.name for task in free_feed[0]["tasks"])
     assert api.get("/api/v1/tasks", params={"status": "open"}).json()["total"] == 4
+
+
+def test_mail_connection_project_recipient_and_reviewed_send(api: TestClient, db: Session, monkeypatch) -> None:
+    from contextlib import contextmanager
+    from uuid import uuid4
+
+    from cryptography.fernet import Fernet
+
+    from app.api import mail
+    from app.models import MailAccount
+
+    fake_origin = "https://mail.example.com"
+    monkeypatch.setattr(_settings, "zimbra_origins", (fake_origin,))
+    monkeypatch.setattr(_settings, "mail_secret", Fernet.generate_key().decode())
+    sent = []
+    uploads = []
+
+    class Mailbox:
+        def contacts(self, query):
+            return [{"name": "Чернильцев", "email": "contact@example.com", "source": "zimbra"}]
+
+        def send(self, *args):
+            sent.append(args)
+            uploads.extend((name, path.read_bytes(), mime) for name, path, mime in args[4])
+
+    @contextmanager
+    def connect(origin, username, password):
+        assert (origin, username, password) == (fake_origin, "qa@example.com", "test-mail-password")
+        yield Mailbox()
+
+    monkeypatch.setattr(mail, "_connection", connect)
+    account = api.put("/api/v1/mail/connection", json={
+        "url": fake_origin + "/#1", "username": "qa@example.com", "password": "test-mail-password",
+    })
+    assert account.status_code == 200, account.text
+    assert account.json() == {"url": fake_origin, "username": "qa@example.com", "connected": True}
+    db.expire_all()
+    assert b"test-mail-password" not in db.get(MailAccount, USER_ID).sealed_password
+    assert api.put("/api/v1/mail/connection", json={
+        "url": "https://127.0.0.1", "username": "qa@example.com", "password": "test-mail-password",
+    }).status_code == 422
+
+    project = api.post(f"/api/v1/clients/{CLIENT_ID}/projects", json={
+        "name": "Терминал", "email": "project@example.com",
+    }).json()
+    assert project["email"] == "project@example.com"
+    assert api.get("/api/v1/mail/recipients", params={"source": "project"}).json()["items"] == [
+        {"name": "Терминал", "email": "project@example.com", "source": "project"},
+    ]
+    draft = api.post("/api/v1/mail/draft", json={"text": "Отправь документы Чернильцеву"}).json()
+    assert draft["recipient_query"] == "Чернильцев"
+    assert draft["subject"] == "Документы"
+    assert sent == []
+    assert api.get("/api/v1/mail/recipients", params={"q": "Чернильцев"}).json()["items"][0]["email"] == "contact@example.com"
+
+    message = {"to": "contact@example.com", "recipient_name": "Чернильцев Илья",
+               "subject": "Документы", "body": "Письмо проверено.", "request_id": str(uuid4())}
+    import json
+    response = api.post("/api/v1/mail/send-files", data={"message": json.dumps(message)}, files=[
+        ("attachments", ("смета.txt", b"test content", "text/plain")),
+    ])
+    assert response.status_code == 200, response.text
+    assert uploads == [("смета.txt", b"test content", "text/plain")]
+    assert sent[0][5] == "Чернильцев Илья"
+    assert api.post("/api/v1/mail/send", json=message).status_code == 200
+    assert len(sent) == 1
+    assert api.patch(f"/api/v1/projects/{project['id']}", json={"email": None}).json()["email"] is None
+
+
+def test_zimbra_sends_encoded_recipient_and_utf8_attachment(tmp_path) -> None:
+    from email import policy
+    from email.parser import BytesParser
+
+    import httpx
+
+    from app.services.zimbra import ACCOUNT, MAIL, SOAP, Zimbra
+
+    path = tmp_path / "payload"
+    path.write_bytes(b"file content")
+    requests = []
+
+    def response(request):
+        requests.append(request.url.path)
+        if request.url.path == "/service/upload":
+            content_type = request.headers["content-type"]
+            payload = BytesParser(policy=policy.default).parsebytes(
+                b"Content-Type: " + content_type.encode() + b"\r\n\r\n" + request.read()
+            )
+            message = payload.get_payload()[0].get_payload()[0]
+            assert message["To"].addresses[0].display_name == "Чернильцев Илья"
+            assert message["Subject"] == "Документы"
+            attached = next(message.iter_attachments())
+            assert attached.get_filename() == "смета.txt"
+            assert attached.get_payload(decode=True) == b"file content"
+            return httpx.Response(200, text='200,\'null\',[{"aid":"uploaded"}]')
+        if b"AuthRequest" in request.content:
+            inner = f'<AuthResponse xmlns="{ACCOUNT}"><authToken>test-token</authToken></AuthResponse>'
+        else:
+            assert b'aid="uploaded"' in request.content
+            inner = f'<SendMsgResponse xmlns="{MAIL}"><m id="1"/></SendMsgResponse>'
+        return httpx.Response(200, text=f'<s:Envelope xmlns:s="{SOAP}"><s:Body>{inner}</s:Body></s:Envelope>')
+
+    with httpx.Client(transport=httpx.MockTransport(response)) as http:
+        service = Zimbra(http, "https://mail.example.com")
+        service.sign_in("qa@example.com", "qa-password")
+        assert service.send("contact@example.com", "Документы", "Здравствуйте!", "request", [
+            ("смета.txt", path, "text/plain"),
+        ], "Чернильцев Илья") == "1"
+    assert requests == ["/service/soap", "/service/upload", "/service/soap"]

@@ -138,6 +138,10 @@ class Settings:
         self.note_watcher_batch = int(_env("FORTEON_NOTE_WATCHER_BATCH", "10"))
 
         # Файлы и отчёты.
+        self.zimbra_origins = tuple(
+            origin.strip().rstrip("/") for origin in _env("FORTEON_ZIMBRA_ORIGINS").split(",") if origin.strip()
+        )
+        self.mail_secret = _env("FORTEON_MAIL_SECRET")
         self.storage_dir = Path(_env("FORTEON_STORAGE_DIR", str(BASE_DIR / "data" / "storage")))
         self.reports_dir = Path(_env("FORTEON_REPORTS_DIR", str(BASE_DIR / "data" / "reports")))
         self.max_upload_bytes = int(_env("FORTEON_MAX_UPLOAD_MB", "25")) * 1024 * 1024

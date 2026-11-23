@@ -74,6 +74,15 @@ class Session(Base):
     user: Mapped[User] = relationship(back_populates="sessions")
 
 
+class MailAccount(Base):
+    __tablename__ = "mail_accounts"
+
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    origin: Mapped[str] = mapped_column(String(255), nullable=False)
+    username: Mapped[str] = mapped_column(String(255), nullable=False)
+    sealed_password: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+
+
 class UserAvatar(Base):
     __tablename__ = "user_avatars"
 
@@ -128,6 +137,7 @@ class Project(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
     client_id: Mapped[str] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"))
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    email: Mapped[str | None] = mapped_column(String(254), nullable=True)
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(String(64), default="new", nullable=False)
     stage_group: Mapped[str | None] = mapped_column(String(128), nullable=True)

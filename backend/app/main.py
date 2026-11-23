@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .api import admin, auth, clients, finance, notes, reports, tasks
+from .api import mail, admin, auth, clients, finance, notes, reports, tasks
 from .config import settings
 from .db import init_db, session_scope
 from .models import utcnow
@@ -138,7 +138,7 @@ async def validation_handler(request: Request, exc: RequestValidationError):
 
 
 for router in (auth.router, clients.router, notes.router, tasks.router,
-               finance.router, reports.router, admin.router):
+               finance.router, reports.router, admin.router, mail.router):
     app.include_router(router, prefix=settings.api_prefix)
 
 
