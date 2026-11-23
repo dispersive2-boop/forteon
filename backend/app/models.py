@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime, timezone
+from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
@@ -134,6 +135,12 @@ class Project(Base, TimestampMixin):
 
     client: Mapped[Client] = relationship(back_populates="projects")
     modules: Mapped[list["ProjectModule"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+
+    @property
+    def expected_profit(self) -> Decimal | None:
+        if self.planned_revenue is None or self.estimated_cost is None:
+            return None
+        return Decimal(str(self.planned_revenue)) - Decimal(str(self.estimated_cost))
 
 
 class ProjectModule(Base, TimestampMixin):

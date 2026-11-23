@@ -56,6 +56,7 @@ type AiHealth = {
   provider: string;
   model: string;
   status?: number;
+  message?: string;
   reason?: string;
 };
 
@@ -144,7 +145,7 @@ export default function AdminPage() {
         ok: false,
         provider: ai?.provider ?? "unknown",
         model: ai?.model ?? "unknown",
-        reason: err instanceof Error ? err.message : "ошибка запроса",
+        message: err instanceof Error ? err.message : "Не удалось выполнить проверку.",
       });
     } finally {
       setCheckingAi(false);
@@ -319,17 +320,17 @@ export default function AdminPage() {
         <div className="space-y-4">
           <Card>
             <SectionTitle
-              title="AI Extractor"
-              subtitle="RouterAI · ключ хранится только на сервере"
+              title="Разбор заметок"
+              subtitle="Подключение к модели и обработка сохранённых заметок"
               action={
-                <div className="flex gap-1.5">
+                <div className="flex flex-wrap gap-1.5">
                   <Button
                     size="sm"
                     variant="ghost"
                     loading={checkingAi}
                     onClick={() => void checkAi()}
                   >
-                    Проверить
+                    Проверить модель
                   </Button>
                   <Button size="sm" variant="outline" loading={syncing} onClick={() => void syncNotes()}>
                     Разобрать заметки
@@ -384,15 +385,19 @@ export default function AdminPage() {
 
             {aiHealth && (
               <div
-                className={`mt-2.5 rounded-control px-2.5 py-2 text-[11.5px] ${
+                role="status"
+                className={`mt-2.5 rounded-control px-2.5 py-2 text-sm ${
                   aiHealth.ok
                     ? "bg-[var(--success-soft)] text-[var(--success)]"
                     : "bg-[var(--danger-soft)] text-[var(--danger)]"
                 }`}
               >
                 {aiHealth.ok
-                  ? `Провайдер отвечает (HTTP ${aiHealth.status ?? 200})`
-                  : `Нет ответа: ${aiHealth.reason ?? "ошибка"}`}
+                  ? "Выбранная модель отвечает."
+                  : aiHealth.message ?? (aiHealth.reason === "no_api_key"
+                    ? "Ключ провайдера не задан."
+                    : "Проверка модели не удалась.")}
+                {!aiHealth.ok && aiHealth.status && ` (HTTP ${aiHealth.status})`}
               </div>
             )}
 

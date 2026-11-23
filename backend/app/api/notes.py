@@ -19,9 +19,20 @@ from ..schemas import (
     TaskOut,
     TranscriptRequest,
 )
+from ..services.ai import provider_failure_message
 from ..services.extraction import run_extraction
 
 router = APIRouter(tags=["notes"])
+
+
+def _describe_run(model: str | None, error: str | None) -> str:
+    if model == "local-rules":
+        return "Заметку обработали по локальным правилам."
+    if model == "local-rules-fallback":
+        return f"Заметку обработали по локальным правилам. {provider_failure_message(error)}"
+    if model:
+        return "Заметку обработала модель."
+    return "Заметка ещё не обработана."
 
 
 def _note_for_user(db: Session, user: User, note_id: str) -> Note:
@@ -165,20 +176,10 @@ def notes_feed(
         if run_note_id in ai_by_note:
             continue
         fallback = bool(run_model and run_model.startswith("local-rules"))
-        if run_model == "local-rules":
-            note_text = "AI не настроен: задачи извлечены локальными правилами"
-        elif run_model == "local-rules-fallback":
-            note_text = "AI недоступен, применены локальные правила. Причина: %s" % (
-                run_error or "нет ответа от провайдера"
-            )
-        elif run_model:
-            note_text = "Задачи извлечены моделью %s" % run_model
-        else:
-            note_text = "Обработка ещё не выполнялась"
         ai_by_note[run_note_id] = {
             "model": run_model,
             "used_fallback": fallback,
-            "provider_note": note_text,
+            "provider_note": _describe_run(run_model, run_error),
         }
 
     commit_rows = db.execute(
@@ -220,7 +221,7 @@ def notes_feed(
         payload.update(
             ai_by_note.get(
                 note.id,
-                {"model": None, "used_fallback": False, "provider_note": "Обработка ещё не выполнялась"},
+                {"model": None, "used_fallback": False, "provider_note": _describe_run(None, None)},
             )
         )
         items.append(payload)
@@ -383,18 +384,6 @@ def ai_status(note_id: str, db: Session = Depends(get_db), user: User = Depends(
     # иначе             — ответила модель.
     model = runs[0].model if runs else None
     used_fallback = bool(model and model.startswith("local-rules"))
-    if model == "local-rules":
-        provider_note = "AI не настроен: задачи извлечены локальными правилами"
-    elif model == "local-rules-fallback":
-        provider_note = (
-            "AI недоступен, применены локальные правила. Причина: %s"
-            % (runs[0].error or "нет ответа от провайдера")
-        )
-    elif model:
-        provider_note = "Задачи извлечены моделью %s" % model
-    else:
-        provider_note = "Обработка ещё не выполнялась"
-
     return AIStatusOut(
         note_id=note.id,
         ai_status=note.ai_status,
@@ -416,7 +405,7 @@ def ai_status(note_id: str, db: Session = Depends(get_db), user: User = Depends(
         needs_review=needs_review,
         model=model,
         used_fallback=used_fallback,
-        provider_note=provider_note,
+        provider_note=_describe_run(model, runs[0].error if runs else None),
         completed=completed,
     )
 

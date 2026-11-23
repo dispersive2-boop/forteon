@@ -35,6 +35,7 @@ import {
   IconSettings,
   IconToday,
 } from "@/components/icons";
+import { ForteOnBrand } from "@/components/ForteOnBrand";
 import { MobileNav } from "@/components/MobileNav";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import Onboarding from "@/components/Onboarding";
@@ -71,8 +72,8 @@ const PAGE_TITLES: Record<string, string> = {
 function pageTitle(pathname: string): string {
   if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname];
   const base = `/${pathname.split("/")[1] ?? ""}`;
-  if (PAGE_TITLES[base]) return PAGE_TITLES[base];
   if (pathname.startsWith("/clients/")) return "Карточка клиента";
+  if (PAGE_TITLES[base]) return PAGE_TITLES[base];
   return "ForteOn";
 }
 
@@ -130,10 +131,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [refreshOverdue, pathname]);
 
   return (
-    <div className="flex min-h-screen w-full max-w-full overflow-x-hidden bg-canvas">
+    <div className="flex min-h-screen w-full max-w-full overflow-x-clip bg-canvas">
       {mobileOpen && (
         <button
-          className="fixed inset-0 z-30 bg-[#0b1220]/45 md:hidden"
+          type="button"
+          tabIndex={-1}
+          className="fixed inset-0 z-[45] bg-[#0b1220]/45 md:hidden"
           onClick={() => setMobileOpen(false)}
           aria-label="Закрыть меню"
         />
@@ -141,34 +144,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Пункт 1: ширина 232-248px, цвет #111827; пункт 17 — скроллится только навигация */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-[240px] flex-col bg-[#111827] transition-transform duration-200 md:sticky md:top-0 md:h-screen md:translate-x-0 ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        id="forteon-sidebar"
+        className={`fixed inset-y-0 left-0 z-50 flex w-[240px] shrink-0 flex-col bg-[var(--sidebar)] transition-transform duration-200 motion-reduce:transition-none md:visible md:sticky md:top-0 md:h-dvh md:translate-x-0 ${
+          mobileOpen ? "visible translate-x-0" : "invisible -translate-x-full"
         }`}
       >
-        {/*
-          Логотип = реальный знак из брендбука (logo-mark.svg, векторизован
-          из forteon_logo_reference.png, IoU 95.5%).
-          Без rounded-«плитки»: в референсе знак стоит свободно на тёмном фоне,
-          а скругление обрезало ему кончики лент.
-        */}
-        <div className="flex h-[68px] shrink-0 items-center px-4">
+        <div className="flex h-[68px] shrink-0 items-center justify-between gap-2 border-b border-white/10 px-3">
           <Link
             href="/today"
-                className="focus-ring flex min-h-[44px] items-center gap-2.5 rounded-lg"
+            onClick={() => setMobileOpen(false)}
+            className="focus-ring flex min-h-[44px] items-center rounded-lg px-1.5 transition-colors hover:bg-white/10"
             aria-label="ForteOn — на главную"
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/logo-mark.svg"
-              alt=""
-              width={38}
-              height={38}
-              className="h-[38px] w-[38px] shrink-0 drop-shadow-[0_2px_8px_rgba(96,165,250,0.35)]"
-            />
-            <span className="text-[22px] font-semibold leading-none tracking-[-0.035em] text-white">
-              Forte<span className="text-[#60A5FA]">On</span>
-            </span>
+            <ForteOnBrand />
           </Link>
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            className="focus-ring grid h-11 w-11 shrink-0 place-items-center rounded-lg text-white/75 hover:bg-white/10 hover:text-white md:hidden"
+            aria-label="Закрыть боковое меню"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>
         </div>
 
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5 py-2" aria-label="Основная навигация">
@@ -224,9 +224,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Пункт 3: топбар 64-72px — название страницы, поиск, уведомления, профиль, «Новая заметка» */}
         <header className="sticky top-0 z-20 flex h-[68px] shrink-0 items-center gap-2 border-b border-[var(--border)] bg-surface/95 px-3 backdrop-blur md:px-6">
           <button
+            type="button"
             onClick={() => setMobileOpen(true)}
             className="focus-ring grid h-11 w-11 shrink-0 place-items-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[#F1F5F9] md:hidden"
             aria-label="Открыть меню"
+            aria-controls="forteon-sidebar"
+            aria-expanded={mobileOpen}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M4 6h16M4 12h16M4 18h16" />
@@ -261,7 +264,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </span>
 
           <Link
-            href="/clients"
+            href="/clients#client-search"
             className="focus-ring hidden h-10 items-center gap-2 rounded-lg border border-[var(--border-strong)] px-3 text-[13.5px] font-medium text-[var(--muted)] transition-colors hover:border-primary hover:text-primary lg:flex"
           >
             <IconSearch size={16} />
@@ -273,14 +276,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <button
             type="button"
             onClick={() => window.dispatchEvent(new CustomEvent("forteon:palette"))}
-            title="Поиск (Ctrl+K)"
+            title="Командная палитра (Ctrl+K)"
             aria-label="Командная палитра"
-            className="focus-ring hidden h-11 w-11 shrink-0 place-items-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[#F1F5F9] hover:text-ink lg:grid"
+            className="focus-ring hidden h-10 shrink-0 items-center gap-2 rounded-lg px-2.5 text-[13.5px] font-medium text-[var(--muted)] transition-colors hover:bg-[var(--primary-soft)] hover:text-ink md:inline-flex"
           >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <circle cx="11" cy="11" r="7" />
-              <path d="M20 20l-3.6-3.6" />
-            </svg>
+            Команды
+            <kbd className="hidden rounded border border-[var(--border)] px-1 text-[11px] xl:inline">Ctrl K</kbd>
           </button>
 
           <Link

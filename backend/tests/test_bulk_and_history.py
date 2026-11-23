@@ -10,9 +10,11 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from io import BytesIO
 
 import pytest
 from fastapi.testclient import TestClient
+from openpyxl import load_workbook
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import settings as _settings  # noqa: E402
@@ -22,8 +24,9 @@ assert "forteon_test" in _settings.database_url
 from app.db import Base, engine, get_db  # noqa: E402
 from app.deps import get_current_user  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import Client, Notification, Task, User  # noqa: E402
+from app.models import Client, Notification, Project, Task, User  # noqa: E402
 from app.security import hash_password  # noqa: E402
+from app.services.reports import _fmt_money, build_pdf, build_xlsx  # noqa: E402
 
 USER_ID = "bulk-user-0000-0000-0000-000000000001"
 OTHER_ID = "bulk-user-0000-0000-0000-000000000002"
@@ -163,3 +166,54 @@ def test_notifications_unread_and_read_all(api: TestClient, db: Session) -> None
 
     api.post("/api/v1/notifications/read-all")
     assert api.get("/api/v1/notifications/unread-count").json()["count"] == 0
+
+
+def test_create_manual_task_validates_title_and_project(api: TestClient, db: Session) -> None:
+    other_client = Client(name="Другой клиент", owner_id=USER_ID)
+    db.add(other_client)
+    db.flush()
+    project = Project(name="Свой проект", client_id=CLIENT_ID)
+    other_project = Project(name="Чужой проект", client_id=other_client.id)
+    db.add_all([project, other_project])
+    db.commit()
+
+    body = {"client_id": CLIENT_ID, "title": "  Открыть проект  ", "project_id": project.id}
+    assert api.post("/api/v1/tasks", json={**body, "title": "   "}).status_code == 422
+    assert api.post("/api/v1/tasks", json={**body, "project_id": other_project.id}).status_code == 422
+
+    response = api.post("/api/v1/tasks", json=body)
+    assert response.status_code == 201, response.text
+    task = response.json()
+    assert task["title"] == "Открыть проект"
+    assert task["project_id"] == project.id
+    assert task["due_date"] is None
+    assert task["needs_review"] is False
+    assert api.get(f"/api/v1/tasks/{task['id']}").json()["origin"] == "manual"
+
+
+def test_expected_profit_requires_cost_and_stays_numeric_in_excel(api: TestClient, db: Session) -> None:
+    project = Project(name="Проект с расчётом", client_id=CLIENT_ID, planned_revenue=1500000.50, estimated_cost=250000)
+    incomplete = Project(name="Проект без затрат", client_id=CLIENT_ID, planned_revenue=200000)
+    db.add_all([project, incomplete])
+    db.commit()
+
+    response = api.get(f"/api/v1/clients/{CLIENT_ID}/projects")
+    assert response.status_code == 200
+    by_id = {item["id"]: item for item in response.json()}
+    assert by_id[project.id]["expected_profit"] == 1250000.50
+    assert by_id[incomplete.id]["expected_profit"] is None
+
+    rows = [{
+        "client": db.get(Client, CLIENT_ID),
+        "projects": [project, incomplete],
+        "tasks": [], "open_tasks": [], "overdue": [], "done": [],
+        "billed": 0, "debt": 0,
+    }]
+    workbook = load_workbook(BytesIO(build_xlsx(db, rows, "Все даты", ["projects"])))
+    sheet = workbook["Проекты"]
+    assert sheet["H1"].value == "Ожидаемая прибыль, ₽"
+    assert sheet["H2"].value == 1250000.50
+    assert sheet["H2"].number_format == '#,##0.00" ₽"'
+    assert sheet["H3"].value is None
+    assert _fmt_money(project.expected_profit) == "1\u00a0250\u00a0000,50\u00a0₽"
+    assert build_pdf(db, rows, "Все даты", "Тест", ["projects"]).startswith(b"%PDF")

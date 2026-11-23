@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import httpx
 import pytest
 
 from app.config import settings as _settings
@@ -33,7 +34,7 @@ from sqlalchemy import delete, select  # noqa: E402
 from app.db import Base, SessionLocal, engine  # noqa: E402
 from app.models import Client, Note, Task, User  # noqa: E402
 from app.security import hash_password  # noqa: E402
-from app.services.ai import local_extract, make_dedupe_key  # noqa: E402
+from app.services.ai import local_extract, make_dedupe_key, ping  # noqa: E402
 from app.services.events import (  # noqa: E402
     DONE,
     FACT,
@@ -276,3 +277,39 @@ def test_pipeline_note_to_planner(db_session, monkeypatch) -> None:
 
     second_tasks = list(session.scalars(select(Task).where(Task.source_note_id == second.id)))
     assert second_tasks, "то же действие из новой заметки — законный повтор"
+
+
+@pytest.mark.parametrize(
+    "status, payload, ok, fragment",
+    [
+        (200, {"choices": [{"message": {"content": "OK"}}]}, True, None),
+        (200, {"choices": [{"message": {}}]}, False, "неожиданном формате"),
+        (402, {"error": {"message": "raw provider error"}}, False, "ошибку оплаты"),
+        (429, {"error": {"message": "raw provider error"}}, False, "лимит запросов"),
+    ],
+)
+def test_ai_ping_checks_the_configured_model(monkeypatch, status, payload, ok, fragment):
+    monkeypatch.setattr(_settings, "ai_enabled", True)
+    monkeypatch.setattr(_settings, "ai_api_key", "test-provider-key")
+    monkeypatch.setattr(_settings, "ai_base_url", "https://provider.example/api/v1")
+    monkeypatch.setattr(_settings, "ai_model", "test-chosen-model")
+
+    requests = []
+
+    def handle(request):
+        requests.append(request)
+        return httpx.Response(status, json=payload)
+
+    client = httpx.Client(transport=httpx.MockTransport(handle))
+    monkeypatch.setattr("app.services.ai.httpx.Client", lambda **_: client)
+    result = ping()
+
+    assert len(requests) == 1
+    assert requests[0].method == "POST"
+    assert requests[0].url.path == "/api/v1/chat/completions"
+    assert b"test-chosen-model" in requests[0].content
+    assert result["ok"] is ok
+    assert result["status"] == status
+    if fragment:
+        assert fragment in result["message"]
+        assert "raw provider error" not in result["message"]

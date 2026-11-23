@@ -192,6 +192,7 @@ class ProjectOut(ORMModel):
     end_date: date | None
     planned_revenue: float | None
     estimated_cost: float | None
+    expected_profit: float | None
     volume: float | None
     service_flag: str | None
     done_before: str | None

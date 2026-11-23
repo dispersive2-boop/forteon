@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import audit, ensure_version, get_client_or_404, get_current_user
-from ..models import AuditLog, Client, Note, Notification, Task, User, utcnow
+from ..models import AuditLog, Client, Note, Notification, Project, Task, User, utcnow
 from ..schemas import (
     PlannerOut,
     PlannerSummary,
@@ -102,10 +102,23 @@ def _client_names(db: Session, ids: set[str]) -> dict[str, str]:
 @router.post("/tasks", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
 def create_task(payload: TaskCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     client = get_client_or_404(db, user, payload.client_id)
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "empty_task_title", "message": "Укажите название задачи"},
+        )
+
+    if payload.project_id is not None:
+        project = db.get(Project, payload.project_id)
+        if project is None or project.client_id != client.id or project.deleted_at is not None:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "invalid_task_project", "message": "Выберите проект этого клиента"},
+            )
+
     due_at = payload.due_at
     due_date = payload.due_date or to_date(due_at)
-    if due_date is None and due_at is None:
-        due_date = None
 
     # П0 AI Task Extraction 2.0, п.1–2: отсутствие срока — не повод требовать
     # уточнения. Раньше здесь стояло needs_review = (due_date is None), из-за
@@ -116,7 +129,7 @@ def create_task(payload: TaskCreate, db: Session = Depends(get_db), user: User =
         client_id=client.id,
         project_id=payload.project_id,
         assignee_id=user.id,
-        title=payload.title.strip(),
+        title=title,
         description=payload.description,
         type=payload.type,
         priority=payload.priority,
@@ -128,7 +141,7 @@ def create_task(payload: TaskCreate, db: Session = Depends(get_db), user: User =
         conditional=payload.conditional,
         needs_review=False,
         review_reason=None,
-        dedupe_key=make_dedupe_key(client.id, payload.title, due_at),
+        dedupe_key=make_dedupe_key(client.id, title, due_at),
     )
     db.add(task)
     db.flush()

@@ -1,297 +1,200 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 
-import { Button, Field, inputClass } from "@/components/ui";
+import { ForteOnBrand } from "@/components/ForteOnBrand";
+import { IconCheck, IconClients, IconMic, IconMore, IconPlanner, IconToday } from "@/components/icons";
+import { Button, inputClass } from "@/components/ui";
 import { ApiFailure, login } from "@/lib/api";
+
+const previewTasks = [
+  { title: "Согласовать смету", client: "Комплекс «Лесной»", detail: "10:30", state: "open" },
+  { title: "Отправить документы", client: "БЦ «Горизонт»", detail: "14:00", state: "open" },
+  { title: "Проверить оплату", client: "Проект «Маяк»", detail: "Выполнено", state: "done" },
+];
+
+const previewNav = [
+  { label: "Сегодня", Icon: IconToday },
+  { label: "Клиенты", Icon: IconClients },
+  { label: "Заметка", Icon: IconMic },
+  { label: "Планы", Icon: IconPlanner },
+  { label: "Ещё", Icon: IconMore },
+];
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function submit(event: React.FormEvent) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (loading) return;
     setLoading(true);
     setError(null);
     try {
       await login(email.trim(), password);
       window.location.href = "/today";
     } catch (err) {
-      setError(
-        err instanceof ApiFailure
-          ? err.message
-          : "Не удалось войти. Проверьте соединение с API.",
-      );
+      setError(err instanceof ApiFailure ? err.message : "Не удалось войти. Проверьте соединение с API.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-[1.1fr_1fr]">
-      {/* Левая тёмная панель */}
-      <div className="relative hidden flex-col justify-between overflow-hidden bg-[var(--sidebar)] p-12 lg:flex">
-        {/* Свечение фона */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -left-40 top-0 h-[560px] w-[560px] rounded-full opacity-40 blur-3xl"
-          style={{ background: "radial-gradient(circle, #2563EB 0%, transparent 68%)" }}
-        />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -bottom-32 right-0 h-[460px] w-[460px] rounded-full opacity-25 blur-3xl"
-          style={{ background: "radial-gradient(circle, #38BDF8 0%, transparent 70%)" }}
-        />
-
-        <div className="relative flex items-center gap-3">
-          {/* Знак из брендбука: свободно, без плитки — как в референсе */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/logo-mark.svg"
-            alt=""
-            width={58}
-            height={58}
-            className="h-[58px] w-[58px] shrink-0 drop-shadow-[0_3px_14px_rgba(96,165,250,0.42)]"
+    <main className="grid min-h-dvh place-items-center bg-canvas px-4 py-6 sm:px-8 sm:py-10">
+      <div className="grid w-full max-w-[460px] overflow-hidden rounded-[26px] border border-[var(--border)] bg-surface shadow-[0_24px_80px_-40px_rgba(5,15,40,0.5)] lg:max-w-[1060px] lg:grid-cols-[1.12fr_1fr]">
+        <aside className="relative hidden grid-cols-[1fr] place-items-center overflow-hidden bg-[#101d38] px-8 pb-8 pt-7 text-white lg:grid">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_95%,#245ad5_0%,#142746_56%,#101d38_88%)]"
           />
-          <span className="text-[30px] font-semibold leading-none tracking-[-0.035em] text-white">
-            Forte<span className="text-[#60A5FA]">On</span>
-          </span>
-        </div>
-
-        <div className="relative max-w-[560px]">
-          <h1 className="text-[40px] font-semibold leading-[1.14] tracking-[-0.035em] text-white">
-            Заметка превращается
-            <br />
-            в обязательство, задачу
-            <br />
-            и контроль результата
-          </h1>
-          <p className="mt-5 max-w-[470px] text-[15.5px] leading-relaxed text-white/65">
-            Специализированная CRM для сопровождения действующих клиентов.
-            Ежедневный план — центральный интерфейс, ручное заполнение форм —
-            минимально.
-          </p>
-
-          <ul className="mt-8 space-y-3.5">
-            {[
-              "Задачи извлекаются из заметки автоматически",
-              "Просрочки, обещания клиентов и платежи на одном экране",
-              "Отчёты PDF и XLSX по проверенным данным",
-            ].map((line) => (
-              <li key={line} className="flex items-start gap-3 text-[14.5px] text-white/80">
-                <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#38BDF8]/20 text-[#7DD3FC]">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.6" strokeLinecap="round">
-                    <path d="M20 6L9 17l-5-5" />
-                  </svg>
-                </span>
-                {line}
-              </li>
-            ))}
-          </ul>
-
-          {/* Мокап телефона */}
-          <PhoneMock />
-        </div>
-
-        <p className="relative text-[12px] text-white/35">
-          MVP v1.0 · модульный монолит · RouterAI
-        </p>
-      </div>
-
-      {/* Форма входа */}
-      <div className="flex items-center justify-center bg-canvas px-5 py-12">
-        <div className="w-full max-w-[404px]">
-          <div className="mb-8 flex items-center gap-3 lg:hidden">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/logo-mark.svg"
-              alt="ForteOn"
-              width={38}
-              height={38}
-              className="h-[38px] w-[38px]"
-            />
-            <span className="text-[22px] font-semibold tracking-[-0.025em] text-ink">
-              Forte<span className="text-primary">On</span>
-            </span>
+          <div className="relative w-full max-w-[430px]">
+            <ForteOnBrand />
+            <p className="mt-3 max-w-[21ch] text-[30px] font-semibold leading-[1.12] tracking-[-0.035em] xl:text-[34px]">
+              Работа с клиентами
+            </p>
+            <p className="mt-2.5 max-w-[35ch] text-[15px] leading-relaxed text-[#c3d5f3]">
+              Планируйте задачи, фиксируйте договорённости и отслеживайте оплаты.
+            </p>
           </div>
+          <PhonePreview />
+        </aside>
 
-          <h2 className="text-[26px] font-semibold leading-tight tracking-[-0.028em] text-ink">
-            Вход в систему
-          </h2>
-          <p className="mt-2 text-[14px] leading-relaxed text-[var(--muted)]">
-            Используйте рабочую учётную запись. Восстановление доступа — через
-            администратора.
-          </p>
+        <section aria-labelledby="login-title" className="flex min-w-0 items-center px-5 py-8 sm:px-9 sm:py-11 lg:px-12">
+          <div className="mx-auto w-full max-w-[356px]">
+            <div className="mb-6 lg:hidden"><ForteOnBrand variant="light" /></div>
+            <h1 id="login-title" className="text-[30px] font-semibold leading-tight tracking-[-0.035em] text-ink">
+              Вход в ForteOn
+            </h1>
+            <p className="mt-2 text-[15px] leading-relaxed text-[var(--muted)]">
+              Введите данные рабочей учётной записи.
+            </p>
 
-          <form onSubmit={submit} className="mt-7 space-y-4">
-            <Field label="E-mail">
-              <input
-                type="email"
-                required
-                autoComplete="username"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@company.ru"
-                className={`${inputClass} h-12`}
-              />
-            </Field>
-            <Field label="Пароль">
-              <input
-                type="password"
-                required
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className={`${inputClass} h-12`}
-              />
-            </Field>
-
-            {error && (
-              <div className="rounded-control bg-[var(--danger-soft)] px-3.5 py-2.5 text-[13px] leading-snug text-[var(--danger)]">
-                {error}
+            <form onSubmit={submit} className="mt-6 space-y-4" aria-busy={loading}>
+              <div>
+                <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-ink">Рабочая почта</label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  required
+                  autoComplete="username"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="name@company.ru"
+                  className={`${inputClass} h-12 !text-base`}
+                />
               </div>
-            )}
+              <div>
+                <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-ink">Пароль</label>
+                <div className="relative">
+                  <input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    required
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    className={`${inputClass} h-12 !text-base !pr-[100px]`}
+                  />
+                  <button
+                    type="button"
+                    aria-controls="password"
+                    aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
+                    onClick={() => setShowPassword((shown) => !shown)}
+                    className="focus-ring absolute inset-y-0 right-0 rounded-control px-3 text-[13px] font-medium text-[var(--muted)] transition-colors hover:text-ink"
+                  >
+                    {showPassword ? "Скрыть" : "Показать"}
+                  </button>
+                </div>
+              </div>
 
-            <Button type="submit" size="lg" loading={loading} className="w-full">
-              Войти
-            </Button>
-          </form>
+              {error && (
+                <p role="alert" className="rounded-control bg-[var(--danger-soft)] px-3.5 py-2.5 text-sm leading-snug text-[var(--danger)]">
+                  {error}
+                </p>
+              )}
 
-          <p className="mt-7 text-[11.5px] leading-snug text-[var(--muted)]">
-            Учётные данные выдаёт администратор. Пароль в интерфейсе не
-            отображается и не подставляется автоматически.
-          </p>
-        </div>
+              <Button type="submit" size="lg" loading={loading} className="w-full">
+                {loading ? "Входим…" : "Войти"}
+              </Button>
+            </form>
+
+            <p className="mt-5 border-t border-[var(--border)] pt-4 text-sm leading-relaxed text-[var(--muted)]">
+              Для восстановления доступа обратитесь к администратору.
+            </p>
+          </div>
+        </section>
       </div>
-    </div>
+    </main>
   );
 }
 
-/** Мобильный мокап: главный экран продукта. */
-function PhoneMock() {
+function PhonePreview() {
   return (
-    <div className="relative mt-12 flex justify-start">
-      <div className="relative w-[276px] shrink-0 rounded-[38px] border border-white/12 bg-[#0B1120] p-2.5 shadow-[0_40px_80px_-30px_rgba(0,0,0,0.8)]">
-        <div className="overflow-hidden rounded-[30px] bg-[var(--canvas)]">
-          {/* Строка статуса */}
-          <div className="flex items-center justify-between bg-[var(--sidebar)] px-4 pb-2 pt-3">
-            <span className="text-[11px] font-semibold text-white">9:41</span>
-            <div className="flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-white/70" />
-              <span className="h-1.5 w-1.5 rounded-full bg-white/70" />
-              <span className="h-1.5 w-3 rounded-sm bg-white/70" />
-            </div>
+    <figure
+      aria-label="Пример экрана «Сегодня» в мобильном ForteOn"
+      className="relative mt-5 w-[238px] rounded-[34px] border border-[#91acd5]/70 bg-[#1a2b48] p-[5px] shadow-[0_20px_45px_-12px_#020a20]"
+    >
+      <div className="flex flex-col min-h-[402px] overflow-hidden rounded-[29px] bg-[rgb(240,244,252)] text-[#15223a]">
+        <div className="relative flex h-8 items-center bg-[rgb(251,252,255)] px-4 text-[11px] font-semibold">
+          <span aria-hidden="true">9:41</span>
+          <span aria-hidden="true" className="absolute left-1/2 top-2.5 h-3 w-12 -translate-x-1/2 rounded-full bg-[#14223b]" />
+          <span aria-hidden="true" className="ml-auto h-2 w-3.5 rounded-[3px] border border-[#526078] bg-[#526078]/70" />
+        </div>
+
+        <div className="border-b border-[#dde5f2] bg-[rgb(251,252,255)] px-3.5 pb-2.5 pt-1">
+          <p className="text-[19px] font-semibold leading-tight tracking-tight">Сегодня</p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-1.5 px-2.5 pt-2.5">
+          <div className="rounded-lg border border-[#dce6f5] bg-[rgb(255,255,255)] px-2 py-1.5">
+            <p className="text-sm font-semibold text-[#2559c4]">2</p>
+            <p className="text-[10px] text-[#596c89]">В работе</p>
           </div>
-
-          {/* Шапка */}
-          <div className="flex items-center gap-2.5 bg-[var(--sidebar)] px-4 pb-4">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo-mark.svg" alt="" width={26} height={26} className="h-[26px] w-[26px]" />
-            <span className="text-[15px] font-semibold text-white">
-              Forte<span className="text-[#60A5FA]">On</span>
-            </span>
-          </div>
-
-          {/* Содержимое */}
-          <div className="space-y-2 p-3">
-            <div className="rounded-xl bg-surface p-3 shadow-soft">
-              <div className="mb-1.5 flex items-center gap-2">
-                <span className="grid h-6 w-6 place-items-center rounded-md bg-[#EFF6FF] text-[#2563EB]">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                    <rect x="3" y="4" width="18" height="17" rx="2.5" />
-                    <path d="M8 2v4M16 2v4M3 10h18" />
-                  </svg>
-                </span>
-                <span className="text-[11px] font-semibold text-ink">Напоминание</span>
-              </div>
-              <p className="text-[10.5px] leading-snug text-[var(--muted)]">
-                Сегодня, 11:00 — Позвонить клиенту «Экспоцентр»
-              </p>
-            </div>
-
-            <div className="rounded-xl bg-surface p-3 shadow-soft">
-              <div className="mb-1.5 flex items-center gap-2">
-                <span className="grid h-6 w-6 place-items-center rounded-md bg-[#ECFDF5] text-[#22C55E]">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6">
-                    <path d="M20 6L9 17l-5-5" />
-                  </svg>
-                </span>
-                <span className="text-[11px] font-semibold text-ink">Задача выполнена</span>
-              </div>
-              <p className="text-[10.5px] leading-snug text-[var(--muted)]">
-                Отправить документы — завершено
-              </p>
-            </div>
-
-            <div className="rounded-xl bg-surface p-3 shadow-soft">
-              <div className="mb-1.5 flex items-center gap-2">
-                <span className="grid h-6 w-6 place-items-center rounded-md bg-[#FEF2F2] text-[#EF4444]">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                    <path d="M12 9v4M12 17h.01" />
-                    <path d="M10.3 3.9 2.6 17.4A1.9 1.9 0 0 0 4.3 20.2h15.4a1.9 1.9 0 0 0 1.7-2.8L13.7 3.9a1.9 1.9 0 0 0-3.4 0Z" />
-                  </svg>
-                </span>
-                <span className="text-[11px] font-semibold text-ink">Просрочено</span>
-              </div>
-              <p className="text-[10.5px] leading-snug text-[var(--muted)]">
-                Оплата по договору №154 — «СтройПроф»
-              </p>
-            </div>
-          </div>
-
-          {/* Нижняя панель */}
-          <div className="flex items-center justify-around border-t border-[var(--border)] bg-surface px-2 py-2.5">
-            {[
-              { icon: "home", label: "Сегодня", active: true },
-              { icon: "users", label: "Клиенты", active: false },
-              { icon: "note", label: "Задачи", active: false },
-              { icon: "more", label: "Ещё", active: false },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className={`flex flex-col items-center gap-0.5 ${
-                  item.active ? "text-[#2563EB]" : "text-[#6B7280]"
-                }`}
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  {item.icon === "home" && <path d="M3.5 10.5 12 3.5l8.5 7M5.5 9.8V20h13V9.8" />}
-                  {item.icon === "users" && (
-                    <>
-                      <circle cx="9" cy="8" r="3.2" />
-                      <path d="M3 19c.5-3.2 2.8-4.8 6-4.8s5.5 1.6 6 4.8" />
-                    </>
-                  )}
-                  {item.icon === "note" && (
-                    <>
-                      <path d="m3.4 7.2 1.8 1.8 3.2-3.4" />
-                      <path d="M11.8 7.4h8.8M11.8 15.4h8.8" />
-                    </>
-                  )}
-                  {item.icon === "more" && (
-                    <>
-                      <circle cx="5" cy="12" r="1.3" />
-                      <circle cx="12" cy="12" r="1.3" />
-                      <circle cx="19" cy="12" r="1.3" />
-                    </>
-                  )}
-                </svg>
-                <span className="text-[8.5px] font-medium leading-none">{item.label}</span>
-              </div>
-            ))}
+          <div className="rounded-lg border border-[#dce6f5] bg-[rgb(255,255,255)] px-2 py-1.5">
+            <p className="text-sm font-semibold text-[#22684e]">1</p>
+            <p className="text-[10px] text-[#596c89]">Выполнено</p>
           </div>
         </div>
-      </div>
 
-      {/* Плавающая кнопка микрофона */}
-      <div className="absolute bottom-14 right-[calc(50%-138px)] grid h-11 w-11 place-items-center rounded-full bg-[#2563EB] shadow-[0_12px_28px_-8px_rgba(37,99,235,0.8)]">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round">
-          <rect x="9" y="2.6" width="6" height="11.2" rx="3" />
-          <path d="M5.2 11.2a6.8 6.8 0 0 0 13.6 0M12 18v3.4" />
-        </svg>
+        <p className="px-3 pt-2.5 text-[11px] font-semibold text-[#344f80]">Задачи на день</p>
+        <ul className="flex-1 space-y-1.5 px-2.5 pb-4 pt-1.5">
+          {previewTasks.map((task) => {
+            const done = task.state === "done";
+            return (
+              <li key={task.title} className="flex items-center gap-2 rounded-lg border border-[#dce6f5] bg-[rgb(255,255,255)] px-2 py-2">
+                <span aria-hidden="true" className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border ${done ? "border-[#b8dccc] bg-[rgb(232,245,239)] text-[#22684e]" : "border-[#afc4e8]"}`}>
+                  {done && <IconCheck size={13} />}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[12px] font-semibold leading-tight">{task.title}</span>
+                  <span className="mt-0.5 block text-[10px] text-[#596c89]">{task.client}</span>
+                </span>
+                <span className={`shrink-0 text-[9.5px] font-medium ${done ? "text-[#22684e]" : "text-[#344f80]"}`}>{task.detail}</span>
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="grid grid-cols-5 items-start border-t border-[#dce6f5] bg-[rgb(255,255,255)] px-1 pt-2.5" aria-hidden="true">
+          {previewNav.map(({ label, Icon }, index) => (
+            <span key={label} className={`flex flex-col items-center gap-1 ${index === 0 ? "text-[#2559c4]" : "text-[#576b8c]"}`}>
+              <span className={index === 2 ? "-mt-4 grid h-9 w-9 place-items-center rounded-full border-2 border-white bg-[#265cd2] text-white shadow-sm" : "grid h-[17px] place-items-center"}>
+                <Icon size={16} />
+              </span>
+              <span className="text-[8px] font-semibold leading-none">{label}</span>
+            </span>
+          ))}
+        </div>
+        <div aria-hidden="true" className="flex justify-center bg-[rgb(255,255,255)] pb-1.5 pt-2">
+          <span className="h-[3px] w-[72px] rounded-full bg-[#192944]" />
+        </div>
       </div>
-    </div>
+    </figure>
   );
 }
