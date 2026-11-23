@@ -189,6 +189,13 @@ html {
   scrollbar-gutter: stable;
 }
 
+@media (max-width: 767px) {
+  html:has(.forteon-mobile-nav) {
+    scroll-padding-top: 68px;
+    scroll-padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+}
+
 .focus-ring:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;

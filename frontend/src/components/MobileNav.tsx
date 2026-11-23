@@ -64,7 +64,7 @@ export function MobileNav({ overdue = 0 }: { overdue?: number }) {
       */}
       <nav
         aria-label="Мобильная навигация"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--border)] bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
+        className="forteon-mobile-nav fixed inset-x-0 bottom-0 z-40 border-t border-[var(--border)] bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
       >
         <div className="mx-auto flex h-16 max-w-lg items-stretch">
           <NavCell href="/today" label="Сегодня" active={isActive("/today")} Icon={IconToday} />

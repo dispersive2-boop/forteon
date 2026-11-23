@@ -20,7 +20,8 @@
  *  - выбранный клиент восстанавливается (п.60).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AudioDraft } from "@/components/AudioDraft";
 import { useAuth } from "@/components/AuthProvider";
@@ -167,6 +168,17 @@ function persistDraft(key: string, value: NoteDraft | null) {
 }
 
 export default function NotesPage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-24" />}>
+      <NotesWorkspace />
+    </Suspense>
+  );
+}
+
+function NotesWorkspace() {
+  const params = useSearchParams();
+  const requestedId = params.get("client_id");
+  const voiceRequested = params.get("voice") === "1";
   const { user } = useAuth();
   const draftKey = `forteon.notes.draft.${user?.id ?? ""}`;
   const [draftClientOpen, setDraftClientOpen] = useState(false);
@@ -261,13 +273,11 @@ export default function NotesPage() {
     (async () => {
       setLoading(true);
       try {
-        const url = new URLSearchParams(window.location.search);
         const draft = storedDraft(draftKey);
-        const requestedId = url.get("client_id");
         const clientToLoad = draft?.clientId || requestedId;
-        setAutoSaveVoice(url.get("voice") === "1" && !draft?.body);
+        setAutoSaveVoice(voiceRequested && !draft?.body);
         const [items, requestedClient] = await Promise.all([
-          fetchPicker(""),
+          fetchPicker("").catch(() => []),
           clientToLoad
             ? api<{ id: string; name: string }>(`/clients/${encodeURIComponent(clientToLoad)}`).catch(() => null)
             : Promise.resolve(null),
@@ -286,12 +296,8 @@ export default function NotesPage() {
         if (requestedId && draft?.clientId && draft.clientId !== requestedId) {
           setError("Восстановлен черновик другого клиента. Проверьте адресата перед отправкой.");
         } else if (requestedId && !requestedClient) setError("Не удалось открыть клиента для заметки.");
-        if (restored) {
-          setClientFilter({ id: restored.id, name: restored.name });
-          setMobileStep("write");
-        } else if (requestedId || draft?.body) {
-          setMobileStep("write");
-        }
+        if (restored) setClientFilter({ id: restored.id, name: restored.name });
+        setMobileStep(restored || requestedId || draft?.body ? "write" : "pick");
       } catch {
         if (!cancelled) setPicker([]);
       } finally {
@@ -301,7 +307,7 @@ export default function NotesPage() {
     return () => {
       cancelled = true;
     };
-  }, [draftKey, fetchPicker]);
+  }, [draftKey, fetchPicker, requestedId, voiceRequested]);
 
   useEffect(() => {
     if (loading || sending || correcting) return;
@@ -803,7 +809,7 @@ export default function NotesPage() {
           )}
 
           {error && (
-            <div className="mb-3 flex flex-wrap items-start justify-between gap-2 rounded-card border border-[#f3c7cb] bg-[var(--danger-soft)] px-3.5 py-2.5 text-[13.5px] text-[var(--danger)]">
+            <div role="alert" className="mb-3 flex flex-wrap items-start justify-between gap-2 rounded-card border border-[#f3c7cb] bg-[var(--danger-soft)] px-3.5 py-2.5 text-[13.5px] text-[var(--danger)]">
               <span className="min-w-0 flex-1">{error}</span>
               <button
                 type="button"
