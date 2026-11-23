@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import audit, get_client_or_404, get_current_user
-from ..models import Invoice, Payment, PaymentAllocation, User, utcnow
+from ..models import PERSONAL_PLAN_TYPE, Invoice, Payment, PaymentAllocation, User, utcnow
 from ..schemas import (
     AllocationIn,
     FinancialSummary,
@@ -389,7 +389,7 @@ def finance_overview(db: Session = Depends(get_db), user: User = Depends(get_cur
     """
     from ..models import Client
 
-    clients_q = select(Client).where(Client.deleted_at.is_(None))
+    clients_q = select(Client).where(Client.deleted_at.is_(None), Client.type != PERSONAL_PLAN_TYPE)
     if user.role != "admin":
         clients_q = clients_q.where(Client.owner_id == user.id)
     clients = list(db.scalars(clients_q))

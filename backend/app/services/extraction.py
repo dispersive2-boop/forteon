@@ -9,12 +9,13 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import AIRun, Commitment, Note, Notification, Task, User, utcnow
+from ..models import PERSONAL_PLAN_TYPE, AIRun, Client, Commitment, Note, Notification, Project, Task, User, utcnow
 from .ai import ExtractionResult, extract, make_dedupe_key
 from .dates import to_date
 
@@ -22,6 +23,41 @@ from .dates import to_date
 def ensure_dedupe(task: Task) -> None:
     if not task.dedupe_key:
         task.dedupe_key = make_dedupe_key(task.client_id, task.title, task.due_at)
+
+
+def _object_text(value: str) -> str:
+    return " ".join(re.findall(r"\w+", value.casefold().replace("ё", "е")))
+
+
+def _named_targets(db: Session, author: User) -> list[tuple[str, str, str | None]]:
+    owned = [Client.deleted_at.is_(None), Client.type != PERSONAL_PLAN_TYPE]
+    if author.role != "admin":
+        owned.append(Client.owner_id == author.id)
+    return [
+        (_object_text(name), client_id, project_id)
+        for name, client_id, project_id in db.execute(
+            select(Project.name, Project.client_id, Project.id)
+            .join(Client).where(*owned, Project.deleted_at.is_(None))
+        )
+    ]
+
+
+def _match_target(
+    targets: list[tuple[str, str, str | None]], source_quote: str, note_text: str,
+) -> tuple[str, str | None] | None:
+    quote = _object_text(source_quote)
+    if not quote or f" {quote} " not in f" {note_text} ":
+        return None
+    matches = [
+        (name, client_id, project_id) for name, client_id, project_id in targets
+        if len(name) >= 3 and f" {name} " in f" {quote} "
+    ]
+    matches = [
+        row for row in matches
+        if not any(row[0] != name and f" {row[0]} " in f" {name} " for name, _, _ in matches)
+    ]
+    destinations = {(client_id, project_id) for _, client_id, project_id in matches}
+    return next(iter(destinations)) if len(destinations) == 1 else None
 
 
 def run_extraction(db: Session, note: Note, author: User) -> ExtractionResult:
@@ -61,14 +97,18 @@ def run_extraction(db: Session, note: Note, author: User) -> ExtractionResult:
     created_commitments = 0
     review_tasks: list[Task] = []
 
-    # Существующие ключи дедупликации по этому клиенту.
+    client = db.get(Client, note.client_id)
+    targets = _named_targets(db, author) if client and client.type == PERSONAL_PLAN_TYPE else []
+    normalized_note = _object_text(note.body) if targets else ""
+
+    # Существующие ключи дедупликации по этой заметке.
     # Ключ учитывает note.id: повторная обработка ТОЙ ЖЕ заметки не создаёт
     # копий (п.21), но законный повтор того же действия из НОВОЙ заметки
     # проходит (п.22) — «созвонился» во вторник и в пятницу это два факта.
     existing = set(
         db.scalars(
             select(Task.dedupe_key).where(
-                Task.client_id == note.client_id, Task.deleted_at.is_(None)
+                Task.source_note_id == note.id, Task.deleted_at.is_(None)
             )
         )
     )
@@ -86,9 +126,12 @@ def run_extraction(db: Session, note: Note, author: User) -> ExtractionResult:
         if needs_review:
             review_reason = item.review_question or "Непонятно, сделано уже или предстоит"
 
+        client_id, project_id = _match_target(targets, item.source_quote, normalized_note) or (
+            note.client_id, note.project_id,
+        )
         task = Task(
-            client_id=note.client_id,
-            project_id=note.project_id,
+            client_id=client_id,
+            project_id=project_id,
             assignee_id=author.id,
             source_note_id=note.id,
             title=item.title,
@@ -120,7 +163,7 @@ def run_extraction(db: Session, note: Note, author: User) -> ExtractionResult:
             if commitment.description and _related(commitment.source_quote, item.source_quote):
                 db.add(
                     Commitment(
-                        client_id=note.client_id,
+                        client_id=client_id,
                         related_task_id=task.id,
                         promised_by=commitment.promised_by,
                         description=commitment.description,
@@ -141,9 +184,10 @@ def run_extraction(db: Session, note: Note, author: User) -> ExtractionResult:
         matched = any(_related(commitment.source_quote, t.source_quote) for t in result.tasks)
         if matched and created_commitments:
             continue
+        target = _match_target(targets, commitment.source_quote, normalized_note)
         db.add(
             Commitment(
-                client_id=note.client_id,
+                client_id=target[0] if target else note.client_id,
                 promised_by=commitment.promised_by,
                 description=commitment.description,
                 due_date=to_date(commitment.due_at, tz_name),

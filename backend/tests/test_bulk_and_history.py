@@ -324,3 +324,47 @@ def test_revoke_other_sessions_keeps_current_device_and_cleans_active_list(db: S
         assert client.post("/api/v1/auth/refresh", json={"refresh_token": second["refresh_token"]}).status_code == 401
         assert client.get("/api/v1/auth/me", headers=bearer(unrelated["access_token"])).status_code == 200
         assert client.post("/api/v1/auth/refresh", json={"refresh_token": first["refresh_token"]}).status_code == 200
+
+
+def test_free_note_creates_personal_and_object_tasks(api: TestClient, db: Session) -> None:
+    own = Project(client_id=CLIENT_ID, name="Северный терминал")
+    duplicate = [
+        Project(client_id=CLIENT_ID, name="Восточный объект"),
+        Project(client_id=CLIENT_ID, name="Восточный объект"),
+    ]
+    other_client = Client(name="Чужой клиент", owner_id=OTHER_ID)
+    db.add(other_client)
+    db.flush()
+    db.add_all([own, *duplicate, Project(client_id=other_client.id, name="Чужой терминал")])
+    db.commit()
+
+    body = {
+        "body": (
+            "Завтра отправить КП: Северный терминал. "
+            "Напомнить про Восточный объект в пятницу. "
+            "Завтра позвонить: Чужой терминал. "
+            "В понедельник проверить почту."
+        ),
+        "source_type": "voice",
+        "idempotency_key": "free-qa",
+    }
+    response = api.post("/api/v1/notes/free", json=body)
+    assert response.status_code == 201, response.text
+    note = response.json()
+    tasks = api.get(f"/api/v1/notes/{note['id']}/tasks").json()
+    assert len(tasks) == 4
+    matched = next(task for task in tasks if task["project_id"])
+    assert matched["project_id"] == own.id
+    assert matched["client_id"] == CLIENT_ID
+    assert all(task["client_id"] == note["client_id"] for task in tasks if not task["project_id"])
+    assert note["client_id"] != CLIENT_ID
+
+    repeated = api.post("/api/v1/notes/free", json=body)
+    assert repeated.json()["id"] == note["id"]
+    assert len(api.get(f"/api/v1/notes/{note['id']}/tasks").json()) == 4
+    assert api.get("/api/v1/clients").json()["total"] == 1
+    assert api.get("/api/v1/notes/feed").json()["items"] == []
+    free_feed = api.get("/api/v1/notes/feed", params={"free": "true"}).json()["items"]
+    assert len(free_feed) == 1
+    assert any(task["project_name"] == own.name for task in free_feed[0]["tasks"])
+    assert api.get("/api/v1/tasks", params={"status": "open"}).json()["total"] == 4

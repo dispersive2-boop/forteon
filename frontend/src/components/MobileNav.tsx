@@ -59,6 +59,7 @@ export function MobileNav({ overdue = 0 }: { overdue?: number }) {
         data-open={moreOpen} inert={!moreOpen}
         className="forteon-more-menu forteon-floating fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-50 mx-3 max-h-[calc(100dvh-96px)] overflow-y-auto overscroll-contain bg-surface p-2 md:hidden">
         {[
+          { href: "/free-note", label: "Свободная заметка" },
           { href: "/notes", label: "Заметки" },
           { href: "/finance", label: "Финансы" },
           { href: "/reports", label: "Отчёты" },

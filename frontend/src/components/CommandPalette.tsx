@@ -34,6 +34,7 @@ type WorkspaceHit = {
 };
 
 const NAV: { label: string; href: string }[] = [
+  { label: "Свободная заметка", href: "/free-note" },
   { label: "Сегодня", href: "/today" },
   { label: "Планировщик", href: "/planner" },
   { label: "Клиенты", href: "/clients" },

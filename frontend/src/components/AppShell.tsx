@@ -46,6 +46,7 @@ import { api, TodayPayload } from "@/lib/api";
  * они дублировали название и мешали быстрому сканированию.
  */
 const NAV_ITEMS = [
+  { href: "/free-note", label: "Свободная заметка", Icon: IconPlus },
   { href: "/today", label: "Сегодня", Icon: IconToday },
   { href: "/planner", label: "Планировщик", Icon: IconPlanner, badge: "overdue" as const },
   { href: "/clients", label: "Клиенты", Icon: IconClients },
@@ -58,6 +59,7 @@ const NAV_ITEMS = [
 ];
 
 const PAGE_TITLES: Record<string, string> = {
+  "/free-note": "Свободная заметка",
   "/today": "Сегодня",
   "/planner": "Планировщик",
   "/clients": "Клиенты",

@@ -81,6 +81,9 @@ class UserAvatar(Base):
     image: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
 
 
+PERSONAL_PLAN_TYPE = "personal_plan"
+
+
 class Client(Base, TimestampMixin):
     __tablename__ = "clients"
     __table_args__ = (Index("ix_clients_owner_status", "owner_id", "status"),)

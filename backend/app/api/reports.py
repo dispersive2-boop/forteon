@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import audit, get_client_or_404, get_current_user
-from ..models import ChangeLog, Client, ReportJob, SyncOperation, Task, User, utcnow
+from ..models import PERSONAL_PLAN_TYPE, ChangeLog, Client, ReportJob, SyncOperation, Task, User, utcnow
 from ..schemas import (
     DashboardOut,
     FinancialSummary,
@@ -139,7 +139,7 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
     overdue = buckets["overdue"][:10]
     today_tasks = buckets["today"][:10]
 
-    client_query = select(Client).where(Client.deleted_at.is_(None))
+    client_query = select(Client).where(Client.deleted_at.is_(None), Client.type != PERSONAL_PLAN_TYPE)
     if user.role != "admin":
         client_query = client_query.where(Client.owner_id == user.id)
     clients = list(db.scalars(client_query))
@@ -307,7 +307,7 @@ def sync_pull(since: int = 0, limit: int = Query(default=500, ge=1, le=2000),
 
 @router.get("/sync/bootstrap")
 def sync_bootstrap(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    client_query = select(Client).where(Client.deleted_at.is_(None))
+    client_query = select(Client).where(Client.deleted_at.is_(None), Client.type != PERSONAL_PLAN_TYPE)
     if user.role != "admin":
         client_query = client_query.where(Client.owner_id == user.id)
     clients = list(db.scalars(client_query))

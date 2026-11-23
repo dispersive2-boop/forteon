@@ -34,7 +34,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import settings
-from ..models import Client, Invoice, Payment, PaymentAllocation, Project, Task, utcnow
+from ..models import PERSONAL_PLAN_TYPE, Client, Invoice, Payment, PaymentAllocation, Project, Task, utcnow
 
 FONT_CANDIDATES = (
     ("DejaVuSans", ("C:/Windows/Fonts/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")),
@@ -97,7 +97,7 @@ def collect_data(
     date_from: date | None = None,
     date_to: date | None = None,
 ) -> list[dict]:
-    client_query = select(Client).where(Client.deleted_at.is_(None))
+    client_query = select(Client).where(Client.deleted_at.is_(None), Client.type != PERSONAL_PLAN_TYPE)
     if not is_admin:
         client_query = client_query.where(Client.owner_id == owner_id)
     if client_id:

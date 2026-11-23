@@ -21,7 +21,7 @@
  */
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AudioDraft } from "@/components/AudioDraft";
 import { useAuth } from "@/components/AuthProvider";
@@ -52,6 +52,8 @@ type PickerClient = {
 
 /** Задача, которую AI вытащил из заметки (приходит вместе с лентой). */
 type NoteTask = {
+  project_name?: string | null;
+  client_name?: string | null;
   id: string;
   title: string;
   status: string;
@@ -177,10 +179,11 @@ export default function NotesPage() {
 
 function NotesWorkspace() {
   const params = useSearchParams();
+  const free = usePathname() === "/free-note";
   const requestedId = params.get("client_id");
   const voiceRequested = params.get("voice") === "1";
   const { user } = useAuth();
-  const draftKey = `forteon.notes.draft.${user?.id ?? ""}`;
+  const draftKey = `forteon.${free ? "free-note" : "notes"}.draft.${user?.id ?? ""}`;
   const [draftClientOpen, setDraftClientOpen] = useState(false);
   /* ---------------------------------------------------------- состояние */
   const [query, setQuery] = useState("");
@@ -222,11 +225,12 @@ function NotesWorkspace() {
   const feedUrl = useCallback(
     (limit: number, before?: string | null) => {
       const params = new URLSearchParams({ limit: String(limit) });
-      if (clientFilter) params.set("client_id", clientFilter.id);
+      if (free) params.set("free", "true");
+      else if (clientFilter) params.set("client_id", clientFilter.id);
       if (before) params.set("before", before);
       return `/notes/feed?${params.toString()}`;
     },
-    [clientFilter],
+    [clientFilter, free],
   );
 
   const loadFirstPage = useCallback(async () => {
@@ -274,6 +278,15 @@ function NotesWorkspace() {
       setLoading(true);
       try {
         const draft = storedDraft(draftKey);
+        if (free) {
+          setBody(draft?.body ?? "");
+          setDictated(draft?.dictated ?? false);
+          pendingNote.current = draft?.retry ?? null;
+          setClientFilter({ id: "free", name: "Личный план" });
+          setAutoSaveVoice(!draft?.body);
+          setMobileStep("write");
+          return;
+        }
         const clientToLoad = draft?.clientId || requestedId;
         setAutoSaveVoice(voiceRequested && !draft?.body);
         const [items, requestedClient] = await Promise.all([
@@ -307,7 +320,7 @@ function NotesWorkspace() {
     return () => {
       cancelled = true;
     };
-  }, [draftKey, fetchPicker, requestedId, voiceRequested]);
+  }, [draftKey, fetchPicker, free, requestedId, voiceRequested]);
 
   useEffect(() => {
     if (loading || sending || correcting) return;
@@ -328,6 +341,7 @@ function NotesWorkspace() {
 
   // Поиск клиента с задержкой, чтобы не дёргать сервер на каждую букву
   useEffect(() => {
+    if (free) return;
     let cancelled = false;
     setPickerLoading(true);
     const id = setTimeout(async () => {
@@ -344,7 +358,7 @@ function NotesWorkspace() {
       cancelled = true;
       clearTimeout(id);
     };
-  }, [query, fetchPicker]);
+  }, [query, fetchPicker, free]);
 
   useEffect(() => {
     return () => {
@@ -460,7 +474,7 @@ function NotesWorkspace() {
     setUploads([]);
 
     try {
-      const note = await api<Note>(`/clients/${target.id}/notes`, {
+      const note = await api<Note>(free ? "/notes/free" : `/clients/${target.id}/notes`, {
         method: "POST",
         body: { body: text, run_ai: true, source_type: source, idempotency_key: noteKey },
       });
@@ -475,11 +489,12 @@ function NotesWorkspace() {
       );
       pollNote(note.id);
       window.dispatchEvent(new Event("forteon:notifications"));
-      try {
-        const items = await fetchPicker("");
-        setPicker(items);
-      } catch {
-        /* список клиентов не критичен */
+      if (!free) {
+        try {
+          setPicker(await fetchPicker(""));
+        } catch {
+          /* список клиентов не критичен */
+        }
       }
     } catch (err) {
       // Убираем пустышку и возвращаем текст, чтобы не потерять работу
@@ -520,11 +535,11 @@ function NotesWorkspace() {
     (note: FeedNote) => {
       setCorrecting(note.id);
       setBody(note.body);
-      if (note.client_id) chooseClient({ id: note.client_id, name: note.client_name || "Клиент" });
+      if (!free && note.client_id) chooseClient({ id: note.client_id, name: note.client_name || "Клиент" });
       setMobileStep("write");
       requestAnimationFrame(() => areaRef.current?.focus());
     },
-    [chooseClient],
+    [chooseClient, free],
   );
 
   /* ------------------------------------------------------------ вложения */
@@ -650,16 +665,17 @@ function NotesWorkspace() {
     <div className="mx-auto max-w-[1280px] lg:flex lg:h-[calc(100dvh-124px)] lg:min-h-[36rem] lg:flex-col">
       <header className="mb-4 shrink-0">
         <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.026em] text-ink sm:text-[28px]">
-          Заметки
+          {free ? "Свободная заметка" : "Заметки"}
         </h1>
         <p className="mt-1 max-w-2xl text-[14.5px] leading-relaxed text-[var(--muted)]">
-          Опишите, что уже сделано, что нужно сделать и чего ждёте от клиента.
+          {free ? "Надиктуйте планы и назовите объект в той же фразе, что и действие. Задачи появятся в планировщике."
+            : "Опишите, что уже сделано, что нужно сделать и чего ждёте от клиента."}
         </p>
       </header>
 
-      <div className="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[280px_minmax(0,1fr)]">
+      <div className={`grid gap-4 lg:min-h-0 lg:flex-1 ${free ? "lg:grid-cols-1" : "lg:grid-cols-[280px_minmax(0,1fr)]"}`}>
         {/* ------------------------------------------------ поиск клиента */}
-        <aside className={`min-h-0 ${mobileStep === "write" ? "hidden lg:block" : ""}`}>
+        <aside className={`min-h-0 ${free ? "hidden" : mobileStep === "write" ? "hidden lg:block" : ""}`}>
           <Card className="lg:flex lg:h-full lg:min-h-0 lg:flex-col">
             <SectionTitle title="Клиент" subtitle="Выберите клиента для заметки" />
 
@@ -794,7 +810,7 @@ function NotesWorkspace() {
         </aside>
 
         <div className={`min-h-0 min-w-0 lg:flex lg:flex-col ${mobileStep === "pick" ? "hidden" : ""}`}>
-          {mobileStep === "write" && (
+          {!free && mobileStep === "write" && (
             <button
               type="button"
               disabled={recording}
@@ -831,14 +847,14 @@ function NotesWorkspace() {
               <span className="text-[12.5px] font-medium text-[var(--muted)]">
                 {correcting ? "Исправление заметки" : "Новая заметка"}
               </span>
-              <button type="button" disabled={recording || sending || Boolean(correcting)}
+              {free ? <span className="text-[13px] text-[var(--muted)]">Личный план</span> : <button type="button" disabled={recording || sending || Boolean(correcting)}
                 className="focus-ring max-w-full truncate rounded px-1 text-[13px] font-semibold text-primary"
                 aria-expanded={draftClientOpen} onClick={() => { setQuery(""); setDraftClientOpen(!draftClientOpen); }}>
                 {clientFilter ? `Клиент: ${clientFilter.name}` : "Выбрать клиента для заметки"}
-              </button>
+              </button>}
             </div>
 
-            {draftClientOpen && (
+            {!free && draftClientOpen && (
               <div className="mb-3 space-y-2 rounded-control border border-[var(--border)] p-2">
                 <input type="search" aria-label="Поиск клиента для черновика" value={query}
                   placeholder="Имя, телефон или ИНН" className={inputClass} onChange={(event) => setQuery(event.target.value)} />
@@ -898,17 +914,19 @@ function NotesWorkspace() {
                   e.target.value = "";
                 }}
               />
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                title="Прикрепить файл"
-                aria-label="Прикрепить файл"
-                className="focus-ring grid h-11 w-11 shrink-0 place-items-center rounded-control border border-[var(--border-strong)] text-[var(--muted)] transition-colors hover:border-primary hover:text-primary"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-                  <path d="M21.4 11.05l-8.9 8.9a5.2 5.2 0 01-7.4-7.4l8.2-8.2a3.5 3.5 0 014.9 4.9l-8.2 8.2a1.8 1.8 0 01-2.5-2.5l7.5-7.5" />
-                </svg>
-              </button>
+              {!free && (
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  title="Прикрепить файл"
+                  aria-label="Прикрепить файл"
+                  className="focus-ring grid h-11 w-11 shrink-0 place-items-center rounded-control border border-[var(--border-strong)] text-[var(--muted)] transition-colors hover:border-primary hover:text-primary"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+                    <path d="M21.4 11.05l-8.9 8.9a5.2 5.2 0 01-7.4-7.4l8.2-8.2a3.5 3.5 0 014.9 4.9l-8.2 8.2a1.8 1.8 0 01-2.5-2.5l7.5-7.5" />
+                  </svg>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={toggleDictation}
@@ -958,7 +976,7 @@ function NotesWorkspace() {
                 Сохранить и разобрать после диктовки
               </label>
             )}
-            {user && <AudioDraft userId={user.id} disabled={recording || sending} onTranscript={(text) => {
+            {user && <AudioDraft userId={free ? `${user.id}:free` : user.id} disabled={recording || sending} onTranscript={(text) => {
               setBody((current) => [current.trim(), text].filter(Boolean).join(" "));
               setDictated(true);
             }} />}
@@ -1000,9 +1018,9 @@ function NotesWorkspace() {
               />
             ) : notes.length === 0 ? (
               <EmptyState
-                title={clientFilter ? "У этого клиента заметок нет" : "Заметок пока нет"}
+                title={clientFilter && !free ? "У этого клиента заметок нет" : "Заметок пока нет"}
                 description={
-                  clientFilter
+                  free ? "Надиктуйте или напишите первый план." : clientFilter
                     ? "Создайте первую заметку для этого клиента."
                     : "Выберите клиента, чтобы создать заметку."
                 }
@@ -1313,6 +1331,11 @@ function NoteCard({
                       }`}
                     >
                       {task.title}
+                      {task.project_name && (
+                        <span className="mt-0.5 block text-xs font-normal text-[var(--muted)]">
+                          Объект: {task.project_name}
+                        </span>
+                      )}
                     </span>
                     <button
                       type="button"
