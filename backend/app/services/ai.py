@@ -622,46 +622,78 @@ def extract(body: str, note_moment: datetime, tz_name: str) -> ExtractionResult:
     return fallback
 
 
+def provider_failure_message(error: str | None) -> str:
+    """Короткая причина для интерфейса, без тела ответа провайдера."""
+    error = error or ""
+    status_match = re.match(r"HTTP (\d{3})\b", error)
+    if status_match:
+        status = int(status_match.group(1))
+        if status in (401, 403):
+            return "Провайдер отклонил доступ. Проверьте ключ и права на модель."
+        if status == 402:
+            return "Провайдер вернул ошибку оплаты. Проверьте баланс."
+        if status == 429:
+            return "Достигнут лимит запросов у провайдера. Повторите позже."
+        if status in (400, 404, 422):
+            return "Провайдер отклонил запрос к выбранной модели."
+        if status >= 500:
+            return "На стороне провайдера произошла ошибка. Повторите позже."
+    if "timeout" in error.lower():
+        return "Провайдер не ответил вовремя."
+    if error.startswith(("Ответ модели", "JSONDecodeError")):
+        return "Модель вернула ответ в неожиданном формате."
+    return "Не удалось получить ответ от модели."
+
+
 def ping() -> dict[str, Any]:
-    """Проверка провайдера (health/админка).
-
-    1) GET /models — если поддерживается;
-    2) иначе минимальный chat-запрос с max_tokens=1.
-    """
+    """Проверяет вызов выбранной модели без отправки клиентских данных."""
     provider = {"provider": settings.ai_base_url, "model": settings.ai_model}
+    if not settings.ai_enabled:
+        return {"ok": False, "reason": "disabled", "message": "Разбор моделью выключен.", **provider}
     if not settings.ai_api_key:
-        return {"ok": False, "reason": "no_api_key", **provider}
+        return {"ok": False, "reason": "no_api_key", "message": "Ключ провайдера не задан.", **provider}
 
+    result: dict[str, Any] = {"mode": "chat", **provider}
     headers = {
         "Authorization": f"Bearer {settings.ai_api_key}",
-        "Content-Type": "application/json",
+        "HTTP-Referer": settings.ai_referer,
+        "X-Title": "ForteOn Extractor",
     }
     timeout = min(settings.ai_timeout_seconds, 25)
-
     try:
         with httpx.Client(timeout=timeout) as client:
-            listing = client.get(f"{settings.ai_base_url}/models", headers=headers)
-            if listing.status_code < 400:
-                return {"ok": True, "status": listing.status_code, "mode": "models", **provider}
-
-            probe = client.post(
+            response = client.post(
                 f"{settings.ai_base_url}/chat/completions",
                 headers=headers,
                 json={
                     "model": settings.ai_model,
-                    "max_tokens": 1,
-                    "messages": [{"role": "user", "content": "ping"}],
+                    "max_tokens": 32,
+                    "messages": [{"role": "user", "content": "Reply with OK."}],
                 },
             )
-            if probe.status_code < 400:
-                return {"ok": True, "status": probe.status_code, "mode": "chat", **provider}
+    except httpx.RequestError as exc:
+        return {"ok": False, "message": provider_failure_message(type(exc).__name__), **result}
 
-            return {
-                "ok": False,
-                "status": probe.status_code,
-                "mode": "chat",
-                "reason": probe.text[:300],
-                **provider,
-            }
-    except Exception as exc:
-        return {"ok": False, "reason": f"{type(exc).__name__}: {exc}", **provider}
+    result["status"] = response.status_code
+    if not response.is_success:
+        return {
+            "ok": False,
+            "message": provider_failure_message(f"HTTP {response.status_code}"),
+            **result,
+        }
+
+    try:
+        data = response.json()
+    except ValueError:
+        data = None
+    if isinstance(data, dict) and isinstance(data.get("choices"), list) and data["choices"]:
+        choice = data["choices"][0]
+        if isinstance(choice, dict):
+            message = choice.get("message")
+            if isinstance(message, dict) and (message.get("content") or message.get("reasoning_content")):
+                return {"ok": True, **result}
+    return {
+        "ok": False,
+        "message": provider_failure_message("Ответ модели в неожиданном формате"),
+        **result,
+    }

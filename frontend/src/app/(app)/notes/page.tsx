@@ -17,7 +17,7 @@
  *    «Исправить текст» (п.61–62);
  *  - менеджер никогда не видит ai_status как код и не видит JSON (п.63):
  *    только человеческие формулировки;
- *  - выбранный клиент и позиция прокрутки восстанавливаются (п.60).
+ *  - выбранный клиент восстанавливается (п.60).
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -112,7 +112,6 @@ type UploadedFile = { name: string; size: number };
 
 const PAGE_SIZE = 20;
 const STORE_CLIENT = "forteon.notes.client";
-const STORE_SCROLL = "forteon.notes.scroll";
 
 const EXAMPLES = [
   "Клиент просит КП до 25.11.2026, обещал оплату по счёту №214 до 05.12.2026.",
@@ -257,21 +256,10 @@ export default function NotesPage() {
     void loadFirstPage();
   }, [loading, loadFirstPage]);
 
-  // Позиция прокрутки: сохраняем при уходе с экрана и при закрытии вкладки
   useEffect(() => {
-    const save = () => {
-      try {
-        window.localStorage.setItem(STORE_SCROLL, String(window.scrollY));
-      } catch {
-        /* приватный режим */
-      }
-    };
-    window.addEventListener("pagehide", save);
-    return () => {
-      save();
-      window.removeEventListener("pagehide", save);
-    };
-  }, []);
+    if (loading || window.matchMedia("(min-width: 1024px)").matches) return;
+    window.scrollTo({ top: 0 });
+  }, [loading, mobileStep]);
 
   // Поиск клиента с задержкой, чтобы не дёргать сервер на каждую букву
   useEffect(() => {
@@ -560,22 +548,21 @@ export default function NotesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1280px]">
-      <header className="mb-4">
+    <div className="mx-auto max-w-[1280px] lg:flex lg:h-[calc(100dvh-124px)] lg:min-h-[36rem] lg:flex-col">
+      <header className="mb-4 shrink-0">
         <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.026em] text-ink sm:text-[28px]">
           Заметки
         </h1>
         <p className="mt-1 max-w-2xl text-[14.5px] leading-relaxed text-[var(--muted)]">
-          Пишите обычным текстом, как в мессенджере. Система сама найдёт сроки,
-          обещания и создаст задачи.
+          Сохраняйте договорённости и создавайте задачи из заметок.
         </p>
       </header>
 
-      <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+      <div className="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[280px_minmax(0,1fr)]">
         {/* ------------------------------------------------ поиск клиента */}
-        <aside className={`${mobileStep === "write" ? "hidden lg:block" : ""}`}>
-          <Card className="lg:sticky lg:top-[84px]">
-            <SectionTitle title="Клиент" subtitle="Найдите по имени, объекту или юрлицу" />
+        <aside className={`min-h-0 ${mobileStep === "write" ? "hidden lg:block" : ""}`}>
+          <Card className="lg:flex lg:h-full lg:min-h-0 lg:flex-col">
+            <SectionTitle title="Клиент" subtitle="Выберите клиента для заметки" />
 
             <div className="relative mb-2">
               <svg
@@ -641,7 +628,7 @@ export default function NotesPage() {
               </svg>
             </button>
 
-            <div className="max-h-[420px] space-y-0.5 overflow-y-auto rounded-control border border-[var(--border)] p-1.5">
+            <div className="space-y-0.5 rounded-control border border-[var(--border)] p-1.5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
               {pickerLoading && picker.length === 0 && (
                 <div className="space-y-1.5 p-1">
                   <Skeleton className="h-11" />
@@ -651,7 +638,7 @@ export default function NotesPage() {
               )}
               {!pickerLoading && picker.length === 0 && (
                 <p className="px-2 py-4 text-center text-[13px] text-[var(--muted)]">
-                  Ничего не найдено. Измените запрос.
+                  Клиенты не найдены. Попробуйте другой запрос.
                 </p>
               )}
               {picker.map((client) => {
@@ -705,21 +692,7 @@ export default function NotesPage() {
           </Card>
         </aside>
 
-        {/* -------------------------------------------- лента и редактор */}
-        {/*
-          Компоновка как в мессенджере (§5): сама страница не «уезжает»,
-          прокручивается только лента, а редактор всегда внизу колонки.
-          Раньше редактор шёл первым и sticky-bottom тянул его вверх —
-          он занимал пол-экрана и перекрывал ленту.
-        */}
-        <div
-          /*
-            Именно lg:flex, а не lg:block: `block` перебивал `flex` и колонка
-            не становилась флекс-контейнером — лента не скроллилась внутри,
-            а редактор уезжал за нижнюю границу экрана.
-          */
-          className={`${mobileStep === "pick" ? "hidden lg:flex" : ""} min-w-0 flex-col lg:sticky lg:top-[88px] lg:h-[calc(100vh_-_104px)] lg:max-h-[calc(100vh_-_104px)]`}
-        >
+        <div className={`min-h-0 min-w-0 lg:flex lg:flex-col ${mobileStep === "pick" ? "hidden" : ""}`}>
           {mobileStep === "write" && (
             <button
               type="button"
@@ -729,7 +702,7 @@ export default function NotesPage() {
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                 <path d="M15 18l-6-6 6-6" />
               </svg>
-              Все клиенты
+              Выбрать клиента
             </button>
           )}
 
@@ -747,86 +720,9 @@ export default function NotesPage() {
           )}
 
 
-          {/* ------------------------------------------------------- лента */}
-          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2 lg:shrink-0">
-            <h2 className="text-[17px] font-semibold tracking-[-0.015em] text-ink">Лента</h2>
-            <span className="text-[12.5px] text-[var(--muted)]">
-              {notes.length > 0
-                ? `${notes.length} заметок, из них ${derivedCount} задач`
-                : "новые сверху"}
-            </span>
-          </div>
-
-          {/*
-            Прокрутка внутри ленты: страница остаётся на месте, редактор
-            всегда виден снизу — как в мессенджере (§5, п.47–49).
-          */}
-          <div className="min-h-0 flex-1 lg:overflow-y-auto lg:pr-1">
-          {feedError ? (
-            <ErrorState
-              title="Лента не загрузилась"
-              description={feedError}
-              onRetry={() => void loadFirstPage()}
-            />
-          ) : notes.length === 0 ? (
-            <EmptyState
-              title={clientFilter ? "У этого клиента заметок нет" : "Заметок пока нет"}
-              description={
-                clientFilter
-                  ? "Напишите первую — одна фраза уже даст результат."
-                  : "Выберите клиента слева и напишите первую заметку."
-              }
-            />
-          ) : (
-            <div className="space-y-2.5">
-              {grouped.today.length > 0 && (
-                <p className="pt-1 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-[var(--muted)]">
-                  Сегодня
-                </p>
-              )}
-              {grouped.today.map((note) => (
-                <NoteCard
-                  key={note.id}
-                  note={note}
-                  onReprocess={reprocess}
-                  onCorrect={startCorrection}
-                />
-              ))}
-
-              {grouped.earlier.length > 0 && (
-                <p className="pt-2 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-[var(--muted)]">
-                  Ранее
-                </p>
-              )}
-              {grouped.earlier.map((note) => (
-                <NoteCard
-                  key={note.id}
-                  note={note}
-                  onReprocess={reprocess}
-                  onCorrect={startCorrection}
-                />
-              ))}
-
-              {hasMore && (
-                <div className="pt-1">
-                  <Button
-                    variant="outline"
-                    size="md"
-                    loading={loadingOlder}
-                    onClick={() => void loadOlder()}
-                    className="w-full"
-                  >
-                    Показать более ранние
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-          </div>
-
-          {/* Редактор — закреплён снизу колонки, не уезжает при прокрутке */}
+          {/* На телефоне редактор перед лентой, на десктопе закреплён под ней. */}
           <Card
-            className="mt-3 shrink-0 border-[var(--border-strong)] shadow-[0_6px_24px_rgba(15,23,42,0.10)]"
+            className="mb-4 shrink-0 border-[var(--border-strong)] shadow-[0_6px_24px_rgba(15,23,42,0.10)] lg:order-3 lg:mb-0 lg:mt-3"
             padded
           >
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -849,9 +745,9 @@ export default function NotesPage() {
                 }
               }}
               rows={3}
-              placeholder="Например: Нужно отправить КП до 25.11.2026. Клиент обещал оплату по счёту №214 до 05.12.2026."
+              placeholder="Например: отправить смету в пятницу, проверить оплату в понедельник."
               aria-label="Текст заметки"
-              className={`${textareaClass} min-h-[84px] text-[15px] leading-relaxed`}
+              className={`${textareaClass} min-h-[84px] max-h-48 !text-base leading-relaxed`}
             />
 
             {uploads.length > 0 && (
@@ -871,7 +767,7 @@ export default function NotesPage() {
               </div>
             )}
 
-            <div className="mt-2.5 flex items-center gap-1.5">
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
               <input
                 ref={fileRef}
                 type="file"
@@ -953,6 +849,79 @@ export default function NotesPage() {
               </div>
             )}
           </Card>
+
+          {/* ------------------------------------------------------- лента */}
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2 lg:order-1 lg:shrink-0">
+            <h2 className="text-[17px] font-semibold tracking-[-0.015em] text-ink">Лента</h2>
+            <span className="text-[12.5px] text-[var(--muted)]">
+              {notes.length > 0
+                ? `Заметки: ${notes.length} · Задачи: ${derivedCount}`
+                : null}
+            </span>
+          </div>
+
+          <div aria-label="Лента заметок" className="min-h-0 lg:order-2 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:pr-2">
+            {feedError ? (
+              <ErrorState
+                title="Лента не загрузилась"
+                description={feedError}
+                onRetry={() => void loadFirstPage()}
+              />
+            ) : notes.length === 0 ? (
+              <EmptyState
+                title={clientFilter ? "У этого клиента заметок нет" : "Заметок пока нет"}
+                description={
+                  clientFilter
+                    ? "Создайте первую заметку для этого клиента."
+                    : "Выберите клиента, чтобы создать заметку."
+                }
+              />
+            ) : (
+              <div className="space-y-2.5">
+                {grouped.today.length > 0 && (
+                  <p className="pt-1 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-[var(--muted)]">
+                    Сегодня
+                  </p>
+                )}
+                {grouped.today.map((note) => (
+                  <NoteCard
+                    key={note.id}
+                    note={note}
+                    onReprocess={reprocess}
+                    onCorrect={startCorrection}
+                  />
+                ))}
+
+                {grouped.earlier.length > 0 && (
+                  <p className="pt-2 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-[var(--muted)]">
+                    Ранее
+                  </p>
+                )}
+                {grouped.earlier.map((note) => (
+                  <NoteCard
+                    key={note.id}
+                    note={note}
+                    onReprocess={reprocess}
+                    onCorrect={startCorrection}
+                  />
+                ))}
+
+                {hasMore && (
+                  <div className="pt-1">
+                    <Button
+                      variant="outline"
+                      size="md"
+                      loading={loadingOlder}
+                      onClick={() => void loadOlder()}
+                      className="w-full"
+                    >
+                      Показать более ранние
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -1075,7 +1044,7 @@ function NoteCard({
             title={note.provider_note ?? undefined}
             className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.04em] ${
               note.used_fallback
-                ? "bg-[var(--warning-soft)] text-[#8a6410]"
+                ? "bg-[var(--warning-soft)] text-[var(--warning)]"
                 : "bg-[var(--primary-soft)] text-primary"
             }`}
           >
@@ -1089,12 +1058,12 @@ function NoteCard({
         показываем: они пришли из локальных правил и работать с ними можно.
       */}
       {realId && note.used_fallback && note.model === "local-rules-fallback" && (
-        <div className="mt-1.5 rounded-control bg-[var(--warning-soft)] px-2.5 py-2 text-[12px] leading-snug text-[#8a6410]">
-          {note.provider_note ?? "AI недоступен, применены локальные правила."}
+        <div className="mt-1.5 rounded-control bg-[var(--warning-soft)] px-2.5 py-2 break-words text-[13px] leading-snug text-[var(--warning)]">
+          {note.provider_note ?? "Заметку обработали по локальным правилам."}
         </div>
       )}
 
-      <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-ink">
+      <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-ink [overflow-wrap:anywhere]">
         {note.body}
       </p>
 
@@ -1228,7 +1197,7 @@ function NoteCard({
 
               {/* п.14: в уточнении должен быть понятный вопрос, а не «уточните» */}
               {task.needs_review && task.review_question && (
-                <p className="mt-1 text-[12px] leading-snug text-[#8a6410]">
+                <p className="mt-1 break-words text-[13px] leading-snug text-[var(--warning)]">
                   {task.review_question}
                 </p>
               )}

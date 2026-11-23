@@ -122,8 +122,8 @@ export function SectionTitle({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="mb-4 flex items-start justify-between gap-3">
-      <div>
+    <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0">
         <h2 className="text-[17px] font-semibold tracking-[-0.015em] text-ink">{title}</h2>
         {subtitle && <p className="mt-1 text-[13.5px] leading-relaxed text-[var(--muted)]">{subtitle}</p>}
       </div>
@@ -388,9 +388,9 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="animate-fade-in w-full max-w-lg rounded-t-2xl border border-[var(--border)] bg-surface shadow-lift sm:rounded-card"
+        className="animate-fade-in flex max-h-[calc(100dvh-1rem)] w-full max-w-lg flex-col rounded-t-2xl border border-[var(--border)] bg-surface shadow-lift sm:rounded-card"
       >
-        <header className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
+        <header className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3">
           <h3 id={titleId} className="text-[14.5px] font-semibold text-ink">{title}</h3>
           <button
             type="button"
@@ -403,8 +403,8 @@ export function Modal({
             </svg>
           </button>
         </header>
-        <div className="max-h-[70vh] overflow-y-auto px-4 py-4">{children}</div>
-        {footer && <footer className="flex justify-end gap-2 border-t border-[var(--border)] px-4 py-3">{footer}</footer>}
+        <div className="min-h-0 overflow-y-auto overscroll-contain px-4 py-4">{children}</div>
+        {footer && <footer className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-[var(--border)] px-4 py-3">{footer}</footer>}
       </div>
     </div>
   );
