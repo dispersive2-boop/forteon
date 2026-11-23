@@ -63,6 +63,7 @@ class UserUpdate(BaseModel):
 
 class SessionOut(ORMModel):
     id: str
+    is_current: bool = False
     created_at: datetime
     expires_at: datetime
     revoked_at: datetime | None

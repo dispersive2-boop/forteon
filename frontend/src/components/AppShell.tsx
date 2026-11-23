@@ -93,7 +93,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useLayoutEffect(() => {
     const changed = previousPath.current !== pathname;
     previousPath.current = pathname;
-    if (!changed || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (!changed || document.documentElement.dataset.motion === "off" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const animation = mainRef.current?.animate([{ opacity: 0.94 }, { opacity: 1 }], {
       duration: 150,
       easing: "ease-out",

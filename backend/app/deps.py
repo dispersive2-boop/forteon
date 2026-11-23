@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
@@ -21,17 +21,35 @@ def _extract_token(request: Request, authorization: str | None) -> str | None:
     return cookie or None
 
 
-def get_optional_user(
-    request: Request,
-    db: Session = Depends(get_db),
-    authorization: str | None = Header(default=None),
-) -> User | None:
+def get_access_claims(request: Request, authorization: str | None = Header(default=None)) -> dict | None:
     token = _extract_token(request, authorization)
-    if not token:
-        return None
-    payload = decode_token(token, settings.secret_key, expected_typ="access")
+    return decode_token(token, settings.secret_key, expected_typ="access") if token else None
+
+
+def get_optional_user(
+    db: Session = Depends(get_db),
+    payload: dict | None = Depends(get_access_claims),
+) -> User | None:
     if not payload:
         return None
+    session_id = payload.get("sid")
+    if session_id:
+        session = db.get(SessionModel, session_id)
+        if (not session or session.user_id != payload.get("sub") or
+                session.revoked_at is not None or session.expires_at <= utcnow()):
+            return None
+    else:
+        # Токены из предыдущих версий ещё не привязаны к строке сессии.
+        # После массового выхода их можно заменить только действующим refresh-токеном.
+        issued_at = datetime.fromtimestamp(payload["iat"], timezone.utc).replace(tzinfo=None)
+        revoked = db.scalar(select(AuditLog.id).where(
+            AuditLog.actor_id == payload.get("sub"),
+            AuditLog.entity == "session",
+            AuditLog.action == "revoked_others",
+            AuditLog.created_at >= issued_at,
+        ).limit(1))
+        if revoked:
+            return None
     user = db.get(User, payload.get("sub"))
     if not user or not user.is_active or user.deleted_at is not None:
         return None

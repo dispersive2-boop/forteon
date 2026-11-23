@@ -275,3 +275,52 @@ def test_import_preview_does_not_save_records(api: TestClient, db: Session) -> N
     imported = api.post("/api/v1/admin/import/grishanov", files=files)
     assert imported.status_code == 200, imported.text
     assert db.scalar(select(func.count()).select_from(Client)) == 2
+
+
+def test_revoke_other_sessions_keeps_current_device_and_cleans_active_list(db: Session) -> None:
+    from app.security import create_token
+
+    def bearer(token: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {token}"}
+
+    with TestClient(app) as client:
+        first = client.post("/api/v1/auth/login", json={
+            "email": "bulk@forteon.local", "password": "Bulk-pass-123", "device_label": "Первый",
+        }).json()
+        second = client.post("/api/v1/auth/login", json={
+            "email": "bulk@forteon.local", "password": "Bulk-pass-123", "device_label": "Второй",
+        }).json()
+        unrelated = client.post("/api/v1/auth/login", json={
+            "email": "other@forteon.local", "password": "Other-pass-123",
+        }).json()
+        old_access = create_token({"sub": USER_ID}, _settings.secret_key, 3600)
+        first_headers = bearer(first["access_token"])
+        initial = client.get("/api/v1/auth/sessions", headers=first_headers).json()
+        assert len(initial) == 2
+        current_id = next(row["id"] for row in initial if row["is_current"])
+        assert initial[0]["id"] != initial[1]["id"]
+
+        rotated = client.post("/api/v1/auth/refresh", json={"refresh_token": first["refresh_token"]})
+        assert rotated.status_code == 200, rotated.text
+        assert client.post("/api/v1/auth/refresh", json={"refresh_token": first["refresh_token"]}).status_code == 401
+        first = rotated.json()
+        first_headers = bearer(first["access_token"])
+        after_refresh = client.get("/api/v1/auth/sessions", headers=first_headers).json()
+        assert len(after_refresh) == 2
+        assert next(row["id"] for row in after_refresh if row["is_current"]) == current_id
+
+        incorrect = client.post("/api/v1/auth/sessions/revoke-others", headers=bearer(old_access), json={
+            "refresh_token": unrelated["refresh_token"],
+        })
+        assert incorrect.status_code == 409
+        result = client.post("/api/v1/auth/sessions/revoke-others", headers=first_headers, json={})
+        assert result.status_code == 200, result.text
+        assert [row["id"] for row in result.json()] == [current_id]
+        assert result.json()[0]["is_current"] is True
+        assert client.get("/api/v1/auth/sessions", headers=first_headers).json() == result.json()
+        assert client.get("/api/v1/auth/me", headers=first_headers).status_code == 200
+        assert client.get("/api/v1/auth/me", headers=bearer(second["access_token"])).status_code == 401
+        assert client.get("/api/v1/auth/me", headers=bearer(old_access)).status_code == 401
+        assert client.post("/api/v1/auth/refresh", json={"refresh_token": second["refresh_token"]}).status_code == 401
+        assert client.get("/api/v1/auth/me", headers=bearer(unrelated["access_token"])).status_code == 200
+        assert client.post("/api/v1/auth/refresh", json={"refresh_token": first["refresh_token"]}).status_code == 200

@@ -107,7 +107,16 @@ export function clearSession(): void {
   window.localStorage.removeItem(USER_KEY);
 }
 
-async function tryRefresh(): Promise<boolean> {
+let refreshInFlight: Promise<boolean> | null = null;
+
+export function refreshSession(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = rotateSession().finally(() => { refreshInFlight = null; });
+  }
+  return refreshInFlight;
+}
+
+async function rotateSession(): Promise<boolean> {
   const refresh = getRefreshToken();
   if (!refresh) return false;
   try {
@@ -115,8 +124,9 @@ async function tryRefresh(): Promise<boolean> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh_token: refresh }),
+      credentials: "include",
     });
-    if (!response.ok) return false;
+    if (!response.ok) return Boolean(getToken() && getRefreshToken() !== refresh);
     const data = await response.json();
     setSession(data.access_token, data.refresh_token, data.user);
     return true;
@@ -155,7 +165,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
     signal,
   });
 
-  if (response.status === 401 && retry && (await tryRefresh())) {
+  if (response.status === 401 && retry && (await refreshSession())) {
     return api<T>(path, { ...options, retry: false });
   }
 
@@ -437,6 +447,7 @@ export type TodayPayload = {
 
 export type Session = {
   id: string;
+  is_current: boolean;
   created_at: string;
   expires_at: string;
   revoked_at: string | null;

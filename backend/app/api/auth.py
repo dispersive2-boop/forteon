@@ -10,12 +10,12 @@ from io import BytesIO
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
 from PIL import Image, ImageOps, UnidentifiedImageError
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import get_db
-from ..deps import audit, find_session, get_current_user, session_expiry
+from ..deps import audit, find_session, get_access_claims, get_current_user, session_expiry
 from ..models import Session as SessionModel, User, UserAvatar, utcnow
 from ..services.ratelimit import limiter
 from ..schemas import (
@@ -56,30 +56,33 @@ def _too_many_attempts(wait: float, scope: str) -> HTTPException:
     )
 
 
-def issue_tokens(db: Session, user: User, request: Request, device_label: str | None = None) -> TokenResponse:
-    access = create_token(
-        {"sub": user.id, "role": user.role, "email": user.email},
-        settings.secret_key,
-        settings.access_token_ttl_minutes * 60,
-        typ="access",
-    )
-    raw_refresh, digest = new_refresh_token()
-    db.add(
-        SessionModel(
-            user_id=user.id,
-            refresh_token_hash=digest,
-            expires_at=session_expiry(),
-            device_label=device_label or "Веб-клиент",
-            user_agent=(request.headers.get("user-agent") or "")[:250],
-        )
-    )
-    db.commit()
+def _token_response(user: User, session_id: str, raw_refresh: str) -> TokenResponse:
+    ttl = settings.access_token_ttl_minutes * 60
     return TokenResponse(
-        access_token=access,
+        access_token=create_token(
+            {"sub": user.id, "role": user.role, "email": user.email, "sid": session_id},
+            settings.secret_key,
+            ttl,
+            typ="access",
+        ),
         refresh_token=raw_refresh,
-        expires_in=settings.access_token_ttl_minutes * 60,
+        expires_in=ttl,
         user=UserOut.model_validate(user),
     )
+
+
+def issue_tokens(db: Session, user: User, request: Request, device_label: str | None = None) -> TokenResponse:
+    raw_refresh, digest = new_refresh_token()
+    session = SessionModel(
+        user_id=user.id,
+        refresh_token_hash=digest,
+        expires_at=session_expiry(),
+        device_label=device_label or "Веб-клиент",
+        user_agent=(request.headers.get("user-agent") or "")[:250],
+    )
+    db.add(session)
+    db.commit()
+    return _token_response(user, session.id, raw_refresh)
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -167,7 +170,7 @@ def login(payload: LoginRequest, request: Request, response: Response, db: Sessi
 
 
 @router.post("/refresh", response_model=TokenResponse)
-def refresh(payload: RefreshRequest, request: Request, db: Session = Depends(get_db)):
+def refresh(payload: RefreshRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     key = limiter.client_key(request, "refresh")
     wait = limiter.hit(key, 60, 60)
     if wait:
@@ -182,19 +185,39 @@ def refresh(payload: RefreshRequest, request: Request, db: Session = Depends(get
     user = db.get(User, session.user_id)
     if user is None or not user.is_active:
         raise HTTPException(status_code=401, detail={"code": "inactive_user", "message": "Пользователь отключён"})
-    return issue_tokens(db, user, request, session.device_label)
+    new_raw, digest = new_refresh_token()
+    changed = db.execute(update(SessionModel).where(
+        SessionModel.id == session.id,
+        SessionModel.refresh_token_hash == session.refresh_token_hash,
+        SessionModel.revoked_at.is_(None),
+        SessionModel.expires_at > utcnow(),
+    ).values(refresh_token_hash=digest, expires_at=session_expiry()))
+    if changed.rowcount != 1:
+        raise HTTPException(status_code=401, detail={"code": "invalid_token", "message": "Сессия недействительна"})
+    db.commit()
+    result = _token_response(user, session.id, new_raw)
+    response.set_cookie(
+        settings.cookie_name, result.access_token, max_age=result.expires_in,
+        httponly=True, secure=settings.cookie_secure, samesite="lax", path="/",
+    )
+    return result
 
 
 @router.post("/logout")
-def logout(request: Request, payload: RefreshRequest | None = None, db: Session = Depends(get_db),
-           user: User = Depends(get_current_user)):
+def logout(
+    request: Request, response: Response, payload: RefreshRequest | None = None,
+    db: Session = Depends(get_db), user: User = Depends(get_current_user),
+    claims: dict | None = Depends(get_access_claims),
+):
     raw = (payload.refresh_token if payload else None) or request.cookies.get("forteon_refresh")
-    if raw:
-        session = find_session(db, raw)
-        if session and session.user_id == user.id:
-            session.revoked_at = utcnow()
+    session_id = (claims or {}).get("sid")
+    session = db.get(SessionModel, session_id) if session_id else (find_session(db, raw) if raw else None)
+    if session and session.user_id == user.id:
+        session.revoked_at = utcnow()
     audit(db, user, "user", user.id, "logout")
     db.commit()
+    response.delete_cookie(settings.cookie_name, path="/")
+    response.delete_cookie("forteon_refresh", path="/")
     return {"status": "ok"}
 
 
@@ -215,12 +238,54 @@ def change_password(payload: PasswordChange, db: Session = Depends(get_db),
     return {"status": "ok"}
 
 
+def _active_sessions(db: Session, user_id: str, current_id: str | None) -> list[SessionOut]:
+    rows = db.scalars(select(SessionModel).where(
+        SessionModel.user_id == user_id,
+        SessionModel.revoked_at.is_(None),
+        SessionModel.expires_at > utcnow(),
+    ).order_by(SessionModel.created_at.desc()))
+    return [
+        SessionOut.model_validate(row).model_copy(update={"is_current": row.id == current_id})
+        for row in rows
+    ]
+
+
 @router.get("/sessions", response_model=list[SessionOut])
-def list_sessions(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    sessions = db.scalars(
-        select(SessionModel).where(SessionModel.user_id == user.id).order_by(SessionModel.created_at.desc())
-    )
-    return [SessionOut.model_validate(s) for s in sessions]
+def list_sessions(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    claims: dict | None = Depends(get_access_claims),
+):
+    return _active_sessions(db, user.id, (claims or {}).get("sid"))
+
+
+@router.post("/sessions/revoke-others", response_model=list[SessionOut])
+def revoke_other_sessions(
+    request: Request, payload: RefreshRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    claims: dict | None = Depends(get_access_claims),
+):
+    current_id = (claims or {}).get("sid")
+    if not current_id:
+        raw = payload.refresh_token or request.cookies.get("forteon_refresh")
+        current = find_session(db, raw) if raw else None
+        if current and current.user_id == user.id and not current.revoked_at and current.expires_at > utcnow():
+            current_id = current.id
+    if not current_id:
+        raise HTTPException(status_code=409, detail={
+            "code": "current_session_unknown",
+            "message": "Не удалось определить текущую сессию. Войдите в аккаунт заново.",
+        })
+    changed = db.execute(update(SessionModel).where(
+        SessionModel.user_id == user.id,
+        SessionModel.id != current_id,
+        SessionModel.revoked_at.is_(None),
+        SessionModel.expires_at > utcnow(),
+    ).values(revoked_at=utcnow()))
+    audit(db, user, "session", current_id, "revoked_others", {"count": changed.rowcount})
+    db.commit()
+    return _active_sessions(db, user.id, current_id)
 
 
 @router.delete("/sessions/{session_id}")

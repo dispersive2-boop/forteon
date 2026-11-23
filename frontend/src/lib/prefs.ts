@@ -64,6 +64,25 @@ export function setDensity(density: Density): void {
   applyDensity(density);
 }
 
+export function getAnimationsEnabled(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    return window.localStorage.getItem("forteon.motion") !== "off";
+  } catch {
+    return true;
+  }
+}
+
+export function setAnimationsEnabled(enabled: boolean): void {
+  try {
+    window.localStorage.setItem("forteon.motion", enabled ? "on" : "off");
+  } catch {
+    // Настройка действует в текущей вкладке, даже если хранилище недоступно.
+  }
+  if (enabled) delete document.documentElement.dataset.motion;
+  else document.documentElement.dataset.motion = "off";
+}
+
 export function isOnboarded(): boolean {
   if (typeof window === "undefined") return true;
   return window.localStorage.getItem(ONBOARD_KEY) === "1";

@@ -411,9 +411,47 @@ html {
 }
 
 .forteon-floating {
+  --glass-base: var(--surface);
+  --glass-rim: rgb(255 255 255 / .7);
+  --glass-glint: rgb(255 255 255 / .34);
+  --glass-opacity: 88%;
+  background-color: var(--glass-base);
   border: 1px solid var(--border-strong);
   border-radius: 18px;
   box-shadow: var(--shadow-lift);
+}
+
+[data-theme="dark"] .forteon-floating,
+.forteon-floating.forteon-glass-inverse {
+  --glass-rim: rgb(196 215 241 / .15);
+  --glass-glint: rgb(196 215 241 / .055);
+  --glass-opacity: 91%;
+}
+
+.forteon-floating.forteon-glass-inverse {
+  --glass-base: #111827;
+}
+
+@supports (background-color: color-mix(in srgb, white 90%, transparent)) {
+  @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .forteon-floating {
+      background-color: color-mix(in srgb, var(--glass-base) var(--glass-opacity), transparent);
+      background-image: linear-gradient(180deg, var(--glass-glint), transparent 62px);
+      border-color: color-mix(in srgb, var(--border-strong) 62%, var(--glass-rim));
+      box-shadow: inset 0 1px 0 var(--glass-rim), var(--shadow-lift);
+      -webkit-backdrop-filter: blur(14px) saturate(125%);
+      backdrop-filter: blur(14px) saturate(125%);
+    }
+  }
+}
+
+@media (prefers-reduced-transparency: reduce), (forced-colors: active) {
+  .forteon-floating {
+    background-color: var(--glass-base);
+    background-image: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 
 .forteon-sheet {
@@ -468,11 +506,70 @@ html {
 }
 
 @keyframes forteon-overlay-in {
-  from { opacity: 0; }
+  from { background-color: transparent; }
 }
 @keyframes forteon-popover-in {
   from { opacity: .84; transform: translateY(-6px); }
 }
 @keyframes forteon-sheet-in {
   from { opacity: .9; transform: translateY(12px); }
+}
+
+html[data-motion="off"],
+html[data-motion="off"] *,
+html[data-motion="off"] *::before,
+html[data-motion="off"] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+
+html[data-motion="off"] .forteon-nav-link .forteon-nav-icon svg,
+html[data-motion="off"] .forteon-action:active {
+  transform: none;
+}
+
+@supports (appearance: base-select) {
+  select:not([multiple]):not([size]),
+  select:not([multiple]):not([size])::picker(select) {
+    appearance: base-select;
+  }
+
+  select:not([multiple]):not([size])::picker-icon {
+    color: var(--muted);
+  }
+
+  select:not([multiple]):not([size])::picker(select) {
+    margin-block: 6px;
+    max-height: min(22rem, 55dvh);
+    padding: 5px;
+    overscroll-behavior: contain;
+    border: 1px solid var(--border-strong);
+    border-radius: 14px;
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: var(--shadow-lift);
+  }
+
+  select:not([multiple]):not([size]) option {
+    min-height: 36px;
+    padding: 6px 9px;
+    gap: 8px;
+    border-radius: 8px;
+  }
+
+  select:not([multiple]):not([size]) option:is(:hover, :focus-visible, :checked) {
+    background: var(--primary-soft);
+    color: var(--ink);
+  }
+
+  select:not([multiple]):not([size]) option::checkmark {
+    color: var(--primary);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    html:not([data-motion="off"]) select:not([multiple]):not([size]):open::picker(select) {
+      animation: forteon-popover-in 140ms ease-out;
+    }
+  }
 }

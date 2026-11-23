@@ -514,7 +514,7 @@ export default function TodayPage() {
 
       {/* Пункт 25: отмена закрытия (undo) */}
       {undo && (
-        <div className="fixed bottom-20 left-1/2 z-50 flex w-[min(94vw,420px)] -translate-x-1/2 items-center gap-3 rounded-control bg-[#111827] px-4 py-3 text-white shadow-lift lg:bottom-6">
+        <div className="forteon-floating forteon-glass-inverse fixed bottom-20 left-1/2 z-50 flex w-[min(94vw,420px)] -translate-x-1/2 items-center gap-3 px-4 py-3 text-white lg:bottom-6">
           <span className="min-w-0 flex-1 truncate text-[13.5px]">
             Задача закрыта: {undo.task.title}
           </span>
