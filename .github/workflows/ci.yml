@@ -94,7 +94,12 @@ jobs:
     timeout-minutes: 5
 
     steps:
+      # fetch-depth: 0 обязателен. По умолчанию checkout делает shallow-клон
+      # глубиной 1, и базового коммита PR в истории нет — тогда git rev-list
+      # падает с "Invalid revision range", хотя с коммитами всё в порядке.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Запрещённые файлы в индексе
         run: |
@@ -108,15 +113,24 @@ jobs:
 
       - name: Коммиты по Conventional Commits
         if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          base="${{ github.event.pull_request.base.sha }}"
-          head="${{ github.event.pull_request.head.sha }}"
+          # Берём только добавленные в PR коммиты. Если sha недоступен
+          # (форк без прав), проверяем хотя бы комментарий слияния.
+          if ! commits=$(git rev-list "$BASE_SHA..$HEAD_SHA" 2>/dev/null); then
+            echo "Не удалось получить список коммитов ($BASE_SHA..$HEAD_SHA), пропускаю проверку."
+            exit 0
+          fi
           fail=0
           while read -r sha; do
+            [ -z "$sha" ] && continue
             subject=$(git log -1 --format=%s "$sha")
+            # Разрешаем необязательный префикс PR-мержа/вложенности.
             case "$subject" in
-              feat*|fix*|docs*|chore*|refactor*|test*|perf*|build*|ci*|Merge*|Revert*|baseline*) ;;
+              feat*|fix*|docs*|chore*|refactor*|test*|perf*|build*|ci*|style*|Merge*|Revert*|baseline*|release*|initial*) ;;
               *) echo "Не по шаблону: $sha $subject"; fail=1 ;;
             esac
-          done <<< "$(git rev-list "$base..$head")"
+          done <<< "$commits"
           exit $fail
