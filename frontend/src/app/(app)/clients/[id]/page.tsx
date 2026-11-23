@@ -496,42 +496,63 @@ function ClientWorkspace() {
               <Badge tone="neutral">версия {client.version}</Badge>
             </div>
             {/*
-              п.29: на телефоне три главных действия — сразу под заголовком,
-              тремя равными кнопками во всю ширину. На десктопе этот ряд
-              скрыт, там те же действия стоят справа в шапке.
-              Текст 12px + иконка 14px: при 390px на кнопку приходится ~103px,
-              и «Надиктовать» 13px уже вылезало за рамку.
+              п.29: на телефоне три главных действия — сразу под заголовком.
+              На десктопе ряд скрыт: там те же действия справа в шапке.
+
+              Вертикальная компоновка (иконка над словом), а не строка:
+              при 390px на треть экрана приходится ~94px, и «Надиктовать»
+              в строку упиралось в рамку. Плитка выше, но нажимается
+              уверенно, и слово всегда целиком.
+
+              Оформление взято из системы, а не своё: `forteon-action`
+              даёт transition и просадку при нажатии (active:scale .98),
+              `shadow-soft` — ту же тень, что у кнопок, hover поднимает
+              плитку на 2px. Иконка сидит в мягком круге, как аватар
+              в шапке, — так плитка читается как действие, а не как текст
+              в рамке. Появление — стаггером, чтобы ряд не «выскакивал».
             */}
-            <div className="mt-3 grid grid-cols-3 gap-1.5 sm:hidden">
+            <div className="forteon-quick-actions mt-3 grid grid-cols-3 gap-2 sm:hidden">
               {callHref ? (
                 <a
                   href={callHref}
-                  className="focus-ring inline-flex h-11 min-h-[44px] items-center justify-center gap-1 rounded-control border border-[var(--border-strong)] px-1 text-[12px] font-medium text-ink hover:text-primary"
+                  className="forteon-action focus-ring group flex min-h-[44px] flex-col items-center justify-center gap-1.5 rounded-card border border-[var(--border)] bg-surface px-1 py-2.5 shadow-soft transition-transform hover:-translate-y-0.5 hover:border-primary hover:shadow-lift active:translate-y-0"
                 >
-                  <IconPhone /> Позвонить
+                  <span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--primary-soft)] text-primary transition-colors group-hover:bg-primary group-hover:text-white">
+                    <IconPhone />
+                  </span>
+                  <span className="text-[12px] font-medium leading-none text-ink">Позвонить</span>
                 </a>
               ) : (
                 <button
                   type="button"
                   disabled
                   title="У клиента нет телефона в контактах"
-                  className="inline-flex h-11 min-h-[44px] cursor-not-allowed items-center justify-center gap-1 rounded-control border border-[var(--border)] px-1 text-[12px] font-medium text-[var(--muted)] opacity-70"
+                  className="flex min-h-[44px] cursor-not-allowed flex-col items-center justify-center gap-1.5 rounded-card border border-dashed border-[var(--border)] px-1 py-2.5"
                 >
-                  <IconPhone /> Позвонить
+                  <span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--canvas)] text-[var(--muted)]">
+                    <IconPhone />
+                  </span>
+                  <span className="text-[12px] font-medium leading-none text-[var(--muted)]">Позвонить</span>
                 </button>
               )}
               <Link
                 href={`/notes?client_id=${encodeURIComponent(clientId)}&voice=1`}
-                className="focus-ring inline-flex h-11 min-h-[44px] items-center justify-center gap-1 rounded-control border border-[var(--border-strong)] px-1 text-[12px] font-medium text-ink hover:text-primary"
+                className="forteon-action focus-ring group flex min-h-[44px] flex-col items-center justify-center gap-1.5 rounded-card border border-[var(--border)] bg-surface px-1 py-2.5 shadow-soft transition-transform hover:-translate-y-0.5 hover:border-primary hover:shadow-lift active:translate-y-0"
               >
-                <IconMic /> Голосом
+                <span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--primary-soft)] text-primary transition-colors group-hover:bg-primary group-hover:text-white">
+                  <IconMic />
+                </span>
+                <span className="text-[12px] font-medium leading-none text-ink">Голосом</span>
               </Link>
               <button
                 type="button"
                 onClick={() => setCreateTask(true)}
-                className="focus-ring inline-flex h-11 min-h-[44px] items-center justify-center gap-1 rounded-control bg-primary px-1 text-[12px] font-medium text-white hover:opacity-90"
+                className="forteon-action focus-ring group flex min-h-[44px] flex-col items-center justify-center gap-1.5 rounded-card bg-primary px-1 py-2.5 shadow-soft transition-transform hover:-translate-y-0.5 hover:bg-[var(--primary-hover)] hover:shadow-lift active:translate-y-0"
               >
-                <IconPlus /> Задача
+                <span className="grid h-8 w-8 place-items-center rounded-full bg-white/20 text-white transition-colors group-hover:bg-white/30">
+                  <IconPlus />
+                </span>
+                <span className="text-[12px] font-medium leading-none text-white">Задача</span>
               </button>
             </div>
           </div>

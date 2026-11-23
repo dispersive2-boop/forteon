@@ -7,11 +7,11 @@
         "href": "",
         "disabled": true,
         "visible": true,
-        "width": 94,
-        "height": 44,
+        "width": 89,
+        "height": 72,
         "top": 247,
         "clipped": false,
-        "contentWidth": 84,
+        "contentWidth": 64,
         "label": "Позвонить"
       },
       "Голосом": {
@@ -20,11 +20,11 @@
         "href": "/notes?client_id=934db758-dada-40ff-876b-529ce827ae2e&voice=1",
         "disabled": false,
         "visible": true,
-        "width": 94,
-        "height": 44,
+        "width": 89,
+        "height": 72,
         "top": 247,
         "clipped": false,
-        "contentWidth": 69,
+        "contentWidth": 49,
         "label": "Голосом"
       },
       "Задача": {
@@ -33,11 +33,11 @@
         "href": "",
         "disabled": false,
         "visible": true,
-        "width": 94,
-        "height": 44,
+        "width": 89,
+        "height": 72,
         "top": 247,
         "clipped": false,
-        "contentWidth": 63,
+        "contentWidth": 43,
         "label": "Задача"
       }
     },
@@ -53,11 +53,11 @@
         "href": "tel:+79991234567",
         "disabled": false,
         "visible": true,
-        "width": 94,
-        "height": 44,
+        "width": 89,
+        "height": 72,
         "top": 247,
         "clipped": false,
-        "contentWidth": 84,
+        "contentWidth": 64,
         "label": "Позвонить"
       },
       "Голосом": {
@@ -66,11 +66,11 @@
         "href": "/notes?client_id=934db758-dada-40ff-876b-529ce827ae2e&voice=1",
         "disabled": false,
         "visible": true,
-        "width": 94,
-        "height": 44,
+        "width": 89,
+        "height": 72,
         "top": 247,
         "clipped": false,
-        "contentWidth": 69,
+        "contentWidth": 49,
         "label": "Голосом"
       },
       "Задача": {
@@ -79,11 +79,11 @@
         "href": "",
         "disabled": false,
         "visible": true,
-        "width": 94,
-        "height": 44,
+        "width": 89,
+        "height": 72,
         "top": 247,
         "clipped": false,
-        "contentWidth": 63,
+        "contentWidth": 43,
         "label": "Задача"
       }
     },
