@@ -541,3 +541,26 @@ def transcribe_audio(file: UploadFile = File(...), _: User = Depends(get_current
     if not isinstance(text, str) or not text.strip():
         raise HTTPException(status_code=422, detail={"message": "В записи не удалось распознать речь."})
     return {"text": text.strip()}
+
+
+@router.post("/notes/document-text")
+def read_note_document(file: UploadFile = File(...), _: User = Depends(get_current_user)):
+    from pathlib import Path
+    from xml.etree.ElementTree import ParseError
+    from zipfile import BadZipFile
+
+    from ..services.document_text import extract_text
+
+    limit = min(settings.max_upload_bytes, 15 * 1024 * 1024)
+    data = file.file.read(limit + 1)
+    if not data or len(data) > limit:
+        raise HTTPException(status_code=422, detail={"message": "Выберите непустой файл до 15 МБ."})
+    try:
+        text = extract_text(data, Path(file.filename or "").suffix.lower())
+    except (BadZipFile, KeyError, ParseError, UnicodeError):
+        raise HTTPException(status_code=422, detail={"message": "Не удалось прочитать документ."}) from None
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail={"message": str(error)}) from None
+    if not text:
+        raise HTTPException(status_code=422, detail={"message": "В файле не удалось распознать текст."})
+    return {"text": text}

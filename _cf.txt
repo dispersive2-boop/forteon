@@ -1,0 +1,189 @@
+LINES 1562
+===== START 38 =====
+38|<<<<<<< HEAD
+39|import { VoiceNoteForm } from "@/components/VoiceNoteForm";
+40|import { api, API_ROOT, ExtractionSummary, getToken, Note } from "@/lib/api";
+41|import {
+42|  PRIORITY_LABELS,
+43|  TASK_TYPE_LABELS,
+44|  dateTimeRu,
+45|  formatBytes,
+46|  isOverdue,
+47|  relativeDay,
+48|} from "@/lib/format";
+49|=======
+50|import { api, Note } from "@/lib/api";
+51|import { PRIORITY_LABELS, TASK_TYPE_LABELS, dateTimeRu, formatBytes, isOverdue, relativeDay } from "@/lib/format";
+52|>>>>>>> origin/feature/crm-workflows
+===== END =====
+===== START 192 =====
+192|<<<<<<< HEAD
+193|=======
+194|  const areaRef = useRef<HTMLTextAreaElement | null>(null);
+195|  const [showText, setShowText] = useState(false);
+196|  const [readingFile, setReadingFile] = useState(false);
+197|>>>>>>> origin/feature/crm-workflows
+===== END =====
+===== START 512 =====
+512|<<<<<<< HEAD
+513|    // Вложение живёт в карточке клиента: в личном плане прикреплять некуда.
+514|    if (!clientFilter || free) {
+515|      setError("Чтобы прикрепить файл, выберите клиента.");
+516|      return;
+517|    }
+518|=======
+519|    setReadingFile(true);
+520|>>>>>>> origin/feature/crm-workflows
+===== END =====
+===== START 762 =====
+762|<<<<<<< HEAD
+763|            {/*
+764|              Вложения живут в левом слоте формы: так скрепка стоит в одной
+765|              строке с микрофоном и «Отправить», а не отдельным блоком снизу.
+766|            */}
+767|            <VoiceNoteForm
+768|              client={clientFilter}
+769|              onSubmit={submitNote}
+770|              onCreated={(noteId) => {
+771|                setMobileStep("write");
+772|                pollNote(noteId);
+773|=======
+774|            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+775|              <span className="text-[12.5px] font-medium text-[var(--muted)]">
+776|                {correcting ? "Исправление заметки" : "Новая заметка"}
+777|              </span>
+778|              {free ? <span className="text-[13px] text-[var(--muted)]">Личный план</span> : <button type="button" disabled={recording || sending || Boolean(correcting)}
+779|                className="focus-ring max-w-full truncate rounded px-1 text-[13px] font-semibold text-primary"
+780|                aria-expanded={draftClientOpen} onClick={() => { setQuery(""); setDraftClientOpen(!draftClientOpen); }}>
+781|                {clientFilter ? `Клиент: ${clientFilter.name}` : "Выбрать клиента для заметки"}
+782|              </button>}
+783|            </div>
+784|
+785|            {!free && draftClientOpen && (
+786|              <div className="mb-3 space-y-2 rounded-control border border-[var(--border)] p-2">
+787|                <input type="search" aria-label="Поиск клиента для черновика" value={query}
+788|                  placeholder="Имя, телефон или ИНН" className={inputClass} onChange={(event) => setQuery(event.target.value)} />
+789|                <div className="flex max-h-32 flex-wrap gap-2 overflow-auto">
+790|                  {picker.slice(0, 12).map((client) => (
+791|                    <Button key={client.id} type="button" size="sm" variant="outline" onClick={() => {
+792|                      chooseClient(client);
+793|                      setDraftClientOpen(false);
+794|                    }}>{client.name}</Button>
+795|                  ))}
+796|                  {!pickerLoading && picker.length === 0 && <p className="text-sm text-[var(--muted)]">Клиенты не найдены.</p>}
+797|                </div>
+798|              </div>
+799|            )}
+800|            <div className="mb-3 flex flex-wrap items-center gap-1.5">
+801|              <input
+802|                ref={fileRef}
+803|                type="file"
+804|                accept=".pdf,.docx,.txt,.jpg,.jpeg,.png,.webp,.tif,.tiff"
+805|                className="hidden"
+806|                onChange={(e) => {
+807|                  const file = e.target.files?.[0];
+808|                  if (file) void attach(file);
+809|                  e.target.value = "";
+810|                }}
+811|              />
+812|              <Button type="button" variant="outline" size="lg" aria-label="Голосовая заметка"
+813|                aria-pressed={recording} disabled={readingFile || sending} onClick={toggleDictation}>
+814|                <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+815|                  <rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0014 0M12 18v3M8.5 21h7" />
+816|                </svg>
+817|                {recording ? "Стоп" : "Голос"}
+818|              </Button>
+819|              <Button type="button" variant="outline" size="lg" disabled={recording || sending}
+820|                onClick={() => {
+821|                  setShowText(true);
+822|                  requestAnimationFrame(() => areaRef.current?.focus());
+823|                }}>
+824|                <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden>
+825|                  <path d="M5 4h14a2 2 0 012 2v10a2 2 0 01-2 2H9l-5 3v-3a2 2 0 01-1-2V6a2 2 0 012-2zM7 9h10M7 13h6" />
+826|                </svg>
+827|                Текст
+828|              </Button>
+829|              <Button type="button" variant="outline" size="lg" aria-label="Разобрать файл"
+830|                loading={readingFile} disabled={recording || sending} onClick={() => fileRef.current?.click()}>
+831|                <span aria-hidden className="text-2xl leading-none">+</span> Файл
+832|              </Button>
+833|
+834|            </div>
+835|            {(showText || body || correcting) && (
+836|            <textarea
+837|              ref={areaRef}
+838|              value={body}
+839|              readOnly={recording || sending}
+840|              onChange={(e) => setBody(e.target.value)}
+841|              onKeyDown={(e) => {
+842|                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+843|                  e.preventDefault();
+844|                  void send();
+845|                }
+846|>>>>>>> origin/feature/crm-workflows
+===== END =====
+===== START 933 =====
+933|<<<<<<< HEAD
+934|=======
+935|
+936|            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+937|              {user && body.trim() && !correcting && (
+938|                <Button type="button" size="sm" variant="ghost" disabled={recording || sending} onClick={() => {
+939|                  sessionStorage.setItem(`forteon.forti.instruction.${user.id}`, body.trim().slice(0, 4000));
+940|                  router.push("/mail");
+941|                }}>Письмо с Форти</Button>
+942|              )}
+943|              <div className="flex-1" />
+944|
+945|              {correcting && (
+946|                <Button
+947|                  variant="ghost"
+948|                  size="md"
+949|                  onClick={() => {
+950|                    setCorrecting(null);
+951|                    setBody("");
+952|                  }}
+953|                >
+954|                  Отменить
+955|                </Button>
+956|              )}
+957|              <Button
+958|                onClick={() => void send()}
+959|                loading={sending}
+960|                disabled={!body.trim() || !clientFilter || recording || readingFile}
+961|                size="md"
+962|              >
+963|                {correcting ? "Сохранить и разобрать" : "Разобрать заметку"}
+964|              </Button>
+965|            </div>
+966|
+967|            {clientFilter && !correcting && (
+968|              <label className="mt-2 flex items-center gap-2 text-sm text-[var(--muted)]">
+969|                <input type="checkbox" className="accent-primary" checked={autoSaveVoice} disabled={recording}
+970|                  onChange={(e) => setAutoSaveVoice(e.target.checked)} />
+971|                Сохранить и разобрать после диктовки
+972|              </label>
+973|            )}
+974|            {user && <AudioDraft userId={free ? `${user.id}:free` : user.id} disabled={recording || sending} onTranscript={(text) => {
+975|              setBody((current) => [current.trim(), text].filter(Boolean).join(" "));
+976|              setDictated(true);
+977|            }} />}
+978|            {!body && !correcting && (
+979|              <div className="mt-2 flex flex-wrap gap-1.5">
+980|                {EXAMPLES.slice(0, 2).map((example) => (
+981|                  <button
+982|                    key={example}
+983|                    type="button"
+984|                    onClick={() => {
+985|                      setBody(example);
+986|                      areaRef.current?.focus();
+987|                    }}
+988|                    className="focus-ring max-w-full truncate rounded-full border border-[var(--border)] px-2.5 py-1 text-[12px] text-[var(--muted)] transition-colors hov
+989|                  >
+990|                    {example}
+991|                  </button>
+992|                ))}
+993|              </div>
+994|            )}
+995|>>>>>>> origin/feature/crm-workflows
+===== END =====

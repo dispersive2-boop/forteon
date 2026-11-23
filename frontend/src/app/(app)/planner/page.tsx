@@ -611,7 +611,7 @@ export default function PlannerPage() {
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
           aria-label="Тип задачи"
-          className={`${inputClass} h-10 w-auto min-w-[130px]`}
+          className={`${inputClass} !h-10 !w-auto min-w-[130px]`}
         >
           <option value="all">Все типы</option>
           {Object.entries(TASK_TYPE_LABELS).map(([key, label]) => (
@@ -625,7 +625,7 @@ export default function PlannerPage() {
           value={priorityFilter}
           onChange={(e) => setPriorityFilter(e.target.value)}
           aria-label="Приоритет"
-          className={`${inputClass} h-10 w-auto min-w-[130px]`}
+          className={`${inputClass} !h-10 !w-auto min-w-[130px]`}
         >
           <option value="all">Любой приоритет</option>
           {Object.entries(PRIORITY_LABELS).map(([key, label]) => (
@@ -639,7 +639,7 @@ export default function PlannerPage() {
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
           aria-label="Статус"
-          className={`${inputClass} h-10 w-auto min-w-[130px]`}
+          className={`${inputClass} !h-10 !w-auto min-w-[130px]`}
         >
           <option value="open">Открытые</option>
           <option value="done">Закрытые</option>
@@ -650,7 +650,7 @@ export default function PlannerPage() {
           value={clientFilter}
           onChange={(e) => setClientFilter(e.target.value)}
           aria-label="Клиент"
-          className={`${inputClass} h-10 w-auto min-w-[160px] max-w-[240px]`}
+          className={`${inputClass} !h-10 !w-auto min-w-[160px] max-w-[240px]`}
         >
           <option value="all">Все клиенты</option>
           {clients.map((client) => (

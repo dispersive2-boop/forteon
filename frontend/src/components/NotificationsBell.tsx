@@ -8,7 +8,7 @@
  * непрочитанных, последние события, «прочитать все».
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import { api } from "@/lib/api";
@@ -25,6 +25,7 @@ type NotificationItem = {
 };
 
 export function NotificationsBell({ overdue }: { overdue?: number }) {
+  const root = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
@@ -53,6 +54,15 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
       setLoading(false);
     }
   }, [refreshCount]);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    return () => document.removeEventListener("pointerdown", closeOutside);
+  }, [open]);
 
   useEffect(() => {
     void refreshCount();
@@ -124,21 +134,21 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
   const badge = unread > 0 ? unread : overdue && overdue > 0 ? overdue : 0;
 
   return (
-    <div className="relative">
+    <div ref={root} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label={unread ? `Уведомления: ${unread} непрочитанных` : "Уведомления"}
         aria-expanded={open}
         title="Уведомления"
-        className="focus-ring relative grid h-11 w-11 shrink-0 place-items-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[#F1F5F9] hover:text-ink"
+        className="focus-ring relative grid h-11 w-11 shrink-0 place-items-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--primary-soft)] hover:text-ink aria-expanded:bg-[var(--primary-soft)] aria-expanded:text-ink"
       >
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
           <path d="M18 8a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6" />
           <path d="M10.3 20a2 2 0 0 0 3.4 0" />
         </svg>
         {badge > 0 && (
-          <span className="absolute right-1.5 top-1.5 grid min-w-[18px] place-items-center rounded-full bg-[#EF4444] px-1 text-[10px] font-semibold leading-[18px] text-white">
+          <span className="absolute right-0.5 top-0.5 grid min-w-[16px] place-items-center rounded-full bg-[#EF4444] px-1 text-[10px] font-semibold leading-[16px] text-white">
             {badge > 99 ? "99+" : badge}
           </span>
         )}
@@ -146,11 +156,6 @@ export function NotificationsBell({ overdue }: { overdue?: number }) {
 
       {open && (
         <>
-          <button
-            className="fixed inset-0 z-40"
-            onClick={() => setOpen(false)}
-            aria-label="Закрыть уведомления"
-          />
           <div className="forteon-floating forteon-popover fixed inset-x-3 top-[64px] z-50 sm:absolute sm:inset-x-auto sm:right-0 sm:top-[52px] sm:w-[360px] overflow-hidden bg-surface">
             <div className="flex items-center justify-between border-b border-[var(--border)] px-3.5 py-2.5">
               <p className="text-[14px] font-semibold text-ink">Уведомления</p>
