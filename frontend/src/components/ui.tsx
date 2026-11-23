@@ -286,13 +286,15 @@ export function EmptyState({
   title,
   description,
   action,
+  className = "",
 }: {
   title: string;
   description?: string;
   action?: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-card border border-dashed border-[var(--border-strong)] bg-[#fbfcfe] px-6 py-12 text-center">
+    <div className={`flex flex-col items-center justify-center rounded-card border border-dashed border-[var(--border-strong)] bg-[#fbfcfe] px-6 py-12 text-center ${className}`}>
       <div className="mb-3 grid h-12 w-12 place-items-center rounded-full bg-[var(--primary-soft)] text-primary">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
           <path d="M12 5v14M5 12h14" />

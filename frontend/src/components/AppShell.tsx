@@ -17,7 +17,7 @@
 
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { useAuth, UserBadge } from "@/components/AuthProvider";
 import CommandPalette, { KeyboardShortcuts } from "@/components/CommandPalette";
@@ -87,6 +87,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [overdue, setOverdue] = useState(0);
+  const mainRef = useRef<HTMLElement>(null);
+  const previousPath = useRef(pathname);
+
+  useLayoutEffect(() => {
+    const changed = previousPath.current !== pathname;
+    previousPath.current = pathname;
+    if (!changed || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const animation = mainRef.current?.animate([{ opacity: 0.94 }, { opacity: 1 }], {
+      duration: 150,
+      easing: "ease-out",
+    });
+    return () => animation?.cancel();
+  }, [pathname]);
   /**
    * П.128: статус сети виден интерфейсу. navigator.onLine не идеален, но
    * даёт честный сигнал при обрыве; запросы всё равно упадут с ошибкой,
@@ -314,7 +327,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Пункт 10: никакой горизонтальной прокрутки всего приложения */}
-        <main className="min-w-0 max-w-full flex-1 px-3 pb-24 pt-4 md:px-6 md:pb-8 md:pt-6">
+        <main ref={mainRef} className="min-w-0 max-w-full flex-1 px-3 pb-24 pt-4 md:px-6 md:pb-8 md:pt-6">
           {children}
         </main>
       </div>

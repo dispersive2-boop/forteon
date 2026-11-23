@@ -329,7 +329,7 @@ export default function TodayPage() {
             <Tabs items={FILTERS.map((f) => ({ ...f, count: counts[f.key] }))} value={filter} onChange={setFilter} />
           </div>
 
-          <div className="min-h-[280px] px-2 py-2">
+          <div key={filter} className={`min-h-[280px] px-2 py-2 ${loading ? "" : "forteon-tab-panel"}`}>
             {loading ? (
               <div className="space-y-1.5 px-2 py-1">
                 {Array.from({ length: 5 }).map((_, i) => (

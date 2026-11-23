@@ -208,7 +208,7 @@ export default function FinancePage() {
           </div>
         ) : tab === "invoices" ? (
           filteredRows.length ? (
-            <div className="overflow-x-auto">
+            <div key="invoices" className="forteon-tab-panel overflow-x-auto">
               <table className="w-full min-w-[680px] text-[13px]">
                 <thead>
                   <tr className="border-b border-[var(--border)] text-left text-[11.5px] uppercase tracking-[0.05em] text-[var(--muted)]">
@@ -256,6 +256,8 @@ export default function FinancePage() {
           ) : (
             /* Пункт 90: при отсутствии данных — предупреждение, а не пустой PDF/таблица */
             <EmptyState
+              key="invoices-empty"
+              className="forteon-tab-panel"
               title={onlyOverdue ? "Просроченных счетов нет" : "Счетов пока нет"}
               description={
                 onlyOverdue
@@ -279,7 +281,7 @@ export default function FinancePage() {
             />
           )
         ) : filteredPayments.length ? (
-          <div className="overflow-x-auto">
+          <div key="payments" className="forteon-tab-panel overflow-x-auto">
             <table className="w-full min-w-[520px] text-[13px]">
               <thead>
                 <tr className="border-b border-[var(--border)] text-left text-[11.5px] uppercase tracking-[0.05em] text-[var(--muted)]">
@@ -311,7 +313,7 @@ export default function FinancePage() {
             </table>
           </div>
         ) : (
-          <EmptyState title="Платежей пока нет" description="Платежи вносятся в карточке клиента." />
+          <EmptyState key="payments-empty" className="forteon-tab-panel" title="Платежей пока нет" description="Платежи вносятся в карточке клиента." />
         )}
       </Card>
 
