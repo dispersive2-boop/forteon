@@ -113,6 +113,30 @@ class ClientUpdate(BaseModel):
     version: int | None = None
 
 
+class ClientNextStep(BaseModel):
+    """Ближайшее открытое дело клиента (п.19 «30 идей»).
+
+    Менеджер смотрит список и должен сразу понимать, что делать дальше.
+    Поэтому отдаём не «5 задач», а конкретную ближайшую и её вид.
+    """
+
+    title: str
+    # task — обычная задача; waiting — ждём клиента; overdue — уже просрочено.
+    kind: Literal["task", "waiting", "overdue"]
+    due_date: date | None = None
+
+
+class ClientRisk(BaseModel):
+    """Почему клиент требует внимания (п.20 «30 идей»).
+
+    Раньше риск был безликим флажком. Теперь у него есть причина: за что
+    именно взяться и насколько срочно.
+    """
+
+    reason: str
+    level: Literal["warning", "critical"]
+
+
 class ClientOut(ORMModel):
     id: str
     owner_id: str
@@ -127,6 +151,9 @@ class ClientOut(ORMModel):
     version: int
     created_at: datetime
     updated_at: datetime
+    # п.19, п.20: заполняются списком клиентов, в одиночной карточке — None.
+    next_step: ClientNextStep | None = None
+    risk: ClientRisk | None = None
 
 
 class ClientDetailOut(ClientOut):

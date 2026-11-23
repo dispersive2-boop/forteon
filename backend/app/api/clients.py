@@ -36,7 +36,9 @@ from ..models import (
 from ..schemas import (
     ClientCreate,
     ClientDetailOut,
+    ClientNextStep,
     ClientOut,
+    ClientRisk,
     ClientUpdate,
     ContactIn,
     ContactOut,
@@ -50,6 +52,7 @@ from ..schemas import (
     ProjectUpdate,
     ProvenanceEntry,
 )
+from ..services.client_signals import collect_signals
 
 router = APIRouter(tags=["clients"])
 
@@ -115,6 +118,40 @@ def search_workspace(
     return {"items": results}
 
 
+def _client_items(db: Session, rows: list[Client]) -> list[ClientOut]:
+    """Клиенты списка + подсказки «что дальше» и «почему риск».
+
+    Один расчёт на всю страницу: три запроса вместо одного на каждого
+    клиента. Сто клиентов в списке — та же скорость, что и у одного.
+    """
+    if not rows:
+        return []
+
+    today = utcnow().date()
+    signals = collect_signals(db, [row.id for row in rows], today)
+
+    items: list[ClientOut] = []
+    for row in rows:
+        out = ClientOut.model_validate(row)
+        signal = signals.get(row.id)
+        if signal is None:
+            items.append(out)
+            continue
+        if signal.next_step is not None:
+            out.next_step = ClientNextStep(
+                title=signal.next_step.title,
+                kind=signal.next_step.kind,  # type: ignore[arg-type]
+                due_date=signal.next_step.due_date,
+            )
+        if signal.risk is not None:
+            out.risk = ClientRisk(
+                reason=signal.risk.reason,
+                level=signal.risk.level,  # type: ignore[arg-type]
+            )
+        items.append(out)
+    return items
+
+
 @router.get("/clients", response_model=PagedClients)
 def list_clients(
     q: str | None = None,
@@ -139,7 +176,7 @@ def list_clients(
         rows = list(db.scalars(query.order_by(Client.name, Client.id).offset(offset).limit(limit)))
         next_cursor = rows[-1].name if len(rows) == limit else None
         return PagedClients(
-            items=[ClientOut.model_validate(c) for c in rows],
+            items=_client_items(db, rows),
             next_cursor=next_cursor,
             total=total,
         )
@@ -187,7 +224,7 @@ def list_clients(
     rows = candidates[offset:offset + limit]
     next_cursor = rows[-1].name if len(rows) == limit else None
     return PagedClients(
-        items=[ClientOut.model_validate(c) for c in rows],
+        items=_client_items(db, rows),
         next_cursor=next_cursor,
         total=total,
     )

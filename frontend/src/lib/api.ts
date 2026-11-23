@@ -202,6 +202,19 @@ export async function logout(): Promise<void> {
 
 /* ---------------------------------------------------------------- типы домена */
 
+/** Ближайшее открытое дело клиента (п.19 «30 идей»). */
+export type ClientNextStep = {
+  title: string;
+  kind: "task" | "waiting" | "overdue";
+  due_date: string | null;
+};
+
+/** Почему клиент требует внимания (п.20 «30 идей»). */
+export type ClientRisk = {
+  reason: string;
+  level: "warning" | "critical";
+};
+
 export type Client = {
   id: string;
   owner_id: string;
@@ -213,6 +226,9 @@ export type Client = {
   version: number;
   created_at: string;
   updated_at: string;
+  /** Заполняется списком клиентов; в одиночной карточке — null. */
+  next_step?: ClientNextStep | null;
+  risk?: ClientRisk | null;
 };
 
 export type ClientDetail = Client & {

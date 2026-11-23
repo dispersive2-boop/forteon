@@ -242,11 +242,45 @@ export default function ClientsPage() {
                   {client.name.slice(0, 2).toUpperCase()}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13.5px] font-medium text-ink">{client.name}</span>
-                  <span className="mt-0.5 block truncate text-[11.5px] text-[var(--muted)]">
-                    {client.legal_name || "Юридическое лицо не указано"}
-                    {client.address ? ` · ${client.address}` : ""}
+                  <span className="flex items-center gap-1.5">
+                    <span className="truncate text-[13.5px] font-medium text-ink">{client.name}</span>
+                    {client.risk ? (
+                      <span
+                        title={client.risk.reason}
+                        className={`shrink-0 rounded px-1.5 py-0.5 text-[10.5px] font-medium ${
+                          client.risk.level === "critical"
+                            ? "bg-[var(--danger-soft)] text-[var(--danger)]"
+                            : "bg-[var(--warning-soft)] text-[var(--warning)]"
+                        }`}
+                      >
+                        {client.risk.level === "critical" ? "Риск" : "Внимание"}
+                      </span>
+                    ) : null}
                   </span>
+                  {/* п.19: что делать дальше — конкретное дело, а не «есть задачи» */}
+                  {client.next_step ? (
+                    <span className="mt-0.5 block truncate text-[11.5px] text-[var(--muted)]">
+                      {client.next_step.kind === "overdue" ? "Просрочено: " : ""}
+                      {client.next_step.kind === "waiting" ? "Ждём: " : ""}
+                      {client.next_step.title}
+                      {client.next_step.due_date ? ` · ${dateRu(client.next_step.due_date)}` : ""}
+                    </span>
+                  ) : (
+                    <span className="mt-0.5 block truncate text-[11.5px] text-[var(--muted)]">
+                      {client.legal_name || "Юридическое лицо не указано"}
+                      {client.address ? ` · ${client.address}` : ""}
+                    </span>
+                  )}
+                  {/* п.20: причина, по которой клиент подсвечен */}
+                  {client.risk ? (
+                    <span
+                      className={`mt-0.5 block truncate text-[11px] ${
+                        client.risk.level === "critical" ? "text-[var(--danger)]" : "text-[var(--warning)]"
+                      }`}
+                    >
+                      {client.risk.reason}
+                    </span>
+                  ) : null}
                 </span>
                 <span className="hidden shrink-0 items-center gap-2 sm:flex">
                   <StatusBadge status={client.status} />
