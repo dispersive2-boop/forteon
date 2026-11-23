@@ -273,6 +273,28 @@ export type ClientHistoryEvent = {
   created_at: string;
 };
 
+/** Файл, прикреплённый к договору (п.15 «30 идей»). */
+export type ContractDocumentRef = {
+  id: string;
+  filename: string;
+  size: number | null;
+  mime_type: string | null;
+};
+
+/** Счёт клиента — нужен для выбора при создании договора (п.15). */
+export type ClientInvoice = {
+  id: string;
+  client_id: string;
+  project_id: string | null;
+  number: string | null;
+  issue_date: string | null;
+  due_date: string | null;
+  amount: number;
+  currency: string;
+  status: string;
+  remaining?: number | null;
+};
+
 /** Договор клиента (вкладка «Проекты» → договоры, п.37 §4). */
 export type ClientContract = {
   id: string;
@@ -283,6 +305,13 @@ export type ClientContract = {
   amount: number | null;
   currency: string;
   status: string;
+  /** Счёт, к которому привязан договор (п.15). */
+  invoice_id?: string | null;
+  invoice_number?: string | null;
+  /** Сколько уже зачтено по этому счёту. null — счёта нет. */
+  invoice_paid?: number | null;
+  /** Подписанные файлы договора. */
+  documents?: ContractDocumentRef[];
 };
 
 export type Project = {

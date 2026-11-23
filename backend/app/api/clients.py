@@ -43,6 +43,7 @@ from ..schemas import (
     ContactIn,
     ContactOut,
     ContractCreate,
+    ContractDocumentRef,
     ContractOut,
     DocumentOut,
     PagedClients,
@@ -716,24 +717,113 @@ def create_module(project_id: str, body: dict, db: Session = Depends(get_db),
 
 
 # ---------------------------------------------------------------- contracts
+def _contract_out(db: Session, contract: Contract) -> ContractOut:
+    """Договор + счёт и подписанные файлы (п.15 «30 идей»)."""
+    out = ContractOut.model_validate(contract)
+
+    # Файлы: Document.contract_id — обратная связь, отдельного поля нет.
+    documents = db.scalars(
+        select(Document).where(
+            Document.contract_id == contract.id,
+            Document.deleted_at.is_(None),
+        )
+    ).all()
+    out.documents = [
+        ContractDocumentRef(
+            id=doc.id, filename=doc.filename, size=doc.size, mime_type=doc.mime_type
+        )
+        for doc in documents
+    ]
+
+    if not contract.invoice_id:
+        return out
+
+    invoice = db.get(Invoice, contract.invoice_id)
+    if invoice is None or invoice.deleted_at is not None:
+        return out
+
+    out.invoice_number = invoice.number or invoice.id[:8]
+    paid = db.scalar(
+        select(func.coalesce(func.sum(PaymentAllocation.amount), 0)).where(
+            PaymentAllocation.invoice_id == invoice.id
+        )
+    )
+    out.invoice_paid = round(float(paid or 0), 2)
+    return out
+
+
 @router.get("/clients/{client_id}/contracts", response_model=list[ContractOut])
 def list_contracts(client_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     client = get_client_or_404(db, user, client_id)
-    rows = db.scalars(
+    rows = list(db.scalars(
         select(Contract).where(Contract.client_id == client.id, Contract.deleted_at.is_(None))
-    )
-    return [ContractOut.model_validate(c) for c in rows]
+        .order_by(Contract.signed_at.desc())
+    ))
+    return [_contract_out(db, c) for c in rows]
 
 
 @router.post("/clients/{client_id}/contracts", response_model=ContractOut, status_code=201)
 def create_contract(client_id: str, payload: ContractCreate, db: Session = Depends(get_db),
                     user: User = Depends(get_current_user)):
     client = get_client_or_404(db, user, client_id)
-    contract = Contract(client_id=client.id, **payload.model_dump())
+    data = payload.model_dump()
+
+    # Счёт должен принадлежать этому же клиенту. Иначе через подмену id
+    # можно было привязать договор к чужому счёту и увидеть его сумму.
+    if data.get("invoice_id"):
+        invoice = db.get(Invoice, data["invoice_id"])
+        if invoice is None or invoice.deleted_at is not None or invoice.client_id != client.id:
+            raise HTTPException(status_code=400, detail={
+                "code": "invalid_invoice",
+                "message": "Счёт не найден у этого клиента",
+            })
+
+    contract = Contract(client_id=client.id, **data)
     db.add(contract)
+    db.flush()
+    audit(db, user, "contract", contract.id, "created", {
+        "client_id": client.id, "number": contract.number,
+        "invoice_id": contract.invoice_id,
+    })
     db.commit()
     db.refresh(contract)
-    return ContractOut.model_validate(contract)
+    return _contract_out(db, contract)
+
+
+@router.post("/contracts/{contract_id}/documents/{document_id}", response_model=ContractOut)
+def attach_contract_document(contract_id: str, document_id: str, db: Session = Depends(get_db),
+                             user: User = Depends(get_current_user)):
+    """Прикрепляет файл клиента к договору (п.15 «30 идей»).
+
+    Связь односторонняя: у Document уже есть contract_id, отдельное поле в
+    договоре создало бы циклический внешний ключ.
+    """
+    contract = db.get(Contract, contract_id)
+    if contract is None or contract.deleted_at is not None:
+        raise HTTPException(status_code=404, detail={"code": "not_found", "message": "Договор не найден"})
+    get_client_or_404(db, user, contract.client_id)
+
+    document = db.get(Document, document_id)
+    if document is None or document.deleted_at is not None:
+        raise HTTPException(status_code=404, detail={"code": "not_found", "message": "Файл не найден"})
+    if document.client_id != contract.client_id:
+        raise HTTPException(status_code=400, detail={
+            "code": "invalid_document",
+            "message": "Файл принадлежит другому клиенту",
+        })
+    if document.contract_id and document.contract_id != contract.id:
+        raise HTTPException(status_code=409, detail={
+            "code": "document_linked",
+            "message": "Файл уже прикреплён к другому договору",
+        })
+
+    document.contract_id = contract.id
+    audit(db, user, "contract", contract.id, "document_attached", {
+        "document_id": document.id, "filename": document.filename,
+    })
+    db.commit()
+    db.refresh(contract)
+    return _contract_out(db, contract)
 
 
 @router.delete("/contracts/{contract_id}")

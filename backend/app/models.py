@@ -175,6 +175,15 @@ class Contract(Base, TimestampMixin):
     ends_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     amount: Mapped[float | None] = mapped_column(Numeric(16, 2), nullable=True)
     currency: Mapped[str] = mapped_column(String(8), default="RUB", nullable=False)
+    # п.15 «30 идей»: договор связан со счётом.
+    # SET NULL, а не CASCADE: удаление счёта не должно стирать договор —
+    # это юридический документ, он живёт дольше счёта.
+    # Файл подписанного договора — это Document.contract_id (обратная
+    # связь): отдельная колонка создала бы циклический внешний ключ,
+    # который SQLite не умеет сортировать при DROP TABLE.
+    invoice_id: Mapped[str | None] = mapped_column(
+        ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     client: Mapped[Client] = relationship(back_populates="contracts")
 

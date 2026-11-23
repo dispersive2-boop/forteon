@@ -270,6 +270,23 @@ class ContractCreate(BaseModel):
     ends_at: date | None = None
     amount: float | None = None
     currency: str = "RUB"
+    # п.15 «30 идей»: договор связан со счётом. Раньше в карточке были
+    # только номер и сумма — непонятно, оплачен он. Поле необязательное:
+    # старые договоры счёта не имеют.
+    invoice_id: str | None = None
+
+
+class ContractDocumentRef(BaseModel):
+    """Подписанный файл договора (п.15 «30 идей»).
+
+    Это `Document` с `contract_id` — обратная связь, поэтому отдельной
+    колонки в договоре нет.
+    """
+
+    id: str
+    filename: str
+    size: int
+    mime_type: str
 
 
 class ContractOut(ORMModel):
@@ -282,6 +299,14 @@ class ContractOut(ORMModel):
     ends_at: date | None
     amount: float | None
     currency: str
+    invoice_id: str | None = None
+    # Заполняются при выдаче: сколько зачтено по связанному счёту и как он
+    # называется в интерфейсе. Отдельные поля, чтобы фронтенд не дёргал
+    # счета по одному.
+    invoice_number: str | None = None
+    invoice_paid: float | None = None
+    # Список, а не одно поле: к договору бывает и скан, и приложение.
+    documents: list[ContractDocumentRef] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------- notes & AI

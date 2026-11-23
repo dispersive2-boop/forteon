@@ -6,6 +6,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ClientFinanceEntry } from "@/components/ClientFinanceEntry";
+import { ContractModal } from "@/components/ContractModal";
 import { ProjectBudgetModal } from "@/components/ProjectBudgetModal";
 import { TaskChatBody, useTaskChat } from "@/components/TaskChat";
 import { VoiceNoteForm } from "@/components/VoiceNoteForm";
@@ -31,6 +32,7 @@ import {
   ClientDetail,
   ClientDocument,
   ClientHistoryEvent,
+  ClientInvoice,
   FinancialSummary,
   Note,
   Project,
@@ -214,6 +216,9 @@ function ClientWorkspace() {
   const [financeEntry, setFinanceEntry] = useState<"invoice" | "payment" | null>(null);
   const [documents, setDocuments] = useState<ClientDocument[]>([]);
   const [contracts, setContracts] = useState<ClientContract[]>([]);
+  // п.15: счета нужны для выбора при создании договора.
+  const [invoices, setInvoices] = useState<ClientInvoice[]>([]);
+  const [contractOpen, setContractOpen] = useState(false);
   const [history, setHistory] = useState<ClientHistoryEvent[]>([]);
   const [resolvedClientId, setResolvedClientId] = useState<string>();
   const loadRevision = useRef(0);
@@ -289,7 +294,10 @@ function ClientWorkspace() {
   const load = useCallback(async () => {
     const revision = ++loadRevision.current;
     try {
-      const [detail, projectList, taskList, notePage, fin, docs, contractList, auditPage] =
+      const [
+        detail, projectList, taskList, notePage, fin, docs,
+        contractList, invoiceList, auditPage,
+      ] =
         await Promise.all([
           api<ClientDetail>(`/clients/${clientId}`),
           api<Project[]>(`/clients/${clientId}/projects`),
@@ -303,6 +311,9 @@ function ClientWorkspace() {
           api<FinancialSummary>(`/clients/${clientId}/financial-summary`),
           api<ClientDocument[]>(`/clients/${clientId}/documents`).catch(() => []),
           api<ClientContract[]>(`/clients/${clientId}/contracts`).catch(() => []),
+          // Ошибка здесь не должна ломать карточку: договор можно завести
+          // и без счёта, просто этот выбор будет недоступен.
+          api<ClientInvoice[]>(`/clients/${clientId}/invoices`).catch(() => []),
           /*
            * A-P0-2: журнал аудита по клиенту. Ошибка здесь не должна ломать
            * карточку — остальные вкладки остаются работоспособными.
@@ -318,6 +329,7 @@ function ClientWorkspace() {
       setFinance(fin);
       setDocuments(Array.isArray(docs) ? docs : []);
       setContracts(Array.isArray(contractList) ? contractList : []);
+      setInvoices(Array.isArray(invoiceList) ? invoiceList : []);
       setHistory(Array.isArray(auditPage?.items) ? auditPage.items : []);
       setError(null);
     } catch (err) {
@@ -827,34 +839,97 @@ function ClientWorkspace() {
             </Card>
           )}
 
-          {/* Пункт 37: внутри проектов — договоры */}
-          {contracts.length > 0 && (
-            <Card>
-              <SectionTitle title="Договоры" subtitle="Суммы договоров не равны оплатам" />
+          {/* Пункт 37 + п.15: внутри проектов — договоры со счётом и файлом */}
+          <Card>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <SectionTitle
+                title="Договоры"
+                subtitle="Сумма договора не равна оплате — оплата видна по счёту"
+              />
+              <Button type="button" size="sm" variant="outline" onClick={() => setContractOpen(true)}>
+                Добавить договор
+              </Button>
+            </div>
+            {contracts.length ? (
               <div className="divide-y divide-[var(--border)]">
                 {contracts.map((contract) => (
-                  <div key={contract.id} id={`contract-${contract.id}`} className="flex flex-wrap items-center justify-between gap-2 py-2 target:ring-2 target:ring-primary">
-                    <div className="min-w-0">
-                      <p className="truncate text-[13.5px] font-medium text-ink">
-                        {contract.number ? `Договор №${contract.number}` : "Без номера"}
-                      </p>
-                      <p className="text-[12px] text-[var(--muted)]">
-                        подписан {dateRu(contract.signed_at)}
-                      </p>
+                  <div key={contract.id} id={`contract-${contract.id}`} className="py-2.5 target:ring-2 target:ring-primary">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="break-words text-[13.5px] font-medium text-ink">
+                          {contract.number ? `Договор №${contract.number}` : "Без номера"}
+                        </p>
+                        <p className="text-[12px] text-[var(--muted)]">
+                          подписан {dateRu(contract.signed_at)}
+                          {contract.project_id
+                            ? ` · ${projects.find((p) => p.id === contract.project_id)?.name ?? "проект"}`
+                            : ""}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {contract.amount !== null && (
+                          <span className="tabular text-[13px] font-medium text-ink">
+                            {money(contract.amount, contract.currency)}
+                          </span>
+                        )}
+                        <Badge tone="neutral">{contract.status}</Badge>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {contract.amount !== null && (
-                        <span className="tabular text-[13px] font-medium text-ink">
-                          {money(contract.amount)}
-                        </span>
+                    {/* п.15: счёт и оплата, иначе непонятно, закрыт ли договор */}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
+                      {contract.invoice_id ? (
+                        <>
+                          <span className="text-[var(--muted)]">
+                            Счёт №{contract.invoice_number}
+                          </span>
+                          <span
+                            className={
+                              (contract.invoice_paid ?? 0) > 0
+                                ? "text-[var(--success)]"
+                                : "text-[var(--muted)]"
+                            }
+                          >
+                            зачтено {money(contract.invoice_paid ?? 0, contract.currency)}
+                            {contract.amount
+                              ? ` из ${money(contract.amount, contract.currency)}`
+                              : ""}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-[var(--muted)]">Счёт не привязан</span>
                       )}
-                      <Badge tone="neutral">{contract.status}</Badge>
                     </div>
+                    {/* Подписанные файлы договора */}
+                    {contract.documents && contract.documents.length > 0 && (
+                      <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                        {contract.documents.map((doc) => (
+                          <li key={doc.id}>
+                            <a
+                              href={`${API_ROOT}/api/v1/documents/${doc.id}/download`}
+                              className="focus-ring inline-flex max-w-[260px] items-center gap-1 rounded-lg border border-[var(--border)] bg-canvas px-2 py-1 text-[11.5px] text-ink hover:bg-[var(--primary-soft)]"
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                                <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+                                <path d="M14 3v5h5" />
+                              </svg>
+                              <span className="truncate">{doc.filename}</span>
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 ))}
               </div>
-            </Card>
-          )}
+            ) : (
+              <p className="mt-2 text-[12.5px] text-[var(--muted)]">
+                Договоров пока нет. Добавьте номер, сумму и при желании счёт —
+                по нему сразу будет видно, сколько уже зачтено.
+              </p>
+            )}
+          </Card>
         </div>
       )}
 
@@ -968,6 +1043,24 @@ function ClientWorkspace() {
       {financeEntry && (
         <ClientFinanceEntry clientId={clientId} kind={financeEntry} onClose={() => setFinanceEntry(null)}
           onSaved={() => { setFinanceEntry(null); void load(); }}
+        />
+      )}
+      {contractOpen && (
+        <ContractModal
+          clientId={clientId}
+          projects={projects}
+          invoices={invoices}
+          documents={documents}
+          onClose={() => setContractOpen(false)}
+          onSaved={(contract) => {
+            setContracts((current) =>
+              current.some((item) => item.id === contract.id)
+                ? current.map((item) => (item.id === contract.id ? contract : item))
+                : [contract, ...current],
+            );
+            setContractOpen(false);
+            void load();
+          }}
         />
       )}
       {budgetProject !== undefined && (
