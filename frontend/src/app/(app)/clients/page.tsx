@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 
 import {
@@ -20,6 +20,13 @@ import { api, Client, Paged } from "@/lib/api";
 import { dateRu } from "@/lib/format";
 
 const PAGE_SIZE = 100;
+
+/*
+ * п.27 «30 идей»: браузер не может восстановить прокрутку сам, потому что
+ * в момент перезагрузки списка ещё нет (он приходит с сервера). Сохраняем
+ * позицию сами и возвращаемся на неё, когда строки отрисованы.
+ */
+const SCROLL_KEY = "forteon.clients.scroll";
 
 /*
  * п.26 «30 идей»: своя схема списка — фильтры **и** набор колонок.
@@ -138,6 +145,50 @@ export default function ClientsPage() {
       setViewError("Не удалось прочитать сохранённые схемы.");
     }
   }, [viewKey]);
+
+  /*
+   * п.27: возвращаемся туда, где менеджер читал список.
+   *
+   * Ждём `loaded`, а не таймер: до появления строк документ короткий, и
+   * scrollTo просто некуда прокручивать. Флаг в ref — чтобы вернуть позицию
+   * один раз за загрузку страницы, а не на каждое обновление списка.
+   */
+  const scrollRestored = useRef(false);
+  useEffect(() => {
+    if (!loaded || scrollRestored.current) return;
+    scrollRestored.current = true;
+    let top = 0;
+    try {
+      top = Number(window.sessionStorage.getItem(SCROLL_KEY) ?? "0");
+    } catch {
+      return;
+    }
+    if (!Number.isFinite(top) || top <= 0) return;
+    // Два кадра: строки успевают получить высоту, иначе прокрутка срывается.
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => window.scrollTo({ top }));
+    });
+  }, [loaded]);
+
+  /* Позицию пишем не на каждый пиксель, а когда прокрутка остановилась. */
+  useEffect(() => {
+    let timer = 0;
+    const save = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        try {
+          window.sessionStorage.setItem(SCROLL_KEY, String(Math.round(window.scrollY)));
+        } catch {
+          /* приватный режим — просто не запоминаем */
+        }
+      }, 150);
+    };
+    window.addEventListener("scroll", save, { passive: true });
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("scroll", save);
+    };
+  }, []);
 
   /* Колонки живут отдельно от схем: набор «сейчас» не обязан быть схемой. */
   useEffect(() => {

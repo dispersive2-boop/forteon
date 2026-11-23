@@ -277,8 +277,12 @@ export default function TodayPage() {
         {/*
           п.23: сводка одной строкой. Это то самое «стоит ли открывать
           систему»: менеджер видит цифры до того, как начал читать задачи.
+
+          п.27: место под сводку занято всегда. Раньше блок появлялся после
+          ответа сервера и сдвигал вниз все KPI — это и был CLS 0.11.
+          Скелетон той же высоты удерживает макет на месте.
         */}
-        {digest && (
+        {digest ? (
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-control border border-[var(--border)] bg-canvas px-3 py-2">
             <p className="text-[12.5px] leading-snug text-ink">{digest.text}</p>
             <span className="text-[11.5px] text-[var(--muted)]">
@@ -286,6 +290,10 @@ export default function TodayPage() {
                 ? `Колокольчик приходит в ${digest.digest_time}`
                 : "Утренняя сводка выключена"}
             </span>
+          </div>
+        ) : (
+          <div className="mt-2" aria-hidden>
+            <Skeleton className="h-[38px] rounded-control" />
           </div>
         )}
       </header>
@@ -350,6 +358,15 @@ export default function TodayPage() {
         )}
       </div>
 
+      {/*
+        п.27: «начните с просроченной» тоже резервирует место. Плашка нужна
+        не всегда, но пока данные не пришли, её появление сдвигало список.
+      */}
+      {loading && (
+        <div className="mb-4" aria-hidden>
+          <Skeleton className="h-[62px] rounded-card" />
+        </div>
+      )}
       {!loading && items.length > 0 && (data?.counters.overdue ?? 0) > 0 && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-card border border-[var(--border)] bg-surface px-3 py-2">
           <div className="min-w-0 flex-1">
