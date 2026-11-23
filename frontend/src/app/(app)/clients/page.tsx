@@ -21,7 +21,44 @@ import { dateRu } from "@/lib/format";
 
 const PAGE_SIZE = 100;
 
-type ClientView = { name: string; query: string; status: string };
+/*
+ * п.26 «30 идей»: своя схема списка — фильтры **и** набор колонок.
+ *
+ * Почему не просто «сохранить поиск»: менеджеры смотрят на список по-разному.
+ * Одному нужны только имена и ближайшее дело, другому — юрлицо, адрес и дата
+ * обновления. Схема хранит ровно то, что человек выбрал, и восстанавливается
+ * одним нажатием. Ключи колонок — стабильные строки, чтобы сохранённые
+ * схемы не ломались при переименовании подписей.
+ */
+const CLIENT_COLUMNS = [
+  { key: "next_step", label: "Ближайшее дело" },
+  { key: "legal", label: "Юрлицо и адрес" },
+  { key: "status", label: "Статус" },
+  { key: "updated", label: "Обновлён" },
+  { key: "risk", label: "Риск с причиной" },
+] as const;
+
+type ClientColumnKey = (typeof CLIENT_COLUMNS)[number]["key"];
+
+const DEFAULT_COLUMNS: ClientColumnKey[] = ["next_step", "status", "updated"];
+
+type ClientView = {
+  name: string;
+  query: string;
+  status: string;
+  /** Колонки, выбранные в момент сохранения схемы. */
+  columns?: ClientColumnKey[];
+};
+
+/** Оставляем только известные ключи: старая схема не должна ломать список. */
+function normalizeColumns(value: unknown): ClientColumnKey[] {
+  const known = new Set<string>(CLIENT_COLUMNS.map((column) => column.key));
+  if (!Array.isArray(value)) return DEFAULT_COLUMNS;
+  const picked = value.filter((item): item is ClientColumnKey =>
+    typeof item === "string" && known.has(item),
+  );
+  return picked.length ? picked : DEFAULT_COLUMNS;
+}
 
 const STATUS_OPTIONS = [
   { value: "", label: "Все статусы" },
@@ -32,7 +69,10 @@ const STATUS_OPTIONS = [
 export default function ClientsPage() {
   const { user } = useAuth();
   const viewKey = user ? `forteon.client-views.${user.id}` : null;
+  const columnsKey = user ? `forteon.client-columns.${user.id}` : null;
   const [views, setViews] = useState<ClientView[]>([]);
+  const [columns, setColumns] = useState<ClientColumnKey[]>(DEFAULT_COLUMNS);
+  const [columnsOpen, setColumnsOpen] = useState(false);
   const [viewName, setViewName] = useState("");
   const [viewOpen, setViewOpen] = useState(false);
   const [viewError, setViewError] = useState("");
@@ -86,11 +126,29 @@ export default function ClientsPage() {
     if (!viewKey) return;
     try {
       const stored = JSON.parse(localStorage.getItem(viewKey) ?? "[]");
-      if (Array.isArray(stored)) setViews(stored);
+      if (Array.isArray(stored)) {
+        // Схемы из прошлых версий могли не знать про колонки — не падаем.
+        setViews(
+          stored
+            .filter((item): item is ClientView => Boolean(item) && typeof item.name === "string")
+            .map((item) => ({ ...item, columns: normalizeColumns(item.columns) })),
+        );
+      }
     } catch {
-      setViewError("Не удалось прочитать сохранённые фильтры.");
+      setViewError("Не удалось прочитать сохранённые схемы.");
     }
   }, [viewKey]);
+
+  /* Колонки живут отдельно от схем: набор «сейчас» не обязан быть схемой. */
+  useEffect(() => {
+    if (!columnsKey) return;
+    try {
+      const stored = JSON.parse(localStorage.getItem(columnsKey) ?? "null");
+      if (stored) setColumns(normalizeColumns(stored));
+    } catch {
+      /* приватный режим — остаёмся на колонках по умолчанию */
+    }
+  }, [columnsKey]);
 
   function writeViews(next: ClientView[]) {
     if (!viewKey) return false;
@@ -100,9 +158,25 @@ export default function ClientsPage() {
       setViewError("");
       return true;
     } catch {
-      setViewError("Не удалось сохранить фильтры в этом браузере.");
+      setViewError("Не удалось сохранить схемы в этом браузере.");
       return false;
     }
+  }
+
+  function writeColumns(next: ClientColumnKey[]) {
+    setColumns(next);
+    if (!columnsKey) return;
+    try {
+      localStorage.setItem(columnsKey, JSON.stringify(next));
+    } catch {
+      /* не смогли запомнить — набор всё равно применён на экране */
+    }
+  }
+
+  function toggleColumn(key: ClientColumnKey) {
+    const active = columns.includes(key);
+    const next = active ? columns.filter((item) => item !== key) : [...columns, key];
+    writeColumns(next);
   }
 
   async function createClient(event: React.FormEvent) {
@@ -184,11 +258,57 @@ export default function ClientsPage() {
           </select>
         </div>
 
+        {/* п.26: колонки — отдельный слой поверх фильтров, можно менять на ходу. */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] px-3 py-2">
+          <Button size="sm" variant="ghost" aria-expanded={columnsOpen} onClick={() => setColumnsOpen(!columnsOpen)}>
+            Колонки: {columns.length} из {CLIENT_COLUMNS.length}
+          </Button>
+          <span className="text-[11.5px] text-[var(--muted)]">
+            Видно: {CLIENT_COLUMNS.filter((column) => columns.includes(column.key)).map((column) => column.label).join(", ")}
+          </span>
+        </div>
+        {columnsOpen && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] bg-[#fafbfd] px-3 py-2">
+            {CLIENT_COLUMNS.map((column) => {
+              const active = columns.includes(column.key);
+              return (
+                <label key={column.key} className="inline-flex items-center gap-1.5 text-[12.5px] text-ink">
+                  <input
+                    type="checkbox"
+                    checked={active}
+                    onChange={() => toggleColumn(column.key)}
+                    className="accent-primary"
+                  />
+                  {column.label}
+                </label>
+              );
+            })}
+            <Button size="sm" variant="ghost" onClick={() => writeColumns(DEFAULT_COLUMNS)}>
+              По умолчанию
+            </Button>
+            {columns.length === 0 && (
+              <span role="alert" className="text-[11.5px] text-[var(--warning)]">
+                Ни одна колонка не выбрана — в строке останется только имя.
+              </span>
+            )}
+          </div>
+        )}
+
         {viewKey && (
           <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] px-3 py-2">
             {views.map((view) => (
               <span key={view.name} className="inline-flex items-center rounded-control border border-[var(--border)]">
-                <Button size="sm" variant="ghost" onClick={() => { setQuery(view.query); setStatus(view.status); setOffset(0); }}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  title={`Запрос: «${view.query || "все"}», статус: ${view.status || "любой"}, колонок: ${(view.columns ?? DEFAULT_COLUMNS).length}`}
+                  onClick={() => {
+                    setQuery(view.query);
+                    setStatus(view.status);
+                    writeColumns(view.columns ?? DEFAULT_COLUMNS);
+                    setOffset(0);
+                  }}
+                >
                   {view.name}
                 </Button>
                 <Button size="sm" variant="ghost" aria-label={`Удалить фильтр «${view.name}»`}
@@ -200,7 +320,7 @@ export default function ClientsPage() {
                 event.preventDefault();
                 const name = viewName.trim();
                 if (!name) return;
-                if (writeViews([...views.filter((item) => item.name !== name), { name, query, status }])) {
+                if (writeViews([...views.filter((item) => item.name !== name), { name, query, status, columns }])) {
                   setViewName(""); setViewOpen(false);
                 }
               }}>
@@ -257,22 +377,32 @@ export default function ClientsPage() {
                       </span>
                     ) : null}
                   </span>
-                  {/* п.19: что делать дальше — конкретное дело, а не «есть задачи» */}
-                  {client.next_step ? (
-                    <span className="mt-0.5 block truncate text-[11.5px] text-[var(--muted)]">
-                      {client.next_step.kind === "overdue" ? "Просрочено: " : ""}
-                      {client.next_step.kind === "waiting" ? "Ждём: " : ""}
-                      {client.next_step.title}
-                      {client.next_step.due_date ? ` · ${dateRu(client.next_step.due_date)}` : ""}
-                    </span>
-                  ) : (
+                  {/*
+                    п.26: подпись под именем собирается из выбранных колонок.
+                    Имя и «перейти» остаются всегда — без них строкой нельзя
+                    пользоваться; остальное менеджер включает сам.
+                  */}
+                  {columns.includes("next_step") && (
+                    client.next_step ? (
+                      <span className="mt-0.5 block truncate text-[11.5px] text-[var(--muted)]">
+                        {client.next_step.kind === "overdue" ? "Просрочено: " : ""}
+                        {client.next_step.kind === "waiting" ? "Ждём: " : ""}
+                        {client.next_step.title}
+                        {client.next_step.due_date ? ` · ${dateRu(client.next_step.due_date)}` : ""}
+                      </span>
+                    ) : (
+                      <span className="mt-0.5 block truncate text-[11.5px] text-[var(--muted)]">
+                        Дел в работе нет
+                      </span>
+                    )
+                  )}
+                  {columns.includes("legal") && (
                     <span className="mt-0.5 block truncate text-[11.5px] text-[var(--muted)]">
                       {client.legal_name || "Юридическое лицо не указано"}
                       {client.address ? ` · ${client.address}` : ""}
                     </span>
                   )}
-                  {/* п.20: причина, по которой клиент подсвечен */}
-                  {client.risk ? (
+                  {columns.includes("risk") && client.risk ? (
                     <span
                       className={`mt-0.5 block truncate text-[11px] ${
                         client.risk.level === "critical" ? "text-[var(--danger)]" : "text-[var(--warning)]"
@@ -283,8 +413,10 @@ export default function ClientsPage() {
                   ) : null}
                 </span>
                 <span className="hidden shrink-0 items-center gap-2 sm:flex">
-                  <StatusBadge status={client.status} />
-                  <Badge tone="neutral">обновлён {dateRu(client.updated_at)}</Badge>
+                  {columns.includes("status") && <StatusBadge status={client.status} />}
+                  {columns.includes("updated") && (
+                    <Badge tone="neutral">обновлён {dateRu(client.updated_at)}</Badge>
+                  )}
                 </span>
                 <svg className="shrink-0 text-[#c2cbdb]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M9 6l6 6-6 6" />
