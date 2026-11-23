@@ -17,6 +17,7 @@ from ..deps import audit, get_client_or_404, get_current_user, require_admin
 from ..models import AuditLog, Client, ClientTransfer, Task, User, utcnow
 from ..schemas import (
     AISettingsIn,
+    ImportDuplicate,
     ImportResult,
     ImportPreview,
     TransferRequest,
@@ -253,8 +254,30 @@ async def import_grishanov(
                 try:
                     stats = import_xlsx(db, target, admin)
                 finally:
+                    # Предпросмотр ничего не сохраняет: savepoint откатывается,
+                    # и база остаётся в прежнем состоянии.
                     transaction.rollback()
-                return ImportPreview(source=source_name, **vars(stats), sample=rows)
+                return ImportPreview(
+                    source=source_name,
+                    **{
+                        key: value
+                        for key, value in vars(stats).items()
+                        # duplicate_rows — наша рабочая структура; наружу
+                        # отдаём её в виде списка ImportDuplicate.
+                        if key != "duplicate_rows"
+                    },
+                    sample=rows,
+                    duplicates=[
+                        ImportDuplicate(
+                            row=item.row,
+                            client_name=item.client_name,
+                            task_title=item.task_title,
+                            reason="уже есть в базе: клиент + название + срок",
+                        )
+                        for item in stats.duplicate_rows
+                    ],
+                    duplicates_count=stats.duplicates_skipped,
+                )
             stats = import_xlsx(db, target, admin)
         except Exception:
             db.rollback()

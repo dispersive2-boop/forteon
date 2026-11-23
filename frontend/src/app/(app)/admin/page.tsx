@@ -29,6 +29,15 @@ type AuditEntry = {
 
 type Stats = { users: number; clients: number; tasks_open: number; tasks_overdue: number };
 
+type ImportDuplicate = {
+  /** Номер строки в файле — по нему дубль ищется в Excel. */
+  row: number;
+  client_name: string;
+  task_title: string;
+  due_date?: string | null;
+  reason: string;
+};
+
 type ImportResult = {
   source: string;
   clients_created: number;
@@ -39,6 +48,9 @@ type ImportResult = {
   skipped_rows: number[];
   warnings: string[];
   sample?: string[][];
+  // п.12: заполняются только в предпросмотре
+  duplicates?: ImportDuplicate[];
+  duplicates_count?: number;
 };
 
 type AiSettings = {
@@ -174,7 +186,9 @@ export default function AdminPage() {
   async function runImport(preview: boolean) {
     setImporting(true);
     setError("");
-    if (preview) setImportResult(null);
+    // Старый результат сбивает с толку: после «Подтвердить» на экране
+    // оставался предпросмотр с дублями, и казалось, что импорт не прошёл.
+    setImportResult(null);
     try {
       const body = new FormData();
       if (importFile) body.append("file", importFile);
@@ -255,7 +269,48 @@ export default function AdminPage() {
             <Stat label="Проектов" value={importResult.projects_created} />
             <Stat label="Задач" value={importResult.tasks_created} />
             <Stat label="Проблем" value={importResult.problems_created} />
+            {importResult.duplicates_count ? (
+              <Stat
+                label="Уже было в базе"
+                value={importResult.duplicates_count}
+                tone="warning"
+              />
+            ) : null}
           </div>
+          {importResult.duplicates_count ? (
+            <div className="mt-3 rounded-md border border-[#f0d7a8] bg-[#fffaf0] p-2.5">
+              <p className="text-[12.5px] font-medium text-ink">
+                Эти строки не будут созданы повторно
+              </p>
+              <p className="mt-0.5 text-[11.5px] text-[var(--muted)]">
+                Совпали клиент, название и срок. Номер строки — как в файле Excel.
+              </p>
+              <div className="mt-2 max-h-56 space-y-1 overflow-y-auto">
+                {(importResult.duplicates ?? []).map((item, index) => (
+                  <div
+                    key={`${item.row}-${index}`}
+                    className="flex items-baseline gap-2 rounded bg-white/70 px-2 py-1 text-[11.5px]"
+                  >
+                    <span className="shrink-0 tabular-nums text-[var(--muted)]">
+                      стр. {item.row}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-ink" title={item.task_title}>
+                      {item.task_title}
+                    </span>
+                    {item.client_name ? (
+                      <span className="shrink-0 truncate text-[var(--muted)]">{item.client_name}</span>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+              {(importResult.duplicates?.length ?? 0) < (importResult.duplicates_count ?? 0) && (
+                <p className="mt-1.5 text-[11.5px] text-[var(--muted)]">
+                  Показаны первые {importResult.duplicates?.length ?? 0} из{" "}
+                  {importResult.duplicates_count} — остальные такие же.
+                </p>
+              )}
+            </div>
+          ) : null}
           {importResult.skipped_rows.length > 0 && (
             <p className="mt-2 text-sm">Пропущенные строки: {importResult.skipped_rows.join(", ")}</p>
           )}
@@ -529,11 +584,26 @@ export default function AdminPage() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: number;
+  /** Предупреждающий тон нужен для дублей: это не ошибка, но и не успех. */
+  tone?: "neutral" | "warning";
+}) {
   return (
     <div className="rounded-control bg-white/70 px-2.5 py-2">
       <p className="text-[10.5px] uppercase tracking-[0.03em] text-[var(--muted)]">{label}</p>
-      <p className="mt-0.5 text-[16px] font-semibold text-ink">{value}</p>
+      <p
+        className={`mt-0.5 text-[16px] font-semibold ${
+          tone === "warning" ? "text-[var(--warning)]" : "text-ink"
+        }`}
+      >
+        {value}
+      </p>
     </div>
   );
 }

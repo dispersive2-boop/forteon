@@ -671,8 +671,26 @@ class ImportResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class ImportDuplicate(BaseModel):
+    """Строка файла, которая уже есть в базе (п.12 «30 идей»).
+
+    Без этого списка повторный импорт того же файла молча удваивал
+    задачи: менеджер видел «создано 120», хотя 120 уже существовали.
+    """
+
+    row: int
+    client_name: str
+    task_title: str
+    due_date: date | None = None
+    # Чем именно совпало: клиент + название + срок.
+    reason: str
+
+
 class ImportPreview(ImportResult):
     sample: list[list[str]]
+    # п.12: сколько строк файла повторяют уже существующие задачи.
+    duplicates: list[ImportDuplicate] = Field(default_factory=list)
+    duplicates_count: int = 0
 
 
 class DashboardOut(BaseModel):

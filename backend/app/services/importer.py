@@ -39,6 +39,20 @@ COLUMNS = {
 SECTION_HINTS = ("проекты в реализации", "эшелон", "архив", "перспектив", "проекты 202")
 
 
+@dataclass(frozen=True)
+class DuplicateRow:
+    """Одна строка файла, которая уже есть в базе (п.12 «30 идей»).
+
+    Храним не только название, но и строку таблицы и клиента: в предпросмотре
+    менеджеру нужно открыть этот файл, найти строку 47 и убедиться, что дубль
+    настоящий, а не склейка разных дел с одинаковым заголовком.
+    """
+
+    row: int
+    client_name: str
+    task_title: str
+
+
 @dataclass
 class ImportStats:
     clients_created: int = 0
@@ -48,6 +62,12 @@ class ImportStats:
     problems_created: int = 0
     skipped_rows: list[int] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    # п.12 «30 идей»: строки, которые уже есть в базе.
+    # Без этого счётчика повторный импорт выглядел как «создано 120»,
+    # хотя 120 задач уже существовали — и менеджер считал, что данных
+    # стало вдвое больше.
+    duplicates_skipped: int = 0
+    duplicate_rows: list[DuplicateRow] = field(default_factory=list)
 
 
 def _text(value) -> str | None:
@@ -277,6 +297,13 @@ def import_xlsx(db: Session, path: str | Path, owner: User) -> ImportStats:
         for item in split_items(next_sprint):
             key = make_dedupe_key(client.id, item, None)
             if key in existing_keys or normalize_title(item) in {""}:
+                # Уже есть — считаем, но не создаём. Это и есть п.12.
+                if key in existing_keys:
+                    stats.duplicates_skipped += 1
+                    if len(stats.duplicate_rows) < 50:
+                        stats.duplicate_rows.append(
+                            DuplicateRow(row=row_idx, client_name=name, task_title=item[:160])
+                        )
                 continue
             existing_keys.add(key)
             due_at, _ = extract_due(item, report_moment, owner.timezone) if report_moment else (None, None)
@@ -308,6 +335,15 @@ def import_xlsx(db: Session, path: str | Path, owner: User) -> ImportStats:
                     continue
                 key = make_dedupe_key(client.id, "Проблема: " + item, None)
                 if key in existing_keys:
+                    stats.duplicates_skipped += 1
+                    if len(stats.duplicate_rows) < 50:
+                        stats.duplicate_rows.append(
+                            DuplicateRow(
+                                row=row_idx,
+                                client_name=name,
+                                task_title=("Проблема: " + item)[:160],
+                            )
+                        )
                     continue
                 existing_keys.add(key)
                 db.add(
