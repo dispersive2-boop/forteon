@@ -104,6 +104,16 @@ export type VoiceNoteFormProps = {
   initialBody?: string;
   /** Подпись кнопки отправки. */
   submitLabel?: string;
+  /**
+   * Левая часть панели действий — вложения и всё, что относится к клиенту.
+   *
+   * Раньше страница заметок рисовала скрепку отдельным блоком под формой,
+   * и она оказывалась на своей строке: микрофон и «Отправить» сверху,
+   * скрепка снизу. Один слот держит все действия в одной строке.
+   */
+  leftSlot?: React.ReactNode;
+  /** Дополнительные действия справа, перед кнопкой отправки. */
+  rightSlot?: React.ReactNode;
 };
 
 export function VoiceNoteForm({
@@ -115,6 +125,8 @@ export function VoiceNoteForm({
   hideExamples = false,
   initialBody = "",
   submitLabel = "Отправить",
+  leftSlot,
+  rightSlot,
 }: VoiceNoteFormProps) {
   const [body, setBody] = useState(() => initialBody || readDraft(client?.id ?? null));
   const [sending, setSending] = useState(false);
@@ -368,6 +380,8 @@ export function VoiceNoteForm({
       )}
 
       <div className="flex flex-wrap items-center gap-1.5">
+        {/* Вложения и прочие действия клиента — в той же строке, что и запись */}
+        {leftSlot}
         <button
           type="button"
           onClick={() => void toggleDictation()}
@@ -406,6 +420,8 @@ export function VoiceNoteForm({
         <span className="mr-1 hidden text-[11.5px] text-[var(--muted)] sm:block">
           {draftSaved ? "черновик сохранён" : "Ctrl+Enter — отправить"}
         </span>
+
+        {rightSlot}
 
         <Button onClick={() => void submit()} loading={sending} disabled={!canSend} size="md">
           {submitLabel}

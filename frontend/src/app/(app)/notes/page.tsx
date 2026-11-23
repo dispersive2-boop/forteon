@@ -661,6 +661,10 @@ export default function NotesPage() {
             className="mb-4 shrink-0 border-[var(--border-strong)] shadow-[0_6px_24px_rgba(15,23,42,0.10)] lg:order-3 lg:mb-0 lg:mt-3"
             padded
           >
+            {/*
+              Вложения живут в левом слоте формы: так скрепка стоит в одной
+              строке с микрофоном и «Отправить», а не отдельным блоком снизу.
+            */}
             <VoiceNoteForm
               client={clientFilter}
               onSubmit={submitNote}
@@ -672,9 +676,47 @@ export default function NotesPage() {
               submitLabel={correcting ? "Сохранить и разобрать" : "Отправить"}
               initialBody={correcting ? correctingText : ""}
               hideExamples={Boolean(correcting)}
+              leftSlot={
+                <>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void attach(file);
+                      e.target.value = "";
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    title="Прикрепить файл"
+                    aria-label="Прикрепить файл"
+                    className="focus-ring grid h-11 w-11 shrink-0 place-items-center rounded-control border border-[var(--border-strong)] text-[var(--muted)] transition-colors hover:border-primary hover:text-primary"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+                      <path d="M21.4 11.05l-8.9 8.9a5.2 5.2 0 01-7.4-7.4l8.2-8.2a3.5 3.5 0 014.9 4.9l-8.2 8.2a1.8 1.8 0 01-2.5-2.5l7.5-7.5" />
+                    </svg>
+                  </button>
+                </>
+              }
+              rightSlot={
+                correcting ? (
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    onClick={() => {
+                      setCorrecting(null);
+                      setCorrectingText("");
+                    }}
+                  >
+                    Отменить
+                  </Button>
+                ) : undefined
+              }
             />
 
-            {/* Вложения остаются здесь: они привязаны к клиенту, а не к тексту. */}
             {uploads.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {uploads.map((file, index) => (
@@ -688,42 +730,6 @@ export default function NotesPage() {
                 ))}
               </div>
             )}
-
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <input
-                ref={fileRef}
-                type="file"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) void attach(file);
-                  e.target.value = "";
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                title="Прикрепить файл"
-                aria-label="Прикрепить файл"
-                className="focus-ring grid h-11 w-11 shrink-0 place-items-center rounded-control border border-[var(--border-strong)] text-[var(--muted)] transition-colors hover:border-primary hover:text-primary"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-                  <path d="M21.4 11.05l-8.9 8.9a5.2 5.2 0 01-7.4-7.4l8.2-8.2a3.5 3.5 0 014.9 4.9l-8.2 8.2a1.8 1.8 0 01-2.5-2.5l7.5-7.5" />
-                </svg>
-              </button>
-              {correcting && (
-                <Button
-                  variant="ghost"
-                  size="md"
-                  onClick={() => {
-                    setCorrecting(null);
-                    setCorrectingText("");
-                  }}
-                >
-                  Отменить исправление
-                </Button>
-              )}
-            </div>
           </Card>
 
           {/* ------------------------------------------------------- лента */}
