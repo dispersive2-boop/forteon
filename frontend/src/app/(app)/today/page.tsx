@@ -47,10 +47,21 @@ import {
 import { api, TodayPayload, Task } from "@/lib/api";
 import { dateRu, dateTimeRu, money, relativeDay, TASK_TYPE_LABELS } from "@/lib/format";
 
-type FilterKey = "all" | "payment" | "call" | "document" | "delivery" | "review" | "done";
+type FilterKey =
+  | "all"
+  | "overdue"
+  | "waiting"
+  | "payment"
+  | "call"
+  | "document"
+  | "delivery"
+  | "review"
+  | "done";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "Все" },
+  { key: "overdue", label: "Просрочено" },
+  { key: "waiting", label: "Ожидания" },
   { key: "payment", label: "Оплаты" },
   { key: "call", label: "Звонки" },
   { key: "document", label: "Документы" },
@@ -122,13 +133,24 @@ export default function TodayPage() {
   const items = data?.items ?? [];
   const doneItems = data?.done ?? [];
 
-  /** Фильтрация на клиенте: сервер уже отдал отсортированный список (п.22). */
+  /** Строка «сегодня» в формате сервера — общая для всех сравнений. */
+  const todayIso = useMemo(() => isoDate(), []);
+
+  /**
+   * п.9 «30 идей»: каждая цифра плана должна открывать свой список.
+   * Раньше «Просрочено» было только числом — менеджер видел 5 просрочек,
+   * но не мог посмотреть, какие именно, и шёл искать их вручную.
+   */
   const visible = useMemo(() => {
     if (filter === "done") return [];
     if (filter === "all") return items;
     if (filter === "review") return items.filter((t) => t.needs_review);
+    if (filter === "overdue") {
+      return items.filter((t) => Boolean(t.due_date) && (t.due_date as string) < todayIso);
+    }
+    if (filter === "waiting") return items.filter((t) => t.event_kind === "waiting");
     return items.filter((t) => t.type === filter);
-  }, [items, filter]);
+  }, [items, filter, todayIso]);
 
   const selected = useMemo(
     () => [...items, ...doneItems].find((t) => t.id === selectedId) ?? null,
@@ -138,6 +160,8 @@ export default function TodayPage() {
   const counts = useMemo(() => {
     const acc: Record<FilterKey, number> = {
       all: items.length,
+      overdue: 0,
+      waiting: 0,
       payment: 0,
       call: 0,
       document: 0,
@@ -151,9 +175,11 @@ export default function TodayPage() {
       if (t.type === "document") acc.document += 1;
       if (t.type === "delivery") acc.delivery += 1;
       if (t.needs_review) acc.review += 1;
+      if (t.due_date && t.due_date < todayIso) acc.overdue += 1;
+      if (t.event_kind === "waiting") acc.waiting += 1;
     }
     return acc;
-  }, [items, doneItems]);
+  }, [items, doneItems, todayIso]);
 
   /** Пункт 25 и 30: закрытие без перезагрузки + отмена действия. */
   async function complete(task: Task) {
@@ -261,10 +287,23 @@ export default function TodayPage() {
               active={filter === "all"}
               onClick={() => setFilter("all")}
             />
+            {/*
+              п.9: цифра открывает список. Раньше «Просрочено» было только
+              числом — менеджер видел проблему, но не мог сразу на неё перейти.
+            */}
             <Stat
               label="Просрочено"
               value={data?.counters.overdue ?? 0}
               tone={(data?.counters.overdue ?? 0) > 0 ? "danger" : "neutral"}
+              active={filter === "overdue"}
+              onClick={() => setFilter("overdue")}
+            />
+            <Stat
+              label="Ожидания"
+              value={counts.waiting}
+              tone={counts.waiting > 0 ? "warning" : "neutral"}
+              active={filter === "waiting"}
+              onClick={() => setFilter("waiting")}
             />
             <Stat
               label="Оплаты"
