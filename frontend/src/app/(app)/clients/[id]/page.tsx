@@ -93,6 +93,12 @@ const HISTORY_RU: Record<string, string> = {
   "note:reprocessed": "Заметка разобрана повторно",
   "project:created": "Создан проект",
   "project:updated": "Проект изменён",
+  "contract:created": "Договор заведён",
+  "contract:updated": "Договор изменён",
+  "contract:deleted": "Договор удалён",
+  "contract:document_attached": "К договору прикреплён файл",
+  "document:uploaded": "Загружен документ",
+  "document:deleted": "Документ удалён",
 };
 
 /** События, которые важны для денег — их подсвечиваем. */
@@ -995,12 +1001,23 @@ function ClientWorkspace() {
             title="История"
             subtitle="Журнал действий по клиенту: счета и оплаты, задачи, изменения карточки"
           />
-          <Field label="События">
+          <Field
+            label="События"
+            hint={
+              visibleHistory.length
+                ? `Показано ${visibleHistory.length} из ${historyItems.length}`
+                : undefined
+            }
+          >
             <select className={inputClass} value={historyFilter} onChange={(event) => setHistoryFilter(event.target.value)}>
               <option value="all">Все</option>
+              <option value="money">Деньги: счета, оплаты, зачёты</option>
               <option value="task">Задачи</option>
-              <option value="money">Счета и оплаты</option>
+              <option value="project">Проекты</option>
+              <option value="contract">Договоры</option>
+              <option value="document">Документы</option>
               <option value="client">Карточка клиента</option>
+              <option value="note">Заметки</option>
             </select>
           </Field>
           {visibleHistory.length ? (

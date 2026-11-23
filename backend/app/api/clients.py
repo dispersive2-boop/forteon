@@ -862,6 +862,15 @@ def client_history(client_id: str, limit: int = Query(default=100, ge=1, le=300)
     project_ids = [str(x) for x in db.scalars(
         select(Project.id).where(Project.client_id == client.id)
     )]
+    # п.21 «30 идей»: лента должна показывать всё по клиенту одной нитью.
+    # Договоры и документы раньше выпадали — их события уходили в аудит,
+    # но в историю клиента не попадали.
+    contract_ids = [str(x) for x in db.scalars(
+        select(Contract.id).where(Contract.client_id == client.id)
+    )]
+    document_ids = [str(x) for x in db.scalars(
+        select(Document.id).where(Document.client_id == client.id)
+    )]
 
     allocation_ids: list[str] = []
     if invoice_ids:
@@ -882,6 +891,10 @@ def client_history(client_id: str, limit: int = Query(default=100, ge=1, le=300)
         clause = or_(clause, (AuditLog.entity == "task") & AuditLog.entity_id.in_(task_ids))
     if project_ids:
         clause = or_(clause, (AuditLog.entity == "project") & AuditLog.entity_id.in_(project_ids))
+    if contract_ids:
+        clause = or_(clause, (AuditLog.entity == "contract") & AuditLog.entity_id.in_(contract_ids))
+    if document_ids:
+        clause = or_(clause, (AuditLog.entity == "document") & AuditLog.entity_id.in_(document_ids))
 
     rows = list(db.scalars(
         select(AuditLog).where(clause).order_by(AuditLog.created_at.desc()).limit(limit)
